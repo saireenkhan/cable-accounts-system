@@ -24,3 +24,85 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ✅ HIDE SCROLLBARS EVERYWHERE - Keep scrolling functional */
+
+/* Chrome, Safari, Edge */
+::-webkit-scrollbar {
+  width: 0px !important;
+  height: 0px !important;
+  background: transparent !important;
+  display: none !important;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none !important;
+}
+
+/* IE and Edge */
+* {
+  -ms-overflow-style: none !important;
+}
+
+/* Allow scrolling on all overflow containers */
+html,
+body {
+  overflow: auto !important;
+}
+
+/* All scrollable containers - no scrollbar */
+.overflow-y-auto,
+.overflow-x-auto,
+.overflow-auto {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.overflow-y-auto::-webkit-scrollbar,
+.overflow-x-auto::-webkit-scrollbar,
+.overflow-auto::-webkit-scrollbar {
+  width: 0px !important;
+  height: 0px !important;
+  display: none !important;
+}
+
+/* Main content area - scrollable without scrollbar */
+main {
+  overflow-y: auto !important;
+  scroll-behavior: smooth;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+main::-webkit-scrollbar {
+  width: 0px !important;
+  height: 0px !important;
+  display: none !important;
+}
+
+/* Sidebar navigation - scrollable without scrollbar */
+nav {
+  overflow-y: auto !important;
+  scroll-behavior: smooth;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+nav::-webkit-scrollbar {
+  width: 0px !important;
+  height: 0px !important;
+  display: none !important;
+}
+
+/* Tables - scrollable without scrollbar */
+.scrollbar-hide {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0px !important;
+  height: 0px !important;
+  display: none !important;
+}
