@@ -19,6 +19,7 @@ export interface Field {
   updateOnChange?: (value: any, formData: any, context?: any) => any;
   searchable?: boolean;
   readOnly?: boolean;
+  defaultValue?: any; // ✅ ADDED — allows pre-filling a field when modal opens
 }
 
 interface AddUserModalProps {
@@ -254,6 +255,9 @@ export function AddUserModal({
             console.error(`Error computing initial value for ${field.name}:`, e);
             initialData[field.name] = '';
           }
+        } else if (field.defaultValue !== undefined) {
+          // ✅ ADDED — use defaultValue if provided (e.g. pre-filled date)
+          initialData[field.name] = field.defaultValue;
         } else {
           initialData[field.name] = '';
         }

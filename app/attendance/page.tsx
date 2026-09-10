@@ -139,7 +139,7 @@ export default function AttendancePage() {
       label: 'Date', 
       type: 'date', 
       required: true,
-      value: selectedDate
+     defaultValue: selectedDate 
     },
     { 
       name: 'status', 

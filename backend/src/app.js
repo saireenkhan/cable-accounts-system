@@ -74,10 +74,13 @@ app.get('/health', (req, res) => {
 // Error handler
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  logger.info(`🚀 Server running on port ${PORT}`);
-  logger.info(`📡 Environment: ${process.env.NODE_ENV}`);
-});
+// Only listen locally — Vercel handles the server in production
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => {
+    logger.info(`🚀 Server running on port ${PORT}`);
+    logger.info(`📡 Environment: ${process.env.NODE_ENV}`);
+  });
+}
 
 module.exports = app;
