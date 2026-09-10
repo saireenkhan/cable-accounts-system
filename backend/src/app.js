@@ -23,10 +23,21 @@ const installationRoutes = require('./routes/installationRoutes');
 const expenseRoutes = require('./routes/expenseRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const dealerAreaRoutes = require('./routes/dealerAreaRoutes');
-// ... rest of the code
+
+// ✅ Prevent unhandled errors from crashing the serverless function
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled Rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err.message);
+});
+
 const app = express();
 
-// Connect to database
+// ✅ Trust Vercel's proxy so rate limiting sees the real client IP
+app.set('trust proxy', 1);
+
+// Connect to database (non-blocking — don't crash function if Mongo is slow)
 connectDB().catch((err) => {
   console.error('❌ Initial MongoDB connection failed:', err.message);
 });
@@ -35,15 +46,17 @@ connectDB().catch((err) => {
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: 'Too many requests from this IP, please try again later.'
+  message: 'Too many requests from this IP, please try again later.',
 });
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', limiter);
@@ -64,7 +77,7 @@ app.use('/api/installation', installationRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dealer-areas', dealerAreaRoutes);
-// Health check
+
 // Health check — responds at both /health (local) and /api/health (via Vercel rewrite)
 const healthHandler = (req, res) => {
   res.json({
