@@ -65,13 +65,17 @@ app.use('/api/expenses', expenseRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dealer-areas', dealerAreaRoutes);
 // Health check
-app.get('/health', (req, res) => {
+// Health check — responds at both /health (local) and /api/health (via Vercel rewrite)
+const healthHandler = (req, res) => {
   res.json({
     status: 'ok',
     uptime: process.uptime(),
     timestamp: new Date(),
   });
-});
+};
+
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 // Error handler
 app.use(errorHandler);
