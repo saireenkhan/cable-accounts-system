@@ -27,7 +27,9 @@ const dealerAreaRoutes = require('./routes/dealerAreaRoutes');
 const app = express();
 
 // Connect to database
-connectDB();
+connectDB().catch((err) => {
+  console.error('❌ Initial MongoDB connection failed:', err.message);
+});
 
 // Rate limiting
 const limiter = rateLimit({
