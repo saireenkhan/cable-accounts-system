@@ -56,12 +56,6 @@ const menuItems: MenuItem[] = [
     section: 'user',
   },
   {
-    label: 'Receive Payment',
-    href: '/payments',
-    icon: <DollarSign className="h-5 w-5" />,
-    section: 'user',
-  },
-  {
     label: 'Add Area',
     href: '/areas',
     icon: <MapPin className="h-5 w-5" />,
@@ -74,7 +68,7 @@ const menuItems: MenuItem[] = [
     section: 'user',
   },
   {
-    label: 'Monthly Billing',
+    label: 'Recieve Payment',
     href: '/billing',
     icon: <FileText className="h-5 w-5" />,
     section: 'user',
@@ -90,7 +84,7 @@ const menuItems: MenuItem[] = [
       { label: 'Dashboard', href: '/dealers', icon: <LayoutDashboard className="h-4 w-4" /> },
       { label: 'Add Dealer', href: '/dealers/add', icon: <User className="h-4 w-4" /> },
       { label: 'Dealer Payment', href: '/dealer-payments', icon: <CreditCard className="h-4 w-4" /> },
-      { label: 'Add Area', href: '/areas', icon: <MapPin className="h-4 w-4" /> },
+      { label: 'Add Area', href: '/area2', icon: <MapPin className="h-4 w-4" /> },
     ],
   },
 
@@ -252,10 +246,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Brand */}
         <div className="flex items-center gap-2 px-4 h-14 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="h-8 w-8 bg-blue-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">CA</span>
+            <span className="text-white font-bold text-sm">SR</span>
           </div>
           <span className="font-semibold text-gray-900 dark:text-white text-lg">
-            Cable<span className="text-blue-600">Accounts</span>
+            Smart<span className="text-blue-600">Recovery</span>
           </span>
           {isMobile && (
             <button

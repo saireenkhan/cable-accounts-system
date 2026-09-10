@@ -1,106 +1,168 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
+import api from '@/app/lib/api';
 import { 
   MapPin, 
   PlusCircle, 
-  Users, 
+  Truck, 
   Edit2, 
   Trash2,
   Building2,
   Home,
   Store,
-  Factory
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
-export default function AreasPage() {
+export default function DealerAreasPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [areas, setAreas] = useState([
-    { id: 1, name: 'Gulshan Block 1', customers: 340, color: 'blue' },
-    { id: 2, name: 'Model Colony', customers: 285, color: 'green' },
-    { id: 3, name: 'Green Town', customers: 229, color: 'purple' },
-    { id: 4, name: 'New Market', customers: 194, color: 'orange' },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [areas, setAreas] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchAreas();
+  }, []);
+
+  const fetchAreas = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      
+      // ✅ Fetch dealer areas and all dealers to count by area
+      const [areasRes, dealersRes] = await Promise.all([
+        api.get('/dealer-areas'),
+        api.get('/dealers?limit=10000') // Get all dealers
+      ]);
+      
+      // ✅ Count dealers by area name
+      const dealerCounts: Record<string, number> = {};
+      if (dealersRes.data.success) {
+        dealersRes.data.dealers.forEach((dealer: any) => {
+          const areaName = dealer.area?.name;
+          if (areaName) {
+            dealerCounts[areaName] = (dealerCounts[areaName] || 0) + 1;
+          }
+        });
+      }
+      
+      if (areasRes.data.success) {
+        const formattedAreas = areasRes.data.areas.map((area: any, index: number) => ({
+          id: area._id,
+          name: area.name,
+          dealers: dealerCounts[area.name] || 0,
+          color: ['purple', 'indigo', 'orange', 'red', 'blue', 'green'][index % 6],
+          code: area.code,
+          description: area.description,
+        }));
+        setAreas(formattedAreas);
+      }
+    } catch (error) {
+      console.error('Error fetching dealer areas:', error);
+      toast.error('Failed to load dealer areas');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Calculate stats
   const totalAreas = areas.length;
-  const totalCustomers = areas.reduce((sum, area) => sum + area.customers, 0);
+  const totalDealers = areas.reduce((sum, area) => sum + (area.dealers || 0), 0);
 
   // Area fields for modal
   const areaFields: Field[] = [
-    { name: 'name', label: 'Area Name', type: 'text', required: true, placeholder: 'Enter area name' },
-    { name: 'code', label: 'Area Code', type: 'text', placeholder: 'e.g., GUL-001' },
+    { name: 'name', label: 'Dealer Area Name', type: 'text', required: true, placeholder: 'Enter dealer area name' },
+    { name: 'code', label: 'Area Code', type: 'text', placeholder: 'e.g., DLR-001' },
     { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description' },
   ];
 
-  const handleAreaAdded = (data: any) => {
-    const newArea = {
-      id: Date.now(),
-      name: data.name.toUpperCase(),
-      customers: 0,
-      color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][Math.floor(Math.random() * 6)],
+  // Transform dealer area data before sending
+  const transformAreaData = (data: any) => {
+    console.log('📝 Transforming dealer area data:', data);
+    return {
+      name: data.name?.trim() || '',
+      code: data.code?.trim() || '',
+      description: data.description?.trim() || '',
     };
-    setAreas([newArea, ...areas]);
-    toast.success(`Area "${data.name}" added successfully!`);
   };
 
-  const handleDelete = (id: number, name: string) => {
-    if (confirm(`Are you sure you want to delete "${name}"?`)) {
-      setAreas(areas.filter(area => area.id !== id));
-      toast.success(`Area "${name}" deleted`);
+  const handleAreaAdded = (data: any) => {
+    toast.success(`Dealer area "${data.name}" added successfully!`);
+    fetchAreas();
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Are you sure you want to delete dealer area "${name}"?`)) {
+      try {
+        await api.delete(`/dealer-areas/${id}`);
+        setAreas(areas.filter(area => area.id !== id));
+        toast.success(`Dealer area "${name}" deleted`);
+      } catch (error) {
+        toast.error('Failed to delete dealer area');
+      }
     }
   };
 
   const handleEdit = (name: string) => {
-    toast.success(`Editing "${name}"`);
+    toast.success(`Editing dealer area "${name}"`);
   };
 
   const filteredAreas = areas.filter(area =>
-    area.name.toLowerCase().includes(searchQuery.toLowerCase())
+    area.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Color mapping for cards
+  // Color mapping for cards (dealer themed)
   const colorClasses = {
-    blue: 'from-blue-500 to-blue-600 border-blue-200 dark:border-blue-800',
-    green: 'from-green-500 to-green-600 border-green-200 dark:border-green-800',
     purple: 'from-purple-500 to-purple-600 border-purple-200 dark:border-purple-800',
+    indigo: 'from-indigo-500 to-indigo-600 border-indigo-200 dark:border-indigo-800',
     orange: 'from-orange-500 to-orange-600 border-orange-200 dark:border-orange-800',
     red: 'from-red-500 to-red-600 border-red-200 dark:border-red-800',
-    indigo: 'from-indigo-500 to-indigo-600 border-indigo-200 dark:border-indigo-800',
+    blue: 'from-blue-500 to-blue-600 border-blue-200 dark:border-blue-800',
+    green: 'from-green-500 to-green-600 border-green-200 dark:border-green-800',
   };
 
   const bgColorClasses = {
-    blue: 'bg-blue-50 dark:bg-blue-950/30',
-    green: 'bg-green-50 dark:bg-green-950/30',
     purple: 'bg-purple-50 dark:bg-purple-950/30',
+    indigo: 'bg-indigo-50 dark:bg-indigo-950/30',
     orange: 'bg-orange-50 dark:bg-orange-950/30',
     red: 'bg-red-50 dark:bg-red-950/30',
-    indigo: 'bg-indigo-50 dark:bg-indigo-950/30',
+    blue: 'bg-blue-50 dark:bg-blue-950/30',
+    green: 'bg-green-50 dark:bg-green-950/30',
   };
 
   const iconColorClasses = {
-    blue: 'text-blue-600 dark:text-blue-400',
-    green: 'text-green-600 dark:text-green-400',
     purple: 'text-purple-600 dark:text-purple-400',
+    indigo: 'text-indigo-600 dark:text-indigo-400',
     orange: 'text-orange-600 dark:text-orange-400',
     red: 'text-red-600 dark:text-red-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
+    blue: 'text-blue-600 dark:text-blue-400',
+    green: 'text-green-600 dark:text-green-400',
   };
 
-  // Get icon based on area name
   const getAreaIcon = (name: string) => {
-    const lower = name.toLowerCase();
+    const lower = name?.toLowerCase() || '';
     if (lower.includes('gulshan') || lower.includes('garden')) return <Home className="h-6 w-6" />;
     if (lower.includes('market') || lower.includes('mall')) return <Store className="h-6 w-6" />;
     if (lower.includes('colony') || lower.includes('town')) return <Building2 className="h-6 w-6" />;
-    return <MapPin className="h-6 w-6" />;
+    return <Truck className="h-6 w-6" />;
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -109,24 +171,55 @@ export default function AreasPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <MapPin className="h-6 w-6 text-blue-600" />
-              Areas / Streets
+              <MapPin className="h-6 w-6 text-purple-600" />
+              Dealer Areas
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Organize customers by service area.
+              Manage dealer service areas.
             </p>
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
+            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-purple-500/25"
           >
             <PlusCircle className="h-4 w-4" />
-            Add Area
+            Add Dealer Area
           </button>
         </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL DEALER AREAS</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {totalAreas}
+                </p>
+              </div>
+              <div className="h-12 w-12 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+                <MapPin className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL DEALERS</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                  {totalDealers.toLocaleString()}
+                </p>
+              </div>
+              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <Truck className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Search */}
         <SearchBar
-          placeholder="Search areas..."
+          placeholder="Search dealer areas..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
@@ -134,7 +227,7 @@ export default function AreasPage() {
         {/* Area Cards Grid */}
         {filteredAreas.length === 0 ? (
           <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            No areas found. Click "Add Area" to create one.
+            No dealer areas found. Click "Add Dealer Area" to create one.
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -147,19 +240,17 @@ export default function AreasPage() {
                   'overflow-hidden'
                 )}
               >
-                {/* Color bar at top */}
                 <div className={cn(
                   'h-1.5 w-full',
-                  area.color === 'blue' && 'bg-blue-500',
-                  area.color === 'green' && 'bg-green-500',
                   area.color === 'purple' && 'bg-purple-500',
+                  area.color === 'indigo' && 'bg-indigo-500',
                   area.color === 'orange' && 'bg-orange-500',
                   area.color === 'red' && 'bg-red-500',
-                  area.color === 'indigo' && 'bg-indigo-500',
+                  area.color === 'blue' && 'bg-blue-500',
+                  area.color === 'green' && 'bg-green-500',
                 )} />
 
                 <div className="p-5">
-                  {/* Icon and Name */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className={cn(
@@ -174,10 +265,12 @@ export default function AreasPage() {
                         <h3 className="font-semibold text-gray-900 dark:text-white text-lg uppercase">
                           {area.name}
                         </h3>
+                        {area.code && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{area.code}</p>
+                        )}
                       </div>
                     </div>
                     
-                    {/* Action Buttons */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleEdit(area.name)}
@@ -194,14 +287,14 @@ export default function AreasPage() {
                     </div>
                   </div>
 
-                  {/* Customers Count */}
+                  {/* ✅ Show actual dealer count */}
                   <div className="flex items-center gap-2 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <Users className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    <Truck className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                     <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {area.customers}
+                      {area.dealers || 0}
                     </span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                      Customers
+                      Dealers
                     </span>
                   </div>
                 </div>
@@ -210,16 +303,18 @@ export default function AreasPage() {
           </div>
         )}
 
-        {/* Add Area Modal */}
+        {/* Add Dealer Area Modal */}
         <AddUserModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSuccess={handleAreaAdded}
-          title="Add New Area"
-          subtitle="Create a new service area for customers"
+          title="Add Dealer Area"
+          subtitle="Create a new dealer service area"
           fields={areaFields}
-          submitLabel="Add Area"
-          color="blue"
+          submitLabel="Add Dealer Area"
+          color="purple"
+          endpoint="/dealer-areas"
+          transformData={transformAreaData}
         />
       </div>
     </Layout>

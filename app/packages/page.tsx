@@ -1,16 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
-import { AddUserModal } from '@/app/components/modals/AddUserModal';
+import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
+import api from '@/app/lib/api';
 import { 
   Package, 
   PlusCircle, 
   Edit2, 
   Trash2,
   TrendingUp,
-  TrendingDown,
   DollarSign,
   Wifi,
   Zap
@@ -21,82 +21,111 @@ import toast from 'react-hot-toast';
 export default function PackagesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [packages, setPackages] = useState([
-    {
-      id: 1,
-      name: 'BASIC',
-      price: 1200,
-      bandwidth: '25 Mbps',
-      purchasePrice: 800,
-      sellingPrice: 1200,
-      profit: 400,
-      color: 'blue',
-      icon: 'basic',
-    },
-    {
-      id: 2,
-      name: 'STANDARD',
-      price: 1500,
-      bandwidth: '50 Mbps',
-      purchasePrice: 950,
-      sellingPrice: 1500,
-      profit: 550,
-      color: 'green',
-      icon: 'standard',
-    },
-    {
-      id: 3,
-      name: 'PREMIUM',
-      price: 1800,
-      bandwidth: '100 Mbps',
-      purchasePrice: 1100,
-      sellingPrice: 1800,
-      profit: 700,
-      color: 'purple',
-      icon: 'premium',
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [packages, setPackages] = useState<any[]>([]);
+
+  // Fetch packages from API
+  useEffect(() => {
+    fetchPackages();
+  }, []);
+
+  const fetchPackages = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        return;
+      }
+      const response = await api.get('/packages');
+      if (response.data.success) {
+        const formattedPackages = response.data.packages.map((pkg: any, index: number) => ({
+          id: pkg._id,
+          name: pkg.name,
+          price: pkg.sellingPrice || 0,
+          bandwidth: pkg.bandwidth || 'N/A',
+          purchasePrice: pkg.purchasePrice || 0,
+          sellingPrice: pkg.sellingPrice || 0,
+          profit: pkg.profit || 0,
+          color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][index % 6],
+          description: pkg.description || '',
+        }));
+        setPackages(formattedPackages);
+      }
+    } catch (error) {
+      console.error('Error fetching packages:', error);
+      toast.error('Failed to load packages');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Package form fields for modal
-  const packageFields = [
-    { name: 'name', label: 'Package Name', type: 'select' as const, required: true, options: [
-      { label: 'BASIC', value: 'BASIC' },
-      { label: 'STANDARD', value: 'STANDARD' },
-      { label: 'PREMIUM', value: 'PREMIUM' },
-    ]},
-    { name: 'bandwidth', label: 'Bandwidth', type: 'select' as const, required: true, options: [
-      { label: '25 Mbps', value: '25 Mbps' },
-      { label: '50 Mbps', value: '50 Mbps' },
-      { label: '100 Mbps', value: '100 Mbps' },
-    ]},
-    { name: 'sellingPrice', label: 'Selling Price (Rs.)', type: 'text' as const, required: true, placeholder: '1,200' },
-    { name: 'purchasePrice', label: 'Purchase Price (Rs.)', type: 'text' as const, required: true, placeholder: '800' },
-    { name: 'description', label: 'Description', type: 'textarea' as const, placeholder: 'Package description' },
+  const packageFields: Field[] = [
+    { 
+      name: 'name', 
+      label: 'Package Name', 
+      type: 'select', 
+      required: true, 
+      options: [
+        { label: 'BASIC', value: 'BASIC' },
+        { label: 'STANDARD', value: 'STANDARD' },
+        { label: 'PREMIUM', value: 'PREMIUM' },
+      ]
+    },
+    { 
+      name: 'bandwidth', 
+      label: 'Bandwidth', 
+      type: 'select', 
+      required: true, 
+      options: [
+        { label: '25 Mbps', value: '25 Mbps' },
+        { label: '50 Mbps', value: '50 Mbps' },
+        { label: '100 Mbps', value: '100 Mbps' },
+      ]
+    },
+    { name: 'sellingPrice', label: 'Selling Price (Rs.)', type: 'text', required: true, placeholder: '1200' },
+    { name: 'purchasePrice', label: 'Purchase Price (Rs.)', type: 'text', required: true, placeholder: '800' },
+    { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Package description' },
   ];
 
+  // ✅ Transform package data before sending
+  const transformPackageData = (data: any) => {
+    return {
+      name: data.name,
+      bandwidth: data.bandwidth,
+      sellingPrice: parseFloat(data.sellingPrice) || 0,
+      purchasePrice: parseFloat(data.purchasePrice) || 0,
+      description: data.description || '',
+    };
+  };
+
   const handlePackageAdded = (data: any) => {
-    const sellingPrice = parseFloat(data.sellingPrice);
-    const purchasePrice = parseFloat(data.purchasePrice);
+    const sellingPrice = data.sellingPrice || 0;
+    const purchasePrice = data.purchasePrice || 0;
     
     const newPackage = {
-      id: Date.now(),
+      id: data._id || Date.now(),
       name: data.name,
       price: sellingPrice,
-      bandwidth: data.bandwidth,
+      bandwidth: data.bandwidth || 'N/A',
       purchasePrice: purchasePrice,
       sellingPrice: sellingPrice,
       profit: sellingPrice - purchasePrice,
       color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][Math.floor(Math.random() * 6)],
-      icon: data.name.toLowerCase(),
     };
     setPackages([newPackage, ...packages]);
     toast.success(`Package "${data.name}" added successfully!`);
+    fetchPackages(); // Refresh the list
   };
 
-  const handleDelete = (id: number, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete "${name}" package?`)) {
-      setPackages(packages.filter(pkg => pkg.id !== id));
-      toast.success(`Package "${name}" deleted`);
+      try {
+        await api.delete(`/packages/${id}`);
+        setPackages(packages.filter(pkg => pkg.id !== id));
+        toast.success(`Package "${name}" deleted`);
+      } catch (error) {
+        toast.error('Failed to delete package');
+      }
     }
   };
 
@@ -105,7 +134,7 @@ export default function PackagesPage() {
   };
 
   const filteredPackages = packages.filter(pkg =>
-    pkg.name.toLowerCase().includes(searchQuery.toLowerCase())
+    pkg.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Color mapping for cards
@@ -147,12 +176,22 @@ export default function PackagesPage() {
 
   // Get icon based on package name
   const getPackageIcon = (name: string) => {
-    const lower = name.toLowerCase();
+    const lower = name?.toLowerCase() || '';
     if (lower.includes('basic')) return <Wifi className="h-6 w-6" />;
     if (lower.includes('standard')) return <Zap className="h-6 w-6" />;
     if (lower.includes('premium')) return <TrendingUp className="h-6 w-6" />;
     return <Package className="h-6 w-6" />;
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -175,6 +214,36 @@ export default function PackagesPage() {
             <PlusCircle className="h-4 w-4" />
             Add Package
           </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL PACKAGES</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {packages.length}
+                </p>
+              </div>
+              <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">HIGHEST PROFIT</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                  Rs. {packages.length > 0 ? Math.max(...packages.map(p => p.profit || 0)).toLocaleString() : '0'}
+                </p>
+              </div>
+              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Search */}
@@ -287,32 +356,6 @@ export default function PackagesPage() {
           </div>
         )}
 
-        {/* Total Packages Stats */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30">
-                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Total Packages</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">{packages.length}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-green-50 dark:bg-green-950/30">
-                <TrendingUp className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Highest Profit</p>
-                <p className="text-xl font-bold text-green-600 dark:text-green-400">
-                  Rs. {Math.max(...packages.map(p => p.profit)).toLocaleString()}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Add Package Modal */}
         <AddUserModal
           isOpen={isModalOpen}
@@ -323,6 +366,8 @@ export default function PackagesPage() {
           fields={packageFields}
           submitLabel="Add Package"
           color="blue"
+          endpoint="/packages"
+          transformData={transformPackageData}
         />
       </div>
     </Layout>

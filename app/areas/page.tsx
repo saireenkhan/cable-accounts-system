@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
-import { AddUserModal } from '@/app/components/modals/AddUserModal';
+import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
+import api from '@/app/lib/api';
 import { 
   MapPin, 
   PlusCircle, 
@@ -13,7 +14,6 @@ import {
   Building2,
   Home,
   Store,
-  Factory
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -21,35 +21,92 @@ import toast from 'react-hot-toast';
 export default function AreasPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [areas, setAreas] = useState([
-    { id: 1, name: 'Gulshan Block 1', customers: 340, color: 'blue' },
-    { id: 2, name: 'Model Colony', customers: 285, color: 'green' },
-    { id: 3, name: 'Green Town', customers: 229, color: 'purple' },
-    { id: 4, name: 'New Market', customers: 194, color: 'orange' },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [areas, setAreas] = useState<any[]>([]);
 
-  // Area form fields for modal
-  const areaFields = [
-    { name: 'name', label: 'Area Name', type: 'text' as const, required: true, placeholder: 'Enter area name' },
-    { name: 'code', label: 'Area Code', type: 'text' as const, placeholder: 'e.g., GUL-001' },
-    { name: 'description', label: 'Description', type: 'textarea' as const, placeholder: 'Optional description' },
-  ];
+  // Fetch areas from API
+  useEffect(() => {
+    fetchAreas();
+  }, []);
 
-  const handleAreaAdded = (data: any) => {
-    const newArea = {
-      id: Date.now(),
-      name: data.name,
-      customers: 0,
-      color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][Math.floor(Math.random() * 6)],
-    };
-    setAreas([newArea, ...areas]);
-    toast.success(`Area "${data.name}" added successfully!`);
+  const fetchAreas = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      
+      // ✅ Fetch all customers first to get area counts
+      const [areasRes, customersRes] = await Promise.all([
+        api.get('/areas'),
+        api.get('/customers?limit=10000') // Get all customers
+      ]);
+      
+      // ✅ Count customers by area name
+      const customerCounts: Record<string, number> = {};
+      if (customersRes.data.success) {
+        customersRes.data.customers.forEach((customer: any) => {
+          const areaName = customer.area?.name;
+          if (areaName) {
+            customerCounts[areaName] = (customerCounts[areaName] || 0) + 1;
+          }
+        });
+      }
+      
+      if (areasRes.data.success) {
+        const formattedAreas = areasRes.data.areas.map((area: any, index: number) => ({
+          id: area._id,
+          name: area.name,
+          customers: customerCounts[area.name] || 0,
+          color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][index % 6],
+          code: area.code,
+          description: area.description,
+        }));
+        setAreas(formattedAreas);
+      }
+    } catch (error) {
+      console.error('Error fetching areas:', error);
+      toast.error('Failed to load areas');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id: number, name: string) => {
+  // Calculate stats
+  const totalAreas = areas.length;
+  const totalCustomers = areas.reduce((sum, area) => sum + (area.customers || 0), 0);
+
+  // Area fields for modal
+  const areaFields: Field[] = [
+    { name: 'name', label: 'Area Name', type: 'text', required: true, placeholder: 'Enter area name' },
+    { name: 'code', label: 'Area Code', type: 'text', placeholder: 'e.g., GUL-001' },
+    { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description' },
+  ];
+
+  // Transform area data before sending
+  const transformAreaData = (data: any) => {
+    return {
+      name: data.name,
+      code: data.code || '',
+      description: data.description || '',
+    };
+  };
+
+  const handleAreaAdded = (data: any) => {
+    toast.success(`Area "${data.name}" added successfully!`);
+    fetchAreas();
+  };
+
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete "${name}"?`)) {
-      setAreas(areas.filter(area => area.id !== id));
-      toast.success(`Area "${name}" deleted`);
+      try {
+        await api.delete(`/areas/${id}`);
+        setAreas(areas.filter(area => area.id !== id));
+        toast.success(`Area "${name}" deleted`);
+      } catch (error) {
+        toast.error('Failed to delete area');
+      }
     }
   };
 
@@ -58,7 +115,7 @@ export default function AreasPage() {
   };
 
   const filteredAreas = areas.filter(area =>
-    area.name.toLowerCase().includes(searchQuery.toLowerCase())
+    area.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Color mapping for cards
@@ -89,14 +146,23 @@ export default function AreasPage() {
     indigo: 'text-indigo-600 dark:text-indigo-400',
   };
 
-  // Get icon based on area name
   const getAreaIcon = (name: string) => {
-    const lower = name.toLowerCase();
+    const lower = name?.toLowerCase() || '';
     if (lower.includes('gulshan') || lower.includes('garden')) return <Home className="h-6 w-6" />;
     if (lower.includes('market') || lower.includes('mall')) return <Store className="h-6 w-6" />;
     if (lower.includes('colony') || lower.includes('town')) return <Building2 className="h-6 w-6" />;
     return <MapPin className="h-6 w-6" />;
   };
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -119,6 +185,36 @@ export default function AreasPage() {
             <PlusCircle className="h-4 w-4" />
             Add Area
           </button>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL AREAS</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                  {totalAreas}
+                </p>
+              </div>
+              <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                <MapPin className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL CUSTOMERS</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                  {totalCustomers.toLocaleString()}
+                </p>
+              </div>
+              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Search */}
@@ -144,7 +240,6 @@ export default function AreasPage() {
                   'overflow-hidden'
                 )}
               >
-                {/* Color bar at top */}
                 <div className={cn(
                   'h-1.5 w-full',
                   area.color === 'blue' && 'bg-blue-500',
@@ -156,7 +251,6 @@ export default function AreasPage() {
                 )} />
 
                 <div className="p-5">
-                  {/* Icon and Name */}
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div className={cn(
@@ -171,10 +265,12 @@ export default function AreasPage() {
                         <h3 className="font-semibold text-gray-900 dark:text-white text-lg uppercase">
                           {area.name}
                         </h3>
+                        {area.code && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{area.code}</p>
+                        )}
                       </div>
                     </div>
                     
-                    {/* Action Buttons */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => handleEdit(area.name)}
@@ -191,11 +287,11 @@ export default function AreasPage() {
                     </div>
                   </div>
 
-                  {/* Customers Count */}
+                  {/* ✅ Show actual customer count */}
                   <div className="flex items-center gap-2 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
                     <Users className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                     <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {area.customers}
+                      {area.customers || 0}
                     </span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       Customers
@@ -217,6 +313,8 @@ export default function AreasPage() {
           fields={areaFields}
           submitLabel="Add Area"
           color="blue"
+          endpoint="/areas"
+          transformData={transformAreaData}
         />
       </div>
     </Layout>

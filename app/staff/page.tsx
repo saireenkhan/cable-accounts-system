@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
+import api from '@/app/lib/api';
 import { 
   Users, 
   UserPlus, 
@@ -13,10 +14,6 @@ import {
   Eye,
   UserCheck,
   UserX,
-  Phone,
-  MapPin,
-  Briefcase,
-  Calendar
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -24,49 +21,63 @@ import toast from 'react-hot-toast';
 export default function StaffPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [staff, setStaff] = useState([
-    {
-      id: 1,
-      staffId: 'ST-001',
-      name: 'Recovery Operator',
-      phone: '0300-5551234',
-      designation: 'Collector',
-      area: 'Gulshan Block 1',
-      status: 'Active',
-    },
-    {
-      id: 2,
-      staffId: 'ST-002',
-      name: 'Kamran Ali',
-      phone: '0321-6644221',
-      designation: 'Technician',
-      area: 'Model Colony',
-      status: 'Active',
-    },
-    {
-      id: 3,
-      staffId: 'ST-003',
-      name: 'Saima Akhtar',
-      phone: '0333-7890123',
-      designation: 'Sales Executive',
-      area: 'Green Town',
-      status: 'Active',
-    },
-    {
-      id: 4,
-      staffId: 'ST-004',
-      name: 'Usman Ghani',
-      phone: '0345-5678901',
-      designation: 'Installer',
-      area: 'Gulshan Block 1',
-      status: 'Inactive',
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [staff, setStaff] = useState<any[]>([]);
+
+  // Fetch staff from API
+  useEffect(() => {
+    fetchStaff();
+  }, []);
+
+  const fetchStaff = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      const response = await api.get('/staff');
+      if (response.data.success) {
+        const formattedStaff = response.data.staff.map((member: any) => ({
+          id: member._id,
+          staffId: member.staffId || 'N/A',
+          name: member.name || 'Unknown',
+          phone: member.phone || 'N/A',
+          designation: member.designation || 'N/A',
+          area: member.assignedArea?.name || 'N/A',
+          status: member.isActive ? 'Active' : 'Inactive',
+        }));
+        setStaff(formattedStaff);
+      }
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+      toast.error('Failed to load staff');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Calculate stats
   const totalStaff = staff.length;
   const activeStaff = staff.filter(s => s.status === 'Active').length;
   const inactiveStaff = staff.filter(s => s.status === 'Inactive').length;
+
+  // ✅ Transform staff data before sending
+  const transformStaffData = (data: any) => {
+    return {
+      name: data.name?.trim() || '',
+      phone: data.phone?.trim() || '',
+      email: data.email?.trim() || '',
+      cnic: data.cnic?.trim() || '',
+      designation: data.designation,
+      salary: parseFloat(data.salary) || 0,
+      joiningDate: data.joiningDate || new Date().toISOString().split('T')[0],
+      address: data.address?.trim() || '',
+      assignedArea: data.area || 'Gulshan Block 1', // This will be converted to ObjectId in backend
+      isActive: data.status === 'Active',
+      remarks: data.remarks || '',
+    };
+  };
 
   // Staff fields for modal
   const staffFields: Field[] = [
@@ -99,7 +110,7 @@ export default function StaffPage() {
         { label: 'Green Town', value: 'Green Town' },
       ]
     },
-    { name: 'salary', label: 'Salary (Rs.)', type: 'text', placeholder: '25,000' },
+    { name: 'salary', label: 'Salary (Rs.)', type: 'text', placeholder: '25000' },
     { name: 'joiningDate', label: 'Joining Date', type: 'date' },
     { name: 'address', label: 'Address', type: 'textarea', placeholder: 'Staff address' },
     { 
@@ -111,26 +122,23 @@ export default function StaffPage() {
         { label: 'Inactive', value: 'Inactive' },
       ]
     },
+    { name: 'remarks', label: 'Remarks', type: 'textarea', placeholder: 'Additional notes...' },
   ];
 
   const handleStaffAdded = (data: any) => {
-    const newStaff = {
-      id: Date.now(),
-      staffId: `ST-${String(staff.length + 1).padStart(3, '0')}`,
-      name: data.name,
-      phone: data.phone,
-      designation: data.designation,
-      area: data.area,
-      status: data.status || 'Active',
-    };
-    setStaff([newStaff, ...staff]);
     toast.success(`${data.name} added successfully!`);
+    fetchStaff(); // Refresh the list
   };
 
-  const handleDelete = (id: number, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete ${name}?`)) {
-      setStaff(staff.filter(s => s.id !== id));
-      toast.success(`${name} deleted`);
+      try {
+        await api.delete(`/staff/${id}`);
+        setStaff(staff.filter(s => s.id !== id));
+        toast.success(`${name} deleted`);
+      } catch (error) {
+        toast.error('Failed to delete staff');
+      }
     }
   };
 
@@ -138,13 +146,14 @@ export default function StaffPage() {
     toast.success(`Editing ${name}`);
   };
 
+  // ✅ Safe filtering with optional chaining
   const filteredStaff = staff.filter(member => {
     const query = searchQuery.toLowerCase();
     return (
-      member.name.toLowerCase().includes(query) ||
-      member.staffId.toLowerCase().includes(query) ||
-      member.phone.includes(query) ||
-      member.designation.toLowerCase().includes(query)
+      member.name?.toLowerCase().includes(query) ||
+      member.staffId?.toLowerCase().includes(query) ||
+      member.phone?.includes(query) ||
+      member.designation?.toLowerCase().includes(query)
     );
   });
 
@@ -168,6 +177,16 @@ export default function StaffPage() {
       )
     },
   ];
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -289,6 +308,8 @@ export default function StaffPage() {
           fields={staffFields}
           submitLabel="Add Staff"
           color="blue"
+          endpoint="/staff"
+          transformData={transformStaffData}
         />
       </div>
     </Layout>

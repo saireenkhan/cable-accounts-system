@@ -1,12 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
+import api from '@/app/lib/api';
 import { 
   Truck, 
   PlusCircle, 
@@ -27,81 +27,183 @@ export default function DealersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All Dealers');
-  const [dealers, setDealers] = useState([
-    {
-      id: 1,
-      dealerId: 'DLR-001',
-      name: 'City Cable Dealer',
-      cellNo: '0300-1112233',
-      area: 'Gulshan Block 1',
-      address: 'Gulshan Block 1',
-      remarks: 'Main area dealer',
-      status: 'active',
-    },
-    {
-      id: 2,
-      dealerId: 'DLR-002',
-      name: 'Star Network',
-      cellNo: '0321-4455667',
-      area: 'Model Colony',
-      address: 'Model Colony',
-      remarks: 'Active recovery dealer',
-      status: 'active',
-    },
-    {
-      id: 3,
-      dealerId: 'DLR-003',
-      name: 'Pak Vision Cable',
-      cellNo: '0333-7788990',
-      area: 'Green Town',
-      address: 'Green Town',
-      remarks: 'Fiber linked dealer',
-      status: 'active',
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [dealers, setDealers] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
+
+  // Fetch dealers + areas
+  useEffect(() => {
+    fetchDealers();
+    fetchAreas();
+  }, []);
+
+  const fetchDealers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      const response = await api.get('/dealers');
+      if (response.data.success) {
+        const formattedDealers = response.data.dealers.map((dealer: any) => ({
+          id: dealer._id,
+          dealerId: dealer.dealerId || 'N/A',
+          name: dealer.name || 'Unknown',
+          cellNo: dealer.cellNo || 'N/A',
+          area: dealer.area?.name || 'N/A',
+          address: dealer.address || 'N/A',
+          remarks: dealer.remarks || '',
+          commission: dealer.commission || '10%',
+          status: dealer.status || 'active',
+        }));
+        setDealers(formattedDealers);
+      }
+    } catch (error) {
+      console.error('Error fetching dealers:', error);
+      toast.error('Failed to load dealers');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ Fetch dealer areas from dealer-areas page
+  const fetchAreas = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      
+      let areasList: any[] = [];
+
+      // Try /dealer-areas first
+      try {
+        const response = await api.get('/dealer-areas');
+        if (response.data.success && response.data.areas) {
+          areasList = response.data.areas;
+          console.log('📋 Dealer areas loaded from /dealer-areas:', areasList);
+        }
+      } catch (err) {
+        console.log('⚠️ /dealer-areas not found, trying /areas...');
+        const response = await api.get('/areas');
+        if (response.data.success && response.data.areas) {
+          areasList = response.data.areas;
+          console.log('📋 Dealer areas loaded from /areas:', areasList);
+        }
+      }
+
+      setAreas(areasList);
+    } catch (error) {
+      console.error('Error fetching dealer areas:', error);
+      toast.error('Failed to load areas');
+    }
+  };
 
   // Calculate stats
   const totalDealers = dealers.length;
+  const activeDealers = dealers.filter(d => d.status === 'active').length;
+  const inactiveDealers = dealers.filter(d => d.status === 'inactive').length;
 
-  // Dealer fields for modal
+  // ✅ Transform dealer data before sending
+  const transformDealerData = (data: any) => {
+    return {
+      dealerId: data.dealerId, // ✅ Manual dealer ID
+      name: data.name,
+      cellNo: data.cellNo,
+      area: data.area,
+      address: data.address || data.area,
+      openingBalance: parseFloat(data.openingBalance) || 0,
+      remarks: data.remarks || '',
+      commission: data.commission || '10%',
+    };
+  };
+
+  // ✅ Dealer fields with manual Dealer ID, dynamic areas + commission
   const dealerFields: Field[] = [
-    { name: 'name', label: 'Dealer Name', type: 'text', required: true, placeholder: 'Enter dealer name' },
-    { name: 'cellNo', label: 'Cell No.', type: 'text', required: true, placeholder: '0330-1234567' },
+    { 
+      name: 'dealerId', 
+      label: 'Dealer ID', 
+      type: 'text', 
+      required: true, 
+      placeholder: 'e.g., DLR-001'
+    },
+    { 
+      name: 'name', 
+      label: 'Dealer Name', 
+      type: 'text', 
+      required: true, 
+      placeholder: 'Enter dealer name' 
+    },
+    { 
+      name: 'cellNo', 
+      label: 'Cell No.', 
+      type: 'text', 
+      required: true, 
+      placeholder: '0330-1234567' 
+    },
     { 
       name: 'area', 
       label: 'Area', 
       type: 'select', 
       required: true, 
+      searchable: true,
+      options: areas.length > 0 
+        ? areas.map((area: any) => ({
+            label: area.name,
+            value: area.name
+          }))
+        : [{ label: 'No areas available - add one first', value: '' }]
+    },
+    { 
+      name: 'commission', 
+      label: 'Commission', 
+      type: 'select', 
+      required: true, 
       options: [
-        { label: 'Gulshan Block 1', value: 'Gulshan Block 1' },
-        { label: 'Model Colony', value: 'Model Colony' },
-        { label: 'Green Town', value: 'Green Town' },
+        { label: '5%', value: '5%' },
+        { label: '10%', value: '10%' },
+        { label: '15%', value: '15%' },
+        { label: '20%', value: '20%' },
+        { label: '25%', value: '25%' },
+        { label: '30%', value: '30%' },
+        { label: '35%', value: '35%' },
+        { label: '40%', value: '40%' },
+        { label: '50%', value: '50%' },
       ]
     },
-    { name: 'address', label: 'Address', type: 'text', placeholder: 'Dealer address' },
-    { name: 'openingBalance', label: 'Opening Balance (Rs.)', type: 'text', placeholder: '0' },
-    { name: 'remarks', label: 'Remarks', type: 'textarea', placeholder: 'Additional notes...' },
+    { 
+      name: 'address', 
+      label: 'Address', 
+      type: 'text', 
+      placeholder: 'Dealer address' 
+    },
+    { 
+      name: 'openingBalance', 
+      label: 'Opening Balance (Rs.)', 
+      type: 'text', 
+      placeholder: '0' 
+    },
+    { 
+      name: 'remarks', 
+      label: 'Remarks', 
+      type: 'textarea', 
+      placeholder: 'Additional notes...' 
+    },
   ];
 
   const handleDealerAdded = (data: any) => {
-    const newDealer = {
-      id: Date.now(),
-      dealerId: `DLR-${String(dealers.length + 1).padStart(3, '0')}`,
-      name: data.name,
-      cellNo: data.cellNo,
-      area: data.area,
-      address: data.address || data.area,
-      remarks: data.remarks || '',
-      status: 'active',
-    };
-    setDealers([newDealer, ...dealers]);
     toast.success(`${data.name} added successfully!`);
+    fetchDealers();
   };
 
-  const handleDelete = (id: number, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete ${name}?`)) {
-      setDealers(dealers.filter(d => d.id !== id));
-      toast.success(`${name} deleted`);
+      try {
+        await api.delete(`/dealers/${id}`);
+        setDealers(dealers.filter(d => d.id !== id));
+        toast.success(`${name} deleted`);
+      } catch (error) {
+        toast.error('Failed to delete dealer');
+      }
     }
   };
 
@@ -109,12 +211,13 @@ export default function DealersPage() {
     toast.success(`Editing ${name}`);
   };
 
+  // Safe filtering
   const filteredDealers = dealers.filter(dealer => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = 
-      dealer.name.toLowerCase().includes(query) ||
-      dealer.dealerId.toLowerCase().includes(query) ||
-      dealer.cellNo.includes(query);
+      dealer.name?.toLowerCase().includes(query) ||
+      dealer.dealerId?.toLowerCase().includes(query) ||
+      dealer.cellNo?.includes(query);
     
     const matchesStatus = selectedStatus === 'All Dealers' || 
       (selectedStatus === 'Active' && dealer.status === 'active') ||
@@ -123,16 +226,36 @@ export default function DealersPage() {
     return matchesSearch && matchesStatus;
   });
 
+  // Columns with Commission
   const columns = [
     { key: 'dealerId', header: 'Dealer ID' },
     { key: 'name', header: 'Dealer Name' },
     { key: 'cellNo', header: 'Cell No.' },
     { key: 'area', header: 'Area' },
+    { 
+      key: 'commission', 
+      header: 'Commission',
+      render: (item: any) => (
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+          {item.commission}
+        </span>
+      )
+    },
     { key: 'address', header: 'Address' },
     { key: 'remarks', header: 'Remarks' },
   ];
 
   const statusOptions = ['All Dealers', 'Active', 'Inactive'];
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -178,7 +301,7 @@ export default function DealersPage() {
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">ACTIVE</p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                  {dealers.filter(d => d.status === 'active').length}
+                  {activeDealers}
                 </p>
               </div>
               <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
@@ -192,7 +315,7 @@ export default function DealersPage() {
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">INACTIVE</p>
                 <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
-                  {dealers.filter(d => d.status === 'inactive').length}
+                  {inactiveDealers}
                 </p>
               </div>
               <div className="h-12 w-12 bg-gray-50 dark:bg-gray-900/30 rounded-full flex items-center justify-center">
@@ -281,6 +404,9 @@ export default function DealersPage() {
           fields={dealerFields}
           submitLabel="Add Dealer"
           color="purple"
+          endpoint="/dealers"
+          transformData={transformDealerData}
+          context={{ areas }}
         />
       </div>
     </Layout>

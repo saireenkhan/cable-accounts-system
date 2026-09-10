@@ -1,20 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
-import { 
-  Users, 
-  UserPlus, 
-  Edit, 
-  Trash2, 
+import api from '@/app/lib/api';
+import {
+  Users,
+  UserPlus,
+  Edit,
+  Trash2,
   Eye,
   UserCheck,
   UserX,
   UserMinus,
-  UserCog
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -22,120 +22,189 @@ import toast from 'react-hot-toast';
 export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      code: 'LC-1001',
-      name: 'Ahmed Khan',
-      phone: '0300-1234567',
-      area: 'Gulshan Block 1',
-      monthlyFee: 'Rs. 1,500',
-      status: 'Active',
-    },
-    {
-      id: 2,
-      code: 'LC-1002',
-      name: 'Ali Raza',
-      phone: '0321-7654321',
-      area: 'Model Colony',
-      monthlyFee: 'Rs. 1,800',
-      status: 'Active',
-    },
-    {
-      id: 3,
-      code: 'LC-1003',
-      name: 'Usman Shah',
-      phone: '0333-2221110',
-      area: 'Green Town',
-      monthlyFee: 'Rs. 1,500',
-      status: 'Inactive',
-    },
-    {
-      id: 4,
-      code: 'LC-1004',
-      name: 'Saira Fatima',
-      phone: '0345-6789012',
-      area: 'Gulshan Block 1',
-      monthlyFee: 'Rs. 2,000',
-      status: 'Active',
-    },
-    {
-      id: 5,
-      code: 'LC-1005',
-      name: 'Muhammad Ali',
-      phone: '0312-3456789',
-      area: 'Model Colony',
-      monthlyFee: 'Rs. 1,200',
-      status: 'Expired',
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
 
-  // Calculate stats
+  useEffect(() => {
+    fetchUsers();
+    fetchPackages();
+    fetchAreas();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      const response = await api.get('/customers?limit=10000');
+      if (response.data.success) {
+        const formattedUsers = response.data.customers.map((customer: any) => ({
+          id: customer._id,
+          customerId: customer.customerId || 'N/A',
+          code: customer.code,
+          name: customer.name,
+          phone: customer.phone,
+          area: customer.area?.name || 'N/A',
+          monthlyFee: `Rs. ${customer.monthlyFee?.toLocaleString() || 0}`,
+          status: customer.status
+            ? customer.status.charAt(0).toUpperCase() + customer.status.slice(1)
+            : 'Active',
+        }));
+        setUsers(formattedUsers);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast.error('Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPackages = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await api.get('/packages');
+      if (response.data.success) {
+        setPackages(response.data.packages);
+      }
+    } catch (error) {
+      console.error('Error fetching packages:', error);
+    }
+  };
+
+  const fetchAreas = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await api.get('/areas');
+      if (response.data.success) {
+        setAreas(response.data.areas);
+      }
+    } catch (error) {
+      console.error('Error fetching areas:', error);
+    }
+  };
+
   const totalUsers = users.length;
-  const activeUsers = users.filter(u => u.status === 'Active').length;
-  const inactiveUsers = users.filter(u => u.status === 'Inactive').length;
-  const expiredUsers = users.filter(u => u.status === 'Expired').length;
+  const activeUsers = users.filter((u) => u.status === 'Active').length;
+  const inactiveUsers = users.filter((u) => u.status === 'Inactive').length;
+  const expiredUsers = users.filter((u) => u.status === 'Expired').length;
 
-  // User fields for modal
+  // ✅ Updated: User ID field first, then rest
   const userFields: Field[] = [
-    { name: 'name', label: 'Full Name', type: 'text', required: true, placeholder: 'Enter full name' },
-    { name: 'phone', label: 'Phone', type: 'text', required: true, placeholder: '0300-1234567' },
-    { name: 'cnic', label: 'CNIC', type: 'text', placeholder: '12345-1234567-1' },
-    { name: 'address', label: 'Address', type: 'text', required: true, placeholder: 'House #, Street' },
-    { 
-      name: 'area', 
-      label: 'Area', 
-      type: 'select', 
-      required: true, 
-      options: [
-        { label: 'Gulshan Block 1', value: 'Gulshan Block 1' },
-        { label: 'Model Colony', value: 'Model Colony' },
-        { label: 'Green Town', value: 'Green Town' },
-      ]
+    {
+      name: 'customerId',
+      label: 'User ID',
+      type: 'text',
+      required: true,
+      placeholder: 'e.g., USR-001',
     },
-    { 
-      name: 'package', 
-      label: 'Package', 
-      type: 'select', 
-      required: true, 
-      options: [
-        { label: 'Basic - Rs. 1,200', value: 'Basic' },
-        { label: 'Standard - Rs. 1,500', value: 'Standard' },
-        { label: 'Premium - Rs. 1,800', value: 'Premium' },
-      ]
+    {
+      name: 'name',
+      label: 'Full Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Enter full name',
     },
-    { name: 'monthlyFee', label: 'Monthly Fee', type: 'text', required: true, placeholder: 'Rs. 1,500' },
-    { 
-      name: 'status', 
-      label: 'Status', 
+    {
+      name: 'phone',
+      label: 'Phone',
+      type: 'text',
+      required: true,
+      placeholder: '0300-1234567',
+    },
+    {
+      name: 'address',
+      label: 'Address',
+      type: 'text',
+      required: true,
+      placeholder: 'House #, Street',
+    },
+    {
+      name: 'area',
+      label: 'Area',
+      type: 'select',
+      required: true,
+      searchable: true,
+      options: areas.map((area: any) => ({
+        label: area.name,
+        value: area.name,
+      })),
+    },
+    {
+      name: 'package',
+      label: 'Package',
+      type: 'select',
+      required: true,
+      searchable: true,
+      options: packages.map((pkg: any) => ({
+        label: `${pkg.name} - Rs. ${pkg.sellingPrice?.toLocaleString() || 0}`,
+        value: pkg.name,
+      })),
+    },
+    {
+      name: 'monthlyFee',
+      label: 'Monthly Fee',
+      type: 'text',
+      required: true,
+      placeholder: 'Auto-filled from package',
+      dependsOn: 'package',
+      updateOnChange: (value: any, formData: any, context: any) => {
+        const packages = context?.packages || [];
+        const selectedPkg = packages.find((p: any) => p.name === value);
+        return selectedPkg?.sellingPrice || '';
+      },
+    },
+    {
+      name: 'status',
+      label: 'Status',
       type: 'select',
       options: [
-        { label: 'Active', value: 'Active' },
-        { label: 'Inactive', value: 'Inactive' },
-        { label: 'Suspended', value: 'Suspended' },
-        { label: 'Expired', value: 'Expired' },
-      ]
+        { label: 'Active', value: 'active' },
+        { label: 'Inactive', value: 'inactive' },
+        { label: 'Suspended', value: 'suspended' },
+        { label: 'Expired', value: 'expired' },
+      ],
     },
   ];
 
-  const handleUserAdded = (data: any) => {
-    const newUser = {
-      id: Date.now(),
-      code: `LC-${String(users.length + 1).padStart(4, '0')}`,
+  const transformUserData = (data: any) => {
+    const selectedPackage = packages.find((pkg: any) => pkg.name === data.package);
+    const monthlyFee =
+      selectedPackage?.sellingPrice || parseFloat(data.monthlyFee) || 0;
+
+    return {
+      customerId: data.customerId,
       name: data.name,
       phone: data.phone,
+      cnic: data.cnic || '',
+      address: data.address,
       area: data.area,
-      monthlyFee: `Rs. ${parseFloat(data.monthlyFee).toLocaleString()}`,
-      status: data.status || 'Active',
+      package: data.package,
+      monthlyFee: monthlyFee,
+      status: data.status || 'active',
     };
-    setUsers([newUser, ...users]);
-    toast.success(`${data.name} added successfully!`);
   };
 
-  const handleDelete = (id: number, name: string) => {
+  const handleUserAdded = (data: any) => {
+    toast.success(`${data.name} added successfully!`);
+    fetchUsers();
+  };
+
+  const handleDelete = async (id: string, name: string) => {
     if (confirm(`Are you sure you want to delete ${name}?`)) {
-      setUsers(users.filter(u => u.id !== id));
-      toast.success(`${name} deleted`);
+      try {
+        await api.delete(`/customers/${id}`);
+        setUsers(users.filter((u) => u.id !== id));
+        toast.success(`${name} deleted`);
+      } catch (error) {
+        toast.error('Failed to delete user');
+      }
     }
   };
 
@@ -143,42 +212,59 @@ export default function UsersPage() {
     toast.success(`Editing ${name}`);
   };
 
-  const filteredUsers = users.filter(user => {
+  const filteredUsers = users.filter((user) => {
     const query = searchQuery.toLowerCase();
     return (
-      user.name.toLowerCase().includes(query) ||
-      user.code.toLowerCase().includes(query) ||
-      user.phone.includes(query)
+      user.name?.toLowerCase().includes(query) ||
+      user.customerId?.toLowerCase().includes(query) ||
+      user.code?.toLowerCase().includes(query) ||
+      user.phone?.includes(query)
     );
   });
 
   const columns = [
+    { key: 'customerId', header: 'User ID' },
     { key: 'code', header: 'Code' },
     { key: 'name', header: 'Customer' },
     { key: 'phone', header: 'Phone' },
     { key: 'area', header: 'Area' },
     { key: 'monthlyFee', header: 'Monthly Fee' },
-    { 
-      key: 'status', 
+    {
+      key: 'status',
       header: 'Status',
       render: (item: any) => (
-        <span className={cn(
-          'px-2 py-1 rounded-full text-xs font-medium',
-          item.status === 'Active' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-          item.status === 'Inactive' && 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
-          item.status === 'Expired' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-          item.status === 'Suspended' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-        )}>
+        <span
+          className={cn(
+            'px-2 py-1 rounded-full text-xs font-medium',
+            item.status === 'Active' &&
+              'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+            item.status === 'Inactive' &&
+              'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
+            item.status === 'Expired' &&
+              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+            item.status === 'Suspended' &&
+              'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+          )}
+        >
           {item.status}
         </span>
-      )
+      ),
     },
   ];
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
       <div className="space-y-5">
-        {/* Header - Same as Receive Payment */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -198,12 +284,13 @@ export default function UsersPage() {
           </button>
         </div>
 
-        {/* Stats - Same format as Receive Payment */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL USERS</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  TOTAL USERS
+                </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {totalUsers}
                 </p>
@@ -231,7 +318,9 @@ export default function UsersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">INACTIVE</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  INACTIVE
+                </p>
                 <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
                   {inactiveUsers}
                 </p>
@@ -245,7 +334,9 @@ export default function UsersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">EXPIRED</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  EXPIRED
+                </p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
                   {expiredUsers}
                 </p>
@@ -256,14 +347,13 @@ export default function UsersPage() {
             </div>
           </div>
         </div>
-        {/* Search - Same as Receive Payment */}
+
         <SearchBar
-          placeholder="Search by name, code or phone..."
+          placeholder="Search by name, user ID, code or phone..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
 
-        {/* Table - Same as Receive Payment */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
@@ -278,9 +368,21 @@ export default function UsersPage() {
               data={filteredUsers}
               columns={columns}
               actions={[
-                { label: 'Edit', value: 'edit', icon: <Edit className="h-4 w-4" /> },
-                { label: 'View', value: 'view', icon: <Eye className="h-4 w-4" /> },
-                { label: 'Delete', value: 'delete', icon: <Trash2 className="h-4 w-4" /> },
+                {
+                  label: 'Edit',
+                  value: 'edit',
+                  icon: <Edit className="h-4 w-4" />,
+                },
+                {
+                  label: 'View',
+                  value: 'view',
+                  icon: <Eye className="h-4 w-4" />,
+                },
+                {
+                  label: 'Delete',
+                  value: 'delete',
+                  icon: <Trash2 className="h-4 w-4" />,
+                },
               ]}
               onAction={(item, action) => {
                 if (action === 'delete') {
@@ -292,13 +394,12 @@ export default function UsersPage() {
                 }
               }}
               accordionTitle="name"
-              accordionSubtitle="code"
+              accordionSubtitle="customerId"
               emptyMessage="No users found matching your search"
             />
           </div>
         </div>
 
-        {/* Add User Modal */}
         <AddUserModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
@@ -308,6 +409,9 @@ export default function UsersPage() {
           fields={userFields}
           submitLabel="Add User"
           color="blue"
+          endpoint="/customers"
+          transformData={transformUserData}
+          context={{ packages, areas }}
         />
       </div>
     </Layout>

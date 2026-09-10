@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
+import api from '@/app/lib/api';
 import { 
   Calendar, 
   Users, 
@@ -21,86 +22,105 @@ import toast from 'react-hot-toast';
 export default function AttendancePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDate, setSelectedDate] = useState('2026-09-05');
-  const [attendance, setAttendance] = useState([
-    {
-      id: 1,
-      staffId: 'ST-001',
-      name: 'Recovery Operator',
-      designation: 'Collector',
-      area: 'Gulshan Block 1',
-      status: 'Present',
-      checkIn: '09:02 AM',
-      checkOut: '06:05 PM',
-      remarks: '',
-    },
-    {
-      id: 2,
-      staffId: 'ST-002',
-      name: 'Kamran Ali',
-      designation: 'Technician',
-      area: 'Model Colony',
-      status: 'Present',
-      checkIn: '09:15 AM',
-      checkOut: '---',
-      remarks: 'Field duty',
-    },
-    {
-      id: 3,
-      staffId: 'ST-003',
-      name: 'Imran Shah',
-      designation: 'Collector',
-      area: 'Green Town',
-      status: 'Absent',
-      checkIn: '---',
-      checkOut: '---',
-      remarks: 'No show',
-    },
-    {
-      id: 4,
-      staffId: 'ST-004',
-      name: 'Saad Ahmed',
-      designation: 'Supervisor',
-      area: 'New Market',
-      status: 'Present',
-      checkIn: '08:55 AM',
-      checkOut: '06:10 PM',
-      remarks: '',
-    },
-    {
-      id: 5,
-      staffId: 'ST-005',
-      name: 'Hina Raza',
-      designation: 'Accounts Operator',
-      area: 'Gulshan Block 1',
-      status: 'Present',
-      checkIn: '09:00 AM',
-      checkOut: '05:45 PM',
-      remarks: '',
-    },
-    {
-      id: 6,
-      staffId: 'ST-006',
-      name: 'Bilal Hussain',
-      designation: 'Technician',
-      area: 'Model Colony',
-      status: 'Leave',
-      checkIn: '---',
-      checkOut: '---',
-      remarks: 'Approved leave',
-    },
-  ]);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(true);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [allStaff, setAllStaff] = useState<any[]>([]);
 
-  const [history] = useState([
-    { date: '04 Sep 2026', total: 6, present: 5, absent: 1, leave: 0, percentage: 83.3 },
-    { date: '03 Sep 2026', total: 6, present: 5, absent: 0, leave: 1, percentage: 83.3 },
-    { date: '02 Sep 2026', total: 6, present: 4, absent: 1, leave: 1, percentage: 66.7 },
-  ]);
+  // Fetch attendance and staff on load
+  useEffect(() => {
+    fetchAllStaff();
+    fetchAttendance();
+  }, [selectedDate]);
 
+  const fetchAllStaff = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await api.get('/staff');
+      if (response.data.success) {
+        setAllStaff(response.data.staff);
+        // Update staff list for dropdown
+        setStaffList(response.data.staff);
+      }
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+    }
+  };
+
+  const fetchAttendance = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      const response = await api.get(`/attendance?date=${selectedDate}`);
+      if (response.data.success) {
+        // If no attendance records, show all staff as "Absent"
+        let formattedAttendance = [];
+        
+        if (response.data.attendance && response.data.attendance.length > 0) {
+          formattedAttendance = response.data.attendance.map((record: any) => ({
+            id: record._id,
+            staffId: record.staffId?.staffId || 'N/A',
+            name: record.staffId?.name || 'Unknown',
+            designation: record.staffId?.designation || 'N/A',
+            area: record.staffId?.assignedArea?.name || 'N/A',
+            status: record.status || 'Absent',
+            checkIn: record.checkIn || '---',
+            checkOut: record.checkOut || '---',
+            remarks: record.remarks || '',
+          }));
+        } else {
+          // Show all staff with "Absent" status if no attendance records
+          formattedAttendance = allStaff.map((staff: any) => ({
+            id: staff._id,
+            staffId: staff.staffId || 'N/A',
+            name: staff.name || 'Unknown',
+            designation: staff.designation || 'N/A',
+            area: staff.assignedArea?.name || 'N/A',
+            status: 'Absent',
+            checkIn: '---',
+            checkOut: '---',
+            remarks: 'No record',
+          }));
+        }
+        setAttendance(formattedAttendance);
+      }
+    } catch (error) {
+      console.error('Error fetching attendance:', error);
+      toast.error('Failed to load attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate stats
   const totalStaff = attendance.length;
   const present = attendance.filter(s => s.status === 'Present').length;
   const absent = attendance.filter(s => s.status === 'Absent').length;
   const leave = attendance.filter(s => s.status === 'Leave').length;
+  const halfDay = attendance.filter(s => s.status === 'Half Day').length;
+
+  // ✅ Transform attendance data
+  const transformAttendanceData = (data: any) => {
+    console.log('📝 Raw form data:', data);
+    
+    // Send the staffId string (like 'ST-001')
+    const formattedData = {
+      staffId: data.staffId,
+      date: data.date || selectedDate,
+      status: data.status,
+      checkIn: data.checkIn || '',
+      checkOut: data.checkOut || '',
+      remarks: data.remarks || '',
+    };
+    
+    console.log('📤 Transformed attendance data:', formattedData);
+    return formattedData;
+  };
 
   // Attendance fields for modal
   const attendanceFields: Field[] = [
@@ -109,16 +129,18 @@ export default function AttendancePage() {
       label: 'Staff Member', 
       type: 'select', 
       required: true, 
-      options: [
-        { label: 'ST-001 - Recovery Operator (Collector)', value: 'ST-001' },
-        { label: 'ST-002 - Kamran Ali (Technician)', value: 'ST-002' },
-        { label: 'ST-003 - Imran Shah (Collector)', value: 'ST-003' },
-        { label: 'ST-004 - Saad Ahmed (Supervisor)', value: 'ST-004' },
-        { label: 'ST-005 - Hina Raza (Accounts Operator)', value: 'ST-005' },
-        { label: 'ST-006 - Bilal Hussain (Technician)', value: 'ST-006' },
-      ]
+      options: staffList.map((s: any) => ({
+        label: `${s.staffId} - ${s.name} (${s.designation})`,
+        value: s.staffId
+      }))
     },
-    { name: 'date', label: 'Date', type: 'date', required: true },
+    { 
+      name: 'date', 
+      label: 'Date', 
+      type: 'date', 
+      required: true,
+      value: selectedDate
+    },
     { 
       name: 'status', 
       label: 'Status', 
@@ -137,37 +159,15 @@ export default function AttendancePage() {
   ];
 
   const handleAttendanceMarked = (data: any) => {
-    // Staff mapping for names
-    const staffMap: Record<string, { name: string; designation: string; area: string }> = {
-      'ST-001': { name: 'Recovery Operator', designation: 'Collector', area: 'Gulshan Block 1' },
-      'ST-002': { name: 'Kamran Ali', designation: 'Technician', area: 'Model Colony' },
-      'ST-003': { name: 'Imran Shah', designation: 'Collector', area: 'Green Town' },
-      'ST-004': { name: 'Saad Ahmed', designation: 'Supervisor', area: 'New Market' },
-      'ST-005': { name: 'Hina Raza', designation: 'Accounts Operator', area: 'Gulshan Block 1' },
-      'ST-006': { name: 'Bilal Hussain', designation: 'Technician', area: 'Model Colony' },
-    };
-
-    const staff = staffMap[data.staffId];
-    const newAttendance = {
-      id: Date.now(),
-      staffId: data.staffId,
-      name: staff?.name || '',
-      designation: staff?.designation || '',
-      area: staff?.area || '',
-      status: data.status,
-      checkIn: data.checkIn || '---',
-      checkOut: data.checkOut || '---',
-      remarks: data.remarks || '',
-    };
-    setAttendance([newAttendance, ...attendance]);
-    toast.success(`Attendance marked for ${staff?.name}`);
+    toast.success('Attendance marked successfully!');
+    fetchAttendance(); // Refresh the list
   };
 
   const filteredAttendance = attendance.filter(member => {
     const query = searchQuery.toLowerCase();
     return (
-      member.name.toLowerCase().includes(query) ||
-      member.staffId.toLowerCase().includes(query)
+      member.name?.toLowerCase().includes(query) ||
+      member.staffId?.toLowerCase().includes(query)
     );
   });
 
@@ -221,25 +221,15 @@ export default function AttendancePage() {
     { key: 'remarks', header: 'Remarks' },
   ];
 
-  const historyColumns = [
-    { key: 'date', header: 'Date' },
-    { key: 'total', header: 'Total Staff' },
-    { key: 'present', header: 'Present' },
-    { key: 'absent', header: 'Absent' },
-    { key: 'leave', header: 'Leave' },
-    { 
-      key: 'percentage', 
-      header: 'Attendance %',
-      render: (item: any) => (
-        <span className={cn(
-          'font-semibold',
-          item.percentage >= 80 ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'
-        )}>
-          {item.percentage}%
-        </span>
-      )
-    },
-  ];
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -360,27 +350,12 @@ export default function AttendancePage() {
               columns={attendanceColumns}
               accordionTitle="name"
               accordionSubtitle="staffId"
-              emptyMessage="No staff found matching your search"
+              emptyMessage="No staff found. Please add staff members first."
             />
           </div>
         </div>
 
-        {/* Attendance History */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 dark:text-white text-sm">Attendance History</h2>
-            <span className="text-xs text-gray-500 dark:text-gray-400">Recent daily attendance summary</span>
-          </div>
-          <div className="p-4">
-            <DataTable
-              data={history}
-              columns={historyColumns}
-              emptyMessage="No history found"
-            />
-          </div>
-        </div>
-
-        {/* Mark Attendance Modal - Using AddUserModal */}
+        {/* Mark Attendance Modal */}
         <AddUserModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
@@ -390,6 +365,8 @@ export default function AttendancePage() {
           fields={attendanceFields}
           submitLabel="Mark Attendance"
           color="blue"
+          endpoint="/attendance"
+          transformData={transformAttendanceData}
         />
       </div>
     </Layout>

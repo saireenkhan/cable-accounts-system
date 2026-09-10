@@ -1,15 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
+import api from '@/app/lib/api';
 import { 
   Wrench, 
   PlusCircle, 
   Printer, 
-  Eye,
   Edit,
   Trash2,
   DollarSign,
@@ -26,52 +26,68 @@ import toast from 'react-hot-toast';
 export default function InstallationPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [charges, setCharges] = useState([
-    {
-      id: 1,
-      date: '03 Sep 2026',
-      customer: 'Ahmed Khan',
-      area: 'Gulshan Block 1',
-      chargeType: 'New Connection',
-      amount: 3500,
-      status: 'Paid',
-    },
-    {
-      id: 2,
-      date: '04 Sep 2026',
-      customer: 'Ali Raza',
-      area: 'Model Colony',
-      chargeType: 'Fiber Re-installation',
-      amount: 2500,
-      status: 'Unpaid',
-    },
-    {
-      id: 3,
-      date: '05 Sep 2026',
-      customer: 'Usman Shah',
-      area: 'Green Town',
-      chargeType: 'Router Replacement',
-      amount: 1500,
-      status: 'Paid',
-    },
-    {
-      id: 4,
-      date: '06 Sep 2026',
-      customer: 'Saira Fatima',
-      area: 'Gulshan Block 1',
-      chargeType: 'New Connection',
-      amount: 3500,
-      status: 'Paid',
-    },
-  ]);
+  const [loading, setLoading] = useState(true);
+  const [charges, setCharges] = useState<any[]>([]);
+
+  // Fetch charges from API
+  useEffect(() => {
+    fetchCharges();
+  }, []);
+
+  const fetchCharges = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      const response = await api.get('/installation');
+      if (response.data.success) {
+        const formattedCharges = response.data.charges.map((charge: any) => ({
+          id: charge._id,
+          date: charge.date ? new Date(charge.date).toLocaleDateString('en-PK', { 
+            day: '2-digit', 
+            month: 'short', 
+            year: 'numeric' 
+          }) : 'N/A',
+          customer: charge.customer?.name || 'Unknown',
+          area: charge.area?.name || 'N/A',
+          chargeType: charge.chargeType || 'N/A',
+          amount: charge.amount || 0,
+          status: charge.status || 'Unpaid',
+          remarks: charge.remarks || '',
+        }));
+        setCharges(formattedCharges);
+      }
+    } catch (error) {
+      console.error('Error fetching installation charges:', error);
+      toast.error('Failed to load installation charges');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Calculate stats
   const totalCharges = charges.length;
-  const totalAmount = charges.reduce((sum, c) => sum + c.amount, 0);
-  const paidAmount = charges.filter(c => c.status === 'Paid').reduce((sum, c) => sum + c.amount, 0);
-  const unpaidAmount = charges.filter(c => c.status === 'Unpaid').reduce((sum, c) => sum + c.amount, 0);
+  const totalAmount = charges.reduce((sum, c) => sum + (c.amount || 0), 0);
+  const paidAmount = charges.filter(c => c.status === 'Paid').reduce((sum, c) => sum + (c.amount || 0), 0);
+  const unpaidAmount = charges.filter(c => c.status === 'Unpaid').reduce((sum, c) => sum + (c.amount || 0), 0);
   const paidCount = charges.filter(c => c.status === 'Paid').length;
   const unpaidCount = charges.filter(c => c.status === 'Unpaid').length;
+
+  // Transform installation charge data before sending
+  const transformInstallationData = (data: any) => {
+    console.log('📝 Transforming installation data:', data);
+    return {
+      customer: data.customer,
+      area: data.area,
+      chargeType: data.chargeType,
+      amount: parseFloat(data.amount) || 0,
+      status: data.status,
+      date: data.date || new Date().toISOString(),
+      remarks: data.remarks || '',
+    };
+  };
 
   // Installation fields for modal
   const installationFields: Field[] = [
@@ -85,6 +101,7 @@ export default function InstallationPage() {
         { label: 'Ali Raza', value: 'Ali Raza' },
         { label: 'Usman Shah', value: 'Usman Shah' },
         { label: 'Saira Fatima', value: 'Saira Fatima' },
+        { label: 'Muhammad Ali', value: 'Muhammad Ali' },
       ]
     },
     { 
@@ -111,7 +128,7 @@ export default function InstallationPage() {
         { label: 'Other', value: 'Other' },
       ]
     },
-    { name: 'amount', label: 'Amount (Rs.)', type: 'text', required: true, placeholder: '3,500' },
+    { name: 'amount', label: 'Amount (Rs.)', type: 'text', required: true, placeholder: '3500' },
     { 
       name: 'status', 
       label: 'Status', 
@@ -127,23 +144,19 @@ export default function InstallationPage() {
   ];
 
   const handleChargeAdded = (data: any) => {
-    const newCharge = {
-      id: Date.now(),
-      date: data.date ? new Date(data.date).toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-PK', { day: '2-digit', month: 'short', year: 'numeric' }),
-      customer: data.customer,
-      area: data.area,
-      chargeType: data.chargeType,
-      amount: parseFloat(data.amount) || 0,
-      status: data.status,
-    };
-    setCharges([newCharge, ...charges]);
-    toast.success(`Installation charge of Rs. ${newCharge.amount} recorded for ${data.customer}`);
+    toast.success(`Installation charge of Rs. ${data.amount} recorded for ${data.customer}`);
+    fetchCharges();
   };
 
-  const handleDelete = (id: number, customer: string) => {
+  const handleDelete = async (id: string, customer: string) => {
     if (confirm(`Are you sure you want to delete this charge for "${customer}"?`)) {
-      setCharges(charges.filter(c => c.id !== id));
-      toast.success(`Charge deleted`);
+      try {
+        await api.delete(`/installation/${id}`);
+        setCharges(charges.filter(c => c.id !== id));
+        toast.success(`Charge deleted`);
+      } catch (error) {
+        toast.error('Failed to delete charge');
+      }
     }
   };
 
@@ -155,12 +168,13 @@ export default function InstallationPage() {
     toast.success(`Printing charge receipt for ${charge.customer}`);
   };
 
+  // Safe filtering with optional chaining
   const filteredCharges = charges.filter(charge => {
     const query = searchQuery.toLowerCase();
     return (
-      charge.customer.toLowerCase().includes(query) ||
-      charge.chargeType.toLowerCase().includes(query) ||
-      charge.area.toLowerCase().includes(query)
+      charge.customer?.toLowerCase().includes(query) ||
+      charge.chargeType?.toLowerCase().includes(query) ||
+      charge.area?.toLowerCase().includes(query)
     );
   });
 
@@ -173,7 +187,7 @@ export default function InstallationPage() {
       key: 'amount', 
       header: 'Amount',
       render: (item: any) => (
-        <span>Rs. {item.amount.toLocaleString()}</span>
+        <span>Rs. {(item.amount || 0).toLocaleString()}</span>
       )
     },
     { 
@@ -190,6 +204,16 @@ export default function InstallationPage() {
       )
     },
   ];
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -335,6 +359,7 @@ export default function InstallationPage() {
             />
           </div>
         </div>
+
         {/* Add Installation Charge Modal */}
         <AddUserModal
           isOpen={isModalOpen}
@@ -345,6 +370,8 @@ export default function InstallationPage() {
           fields={installationFields}
           submitLabel="Add Charge"
           color="indigo"
+          endpoint="/installation"
+          transformData={transformInstallationData}
         />
       </div>
     </Layout>
