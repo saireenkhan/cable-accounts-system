@@ -23,6 +23,7 @@ import {
   Clock,
   XCircle,
   Search,
+  TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -143,6 +144,7 @@ function ReceivePaymentModal({
   onSuccess,
   customers,
   payments,
+  packages,
   fetchData,
 }: {
   isOpen: boolean;
@@ -150,6 +152,7 @@ function ReceivePaymentModal({
   onSuccess?: () => void;
   customers: any[];
   payments: any[];
+  packages: any[];
   fetchData: () => void;
 }) {
   const [selectedArea, setSelectedArea] = useState('');
@@ -320,6 +323,34 @@ function ReceivePaymentModal({
       : null;
 
   const isDuplicateMonth = !!existingMonthPayment;
+
+  // ✅ Look up the customer's package details for profit calculation
+  const packageDetails = (() => {
+    if (!customerDetails) return null;
+    const pkgName =
+      typeof customerDetails.package === 'string'
+        ? customerDetails.package
+        : customerDetails.package?.name;
+    if (!pkgName) return null;
+
+    const pkg = packages.find((p: any) => p.name === pkgName);
+    if (!pkg) return null;
+
+    const selling = parseFloat(String(pkg.sellingPrice)) || 0;
+    const cost = parseFloat(String(pkg.purchasePrice)) || 0;
+    const profit = selling - cost;
+    const profitRatio = selling > 0 ? profit / selling : 0;
+
+    return { name: pkg.name, selling, cost, profit, profitRatio };
+  })();
+
+  // ✅ Live pro-rated profit based on amount being received
+  const liveProfit = packageDetails
+    ? Math.round(receivedAmount * packageDetails.profitRatio)
+    : 0;
+
+  // ✅ Profit if the whole package price is paid
+  const fullMonthProfit = packageDetails ? packageDetails.profit : 0;
 
   const handleSubmit = async () => {
     if (!selectedArea) {
@@ -578,6 +609,67 @@ function ReceivePaymentModal({
                 />
               </div>
 
+              {/* ✅ Package Profit Panel */}
+              {packageDetails && (
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                      Package Profit
+                    </span>
+                    <span className="text-emerald-700 dark:text-emerald-400 font-mono">
+                      {packageDetails.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Selling Price
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      Rs. {packageDetails.selling.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">
+                      Package Cost
+                    </span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      Rs. {packageDetails.cost.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm border-t border-emerald-200 dark:border-emerald-800 pt-2">
+                    <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                      Profit (per full month)
+                    </span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                      Rs. {fullMonthProfit.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {receivedAmount > 0 && (
+                    <div className="flex items-center justify-between text-sm border-t border-emerald-200 dark:border-emerald-800 pt-2">
+                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                        Earned this payment
+                      </span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                        Rs. {liveProfit.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-emerald-700/70 dark:text-emerald-400/70 pt-1">
+                    Formula: Profit = Selling − Cost
+                    {packageDetails.selling > 0 && (
+                      <>
+                        {' '}· Ratio: {Math.round(packageDetails.profitRatio * 100)}%
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Previous Balance (Rs.)
@@ -773,6 +865,7 @@ export default function ReceivePaymentPage() {
 
   const [payments, setPayments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
 
   useEffect(() => {
     fetchAllData();
@@ -787,9 +880,10 @@ export default function ReceivePaymentPage() {
         return;
       }
 
-      const [paymentsRes, customersRes] = await Promise.all([
+      const [paymentsRes, customersRes, packagesRes] = await Promise.all([
         api.get('/payments'),
         api.get('/customers?limit=1000'),
+        api.get('/packages'),
       ]);
 
       if (paymentsRes.data.success) {
@@ -837,6 +931,10 @@ export default function ReceivePaymentPage() {
       if (customersRes.data.success) {
         setCustomers(customersRes.data.customers);
       }
+
+      if (packagesRes.data.success) {
+        setPackages(packagesRes.data.packages || []);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load data');
@@ -868,6 +966,34 @@ export default function ReceivePaymentPage() {
   const totalCollected = payments
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
+
+  // ✅ TOTAL PROFIT — sum of profits earned from each payment
+  const totalProfit = payments    .filter((p) => !p.isNoPayment)
+    .reduce((sum, p) => {
+      const customer = customers.find((c) => c.name === p.customer);
+      if (!customer) return sum;
+
+      const pkgName =
+        typeof customer.package === 'string'
+          ? customer.package
+          : customer.package?.name;
+      if (!pkgName) return sum;
+
+      const pkg = packages.find((pk: any) => pk.name === pkgName);
+      if (!pkg) return sum;
+
+      const selling = parseFloat(String(pkg.sellingPrice)) || 0;
+      const cost = parseFloat(String(pkg.purchasePrice)) || 0;
+      if (selling <= 0) return sum;
+
+      const ratio = (selling - cost) / selling;
+      const profit = (parseFloat(String(p.amount)) || 0) * ratio;
+
+      return sum + profit;
+    }, 0);
+
+  const totalProfitMargin =
+    totalCollected > 0 ? Math.round((totalProfit / totalCollected) * 100) : 0;
 
   const now = new Date();
   const monthsList = [
@@ -1094,6 +1220,7 @@ export default function ReceivePaymentPage() {
           </button>
         </div>
 
+        {/* ✅ 3 STAT CARDS — Total Profit is now inside Total Collection */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
@@ -1144,25 +1271,39 @@ export default function ReceivePaymentPage() {
             </div>
           </div>
 
+          {/* ✅ Total Collection card — now with Total Profit inside */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   TOTAL COLLECTION
                 </p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   Rs. {totalCollected.toLocaleString()}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {totalReceivable > 0
-                    ? `${Math.min(
-                        100,
-                        Math.round((totalCollected / totalReceivable) * 100)
-                      )}% recovered`
-                    : '0% recovered'}
-                </p>
+
+                {/* ✅ Profit line inside the same card */}
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3 text-emerald-500" />
+                      TOTAL PROFIT
+                    </span>
+                    <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                      Rs. {Math.round(totalProfit).toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
+                    {totalCollected > 0
+                      ? `${totalProfitMargin}% margin · ${Math.min(
+                          100,
+                          Math.round((totalCollected / totalReceivable) * 100)
+                        )}% recovered`
+                      : '0% margin'}
+                  </p>
+                </div>
               </div>
-              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center flex-shrink-0">
                 <DollarSign className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
@@ -1215,6 +1356,7 @@ export default function ReceivePaymentPage() {
           }}
           customers={customers}
           payments={payments}
+          packages={packages}
           fetchData={fetchAllData}
         />
       </div>
