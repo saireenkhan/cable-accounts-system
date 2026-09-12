@@ -90,13 +90,13 @@ export default function DealerPaymentsPage() {
   };
 
   // ============ COMMON ============
- const uniqueAreas: string[] = Array.from(
-  new Set<string>(
-    dealers
-      .map((d: any) => d.area?.name || d.area)
-      .filter((a: any): a is string => Boolean(a))
-  )
-).sort();
+  const uniqueAreas: string[] = Array.from(
+    new Set<string>(
+      dealers
+        .map((d: any) => d.area?.name || d.area)
+        .filter((a: any): a is string => Boolean(a))
+    )
+  ).sort();
 
   const monthOptions = [
     'January',
@@ -297,14 +297,14 @@ export default function DealerPaymentsPage() {
         return Math.max(0, billing - received).toLocaleString();
       },
     },
-    // ✅ Previous Balance = unpaid from OTHER months
+    // ✅ Previous Balance = unpaid from OTHER months (excludes the currently selected month)
     {
       name: 'previousBalance',
       label: 'Previous Balance (Rs.)',
       type: 'text',
       readOnly: true,
       placeholder: 'Auto-calculated',
-      dependsOn: 'dealerName',
+      dependsOn: 'month', // ✅ changed from 'dealerName'
       updateOnChange: (_v: any, formData: any, context: any) => {
         const dealerName = formData?.dealerName;
         const month = formData?.month;
@@ -314,12 +314,15 @@ export default function DealerPaymentsPage() {
         const dealerPayments = allPayments.filter(
           (p: any) => p.dealer === dealerName
         );
-const allMonths: string[] = Array.from(
-  new Set<string>(dealerPayments.map((p: any) => p.month))
-);
 
-let prevBalance = 0;
-allMonths.forEach((m: string) => {
+        const allMonths: string[] = Array.from(
+          new Set<string>(dealerPayments.map((p: any) => p.month))
+        );
+
+        let prevBalance = 0;
+        allMonths.forEach((m: string) => {
+          // ✅ Skip the currently selected month — its balance goes in "Billing Amount"
+          if (m === month) return;
 
           const billing = dealerPayments
             .filter(
@@ -339,25 +342,25 @@ allMonths.forEach((m: string) => {
         return prevBalance.toLocaleString();
       },
     },
-   {
-  name: 'totalBalance',
-  label: 'Total Balance (Rs.)',
-  type: 'text',
-  readOnly: true,
-  placeholder: 'Auto-calculated',
-  dependsOn: 'billingAmount',
-  updateOnChange: (_v: any, formData: any) => {
-    const prev =
-      parseFloat(
-        String(formData?.previousBalance || '0').replace(/,/g, '')
-      ) || 0;
-    const bill =
-      parseFloat(
-        String(formData?.billingAmount || '0').replace(/,/g, '')
-      ) || 0;
-    return (prev + bill).toLocaleString();
-  },
-},
+    {
+      name: 'totalBalance',
+      label: 'Total Balance (Rs.)',
+      type: 'text',
+      readOnly: true,
+      placeholder: 'Auto-calculated',
+      dependsOn: 'billingAmount',
+      updateOnChange: (_v: any, formData: any) => {
+        const prev =
+          parseFloat(
+            String(formData?.previousBalance || '0').replace(/,/g, '')
+          ) || 0;
+        const bill =
+          parseFloat(
+            String(formData?.billingAmount || '0').replace(/,/g, '')
+          ) || 0;
+        return (prev + bill).toLocaleString();
+      },
+    },
     {
       name: 'receiveAmount',
       label: 'Receive Amount (Rs.)',
@@ -365,23 +368,23 @@ allMonths.forEach((m: string) => {
       required: true,
       placeholder: '0',
     },
- {
-  name: 'remainingBalance',
-  label: 'Remaining Balance (Rs.)',
-  type: 'text',
-  readOnly: true,
-  placeholder: 'Auto-calculated',
-  dependsOn: 'receiveAmount',
-  updateOnChange: (_v: any, formData: any) => {
-    const total =
-      parseFloat(
-        String(formData?.totalBalance || '0').replace(/,/g, '')
-      ) || 0;
-    const received =
-      parseFloat(String(formData?.receiveAmount || '0')) || 0;
-    return Math.max(0, total - received).toLocaleString();
-  },
-},
+    {
+      name: 'remainingBalance',
+      label: 'Remaining Balance (Rs.)',
+      type: 'text',
+      readOnly: true,
+      placeholder: 'Auto-calculated',
+      dependsOn: 'receiveAmount',
+      updateOnChange: (_v: any, formData: any) => {
+        const total =
+          parseFloat(
+            String(formData?.totalBalance || '0').replace(/,/g, '')
+          ) || 0;
+        const received =
+          parseFloat(String(formData?.receiveAmount || '0')) || 0;
+        return Math.max(0, total - received).toLocaleString();
+      },
+    },
     {
       name: 'receiptNo',
       label: 'Dealer Receipt No.',
@@ -585,7 +588,7 @@ allMonths.forEach((m: string) => {
     },
   ];
 
-  // ✅ FIXED Receive columns: "Received" shows THIS ROW's amount
+  // ✅ Receive columns: "Received" shows THIS ROW's amount
   const receiveColumns = [
     { key: 'receipt', header: 'Receipt' },
     {

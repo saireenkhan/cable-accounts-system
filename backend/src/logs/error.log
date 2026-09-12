@@ -12,3 +12,5 @@
 {"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Gulshan Block 1\" (type string) at path \"area\" for model \"Customer\"","timestamp":"2026-09-09T06:46:50.430Z"}
 {"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Gulshan Block 1\" (type string) at path \"area\" for model \"Customer\"","timestamp":"2026-09-09T06:46:50.490Z"}
 {"level":"error","message":"❌ MongoDB Error: Server selection timed out after 5000 ms","timestamp":"2026-09-09T10:17:47.744Z"}
+{"level":"error","message":"❌ MongoDB connection error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.9f1a3ua.mongodb.net","timestamp":"2026-09-12T05:57:07.288Z"}
+{"level":"error","message":"❌ MongoDB connection error event: querySrv ECONNREFUSED _mongodb._tcp.cluster0.9f1a3ua.mongodb.net","timestamp":"2026-09-12T05:57:07.290Z"}

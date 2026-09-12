@@ -417,3 +417,22 @@
 {"level":"info","message":"✅ MongoDB reconnected","timestamp":"2026-09-10T15:00:07.518Z"}
 {"level":"warn","message":"⚠️ MongoDB disconnected, attempting to reconnect...","timestamp":"2026-09-10T15:00:18.120Z"}
 {"level":"info","message":"✅ MongoDB reconnected","timestamp":"2026-09-10T15:00:18.391Z"}
+{"level":"warn","message":"⚠️ MongoDB disconnected, will reconnect on next request","timestamp":"2026-09-12T05:57:07.282Z"}
+{"level":"error","message":"❌ MongoDB connection error: querySrv ECONNREFUSED _mongodb._tcp.cluster0.9f1a3ua.mongodb.net","timestamp":"2026-09-12T05:57:07.288Z"}
+{"level":"error","message":"❌ MongoDB connection error event: querySrv ECONNREFUSED _mongodb._tcp.cluster0.9f1a3ua.mongodb.net","timestamp":"2026-09-12T05:57:07.290Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T06:02:42.199Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-12T06:10:10.637Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-12T06:10:10.641Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T06:10:11.204Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-12T06:11:26.062Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-12T06:11:26.068Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T06:11:26.638Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-12T06:16:22.060Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-12T06:16:22.067Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T06:16:22.656Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-12T06:16:39.386Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-12T06:16:39.391Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T06:16:39.926Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-12T06:26:42.784Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-12T06:26:42.791Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T06:26:43.391Z"}

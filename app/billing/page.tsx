@@ -184,7 +184,6 @@ function ReceivePaymentModal({
   const uniqueAreas = getUniqueAreas();
   const filteredCustomers = getFilteredCustomers();
 
-  // ✅ Build User ID options — using the SAME customerId that was saved
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.customerId || c.code || 'N/A';
     return {
@@ -748,8 +747,6 @@ export default function ReceivePaymentPage() {
       ]);
 
       if (paymentsRes.data.success) {
-        // ✅ Build a lookup map of customer name → customerId
-        // This ensures the table shows the EXACT customerId that was saved
         const customerIdMap: Record<string, string> = {};
         (customersRes.data.customers || []).forEach((c: any) => {
           customerIdMap[c.name] = c.customerId || c.code || 'N/A';
@@ -757,7 +754,6 @@ export default function ReceivePaymentPage() {
 
         const formattedPayments = paymentsRes.data.payments.map((payment: any) => {
           const customerName = payment.customer?.name || 'Unknown';
-          // ✅ Use the customerId from the fetched customer, fallback to populated payment customer
           const displayUserId =
             payment.customer?.customerId ||
             customerIdMap[customerName] ||
@@ -767,7 +763,7 @@ export default function ReceivePaymentPage() {
           return {
             id: payment._id,
             receipt: payment.receiptNo || 'N/A',
-            userId: displayUserId, // ✅ This is what we show in the table
+            userId: displayUserId,
             customer: customerName,
             customerId: payment.customer?._id || '',
             month: payment.month || 'N/A',
@@ -806,14 +802,29 @@ export default function ReceivePaymentPage() {
   // ============ STATS CALCULATIONS ============
   const totalCustomers = customers.length;
 
-  const totalReceivable = customers.reduce(
-    (sum, c) => sum + (c.monthlyFee || 0),
-    0
-  );
+  // ✅ Total Receivable = sum of (monthlyFee × active months) per customer
+  // This matches totalCollected (all-time), so % recovered stays ≤ 100%
+  const totalReceivable = customers.reduce((sum: number, customer: any) => {
+    const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
+    if (monthlyFee === 0) return sum;
+
+    const customerPayments = payments.filter(
+      (p) => p.customer === customer.name && !p.isNoPayment
+    );
+    const activeMonths = new Set<string>();
+    customerPayments.forEach((p) => {
+      if (p.month) activeMonths.add(p.month);
+    });
+
+    // If no payments yet, expect 1 month (current month)
+    const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
+
+    return sum + monthlyFee * monthCount;
+  }, 0);
 
   const totalCollected = payments
     .filter((p) => !p.isNoPayment)
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+    .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
 
   const now = new Date();
   const monthsList = [
@@ -846,95 +857,128 @@ export default function ReceivePaymentPage() {
     return false;
   };
 
-  const getCustomerStatus = (customer: any) => {
-    const monthlyFee = customer.monthlyFee || 0;
-    if (monthlyFee === 0) return 'paid';
+  // ============================================================
+  // ✅ Count per-MONTH statuses (customer can appear in multiple categories)
+  // ============================================================
+  const monthStatusCounts = {
+    paid: 0,
+    partial: 0,
+    notpaid: 0,
+  };
+
+  const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
+
+  customers.forEach((customer: any) => {
+    const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
+    if (monthlyFee === 0) return;
 
     const customerPayments = payments.filter(
       (p) => p.customer === customer.name && !p.isNoPayment
     );
 
+    // ✅ No payments at all → Not Paid
+    if (customerPayments.length === 0) {
+      monthStatusCounts.notpaid += 1;
+      return;
+    }
+
+    // Group total paid per month
     const monthPaidMap: Record<string, number> = {};
     customerPayments.forEach((p: any) => {
       if (!monthPaidMap[p.month]) {
         monthPaidMap[p.month] = 0;
       }
-      monthPaidMap[p.month] += p.amount || 0;
+      monthPaidMap[p.month] += parseFloat(String(p.amount)) || 0;
     });
 
-    let hasPartialMonth = false;
+    const activeMonths = Object.keys(monthPaidMap);
+    const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
+    const totalExpected = monthlyFee * activeMonths.length;
 
-    Object.keys(monthPaidMap).forEach((month) => {
+    // ✅ If fully paid across ALL months → count as 1 Paid
+    if (totalPaid >= totalExpected) {
+      monthStatusCounts.paid += 1;
+      return;
+    }
+
+    // ✅ Otherwise, check each month individually
+    activeMonths.forEach((month) => {
       const paid = monthPaidMap[month];
+      const remaining = monthlyFee - paid;
 
-      if (isPastOrCurrentMonth(month)) {
-        if (paid > 0 && paid < monthlyFee) {
-          hasPartialMonth = true;
-        }
+      if (remaining <= 0) {
+        monthStatusCounts.paid += 1;
+      } else if (month === currentMonth) {
+        monthStatusCounts.partial += 1;
+      } else if (isPastOrCurrentMonth(month)) {
+        monthStatusCounts.notpaid += 1;
       }
     });
+  });
 
-    if (hasPartialMonth) {
-      return 'partial';
-    }
+  const paidCustomers = monthStatusCounts.paid;
+  const partialCustomers = monthStatusCounts.partial;
+  const notPaidCustomers = monthStatusCounts.notpaid;
 
-    const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
-    const currentMonthPaid = monthPaidMap[currentMonth] || 0;
-
-    if (currentMonthPaid >= monthlyFee) {
-      return 'paid';
-    } else if (currentMonthPaid > 0) {
-      return 'partial';
-    } else {
-      return 'notpaid';
-    }
-  };
-
-  const customerStatuses = customers.map((c) => ({
-    ...c,
-    status: getCustomerStatus(c),
-  }));
-
-  const paidCustomers = customerStatuses.filter(
-    (c) => c.status === 'paid'
-  ).length;
-  const partialCustomers = customerStatuses.filter(
-    (c) => c.status === 'partial'
-  ).length;
-  const notPaidCustomers = customerStatuses.filter(
-    (c) => c.status === 'notpaid'
-  ).length;
-
+  // ============================================================
+  // ✅ Table row status — per-month logic for each payment row
+  // ============================================================
   const getPaymentStatus = (payment: any) => {
-    if (payment.isNoPayment || payment.amount === 0) {
+    const customer = customers.find((c) => c.name === payment.customer);
+    if (!customer) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
 
-    const customer = customers.find((c) => c.name === payment.customer);
-    if (!customer)
-      return { status: 'pending', label: 'Pending', color: 'pending' };
-
-    const monthlyFee = customer.monthlyFee || 0;
-
-    const monthlyPayments = payments.filter(
-      (p) =>
-        p.customer === payment.customer &&
-        p.month === payment.month &&
-        !p.isNoPayment
-    );
-
-    const totalPaidForMonth = monthlyPayments.reduce(
-      (sum, p) => sum + (p.amount || 0),
-      0
-    );
-
-    if (totalPaidForMonth >= monthlyFee) {
+    const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
+    if (monthlyFee === 0) {
       return { status: 'paid', label: 'Paid', color: 'paid' };
-    } else if (totalPaidForMonth > 0) {
-      return { status: 'partial', label: 'Partial', color: 'partial' };
-    } else {
-      return { status: 'pending', label: 'Pending', color: 'pending' };
     }
+
+    const allCustomerPayments = payments.filter(
+      (p) => p.customer === payment.customer && !p.isNoPayment
+    );
+
+    // No payments at all
+    if (allCustomerPayments.length === 0) {
+      return { status: 'pending', label: 'Not Paid', color: 'pending' };
+    }
+
+    // Group total paid per month
+    const monthPaidMap: Record<string, number> = {};
+    allCustomerPayments.forEach((p) => {
+      if (!monthPaidMap[p.month]) monthPaidMap[p.month] = 0;
+      monthPaidMap[p.month] += parseFloat(String(p.amount)) || 0;
+    });
+
+    const activeMonths = Object.keys(monthPaidMap);
+    const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
+    const totalExpected = monthlyFee * activeMonths.length;
+
+    // ✅ Fully paid across all months → Paid
+    if (totalPaid >= totalExpected) {
+      return { status: 'paid', label: 'Paid', color: 'paid' };
+    }
+
+    // ✅ Check this specific payment's month
+    const paidForThisMonth = monthPaidMap[payment.month] || 0;
+    const remainingForThisMonth = monthlyFee - paidForThisMonth;
+
+    // This specific month is fully paid
+    if (remainingForThisMonth <= 0) {
+      return { status: 'paid', label: 'Paid', color: 'paid' };
+    }
+
+    // This month is the current month and partially paid → Partial
+    if (payment.month === currentMonth) {
+      return { status: 'partial', label: 'Partial', color: 'partial' };
+    }
+
+    // This month is a past month and underpaid → Not Paid
+    if (isPastOrCurrentMonth(payment.month)) {
+      return { status: 'pending', label: 'Not Paid', color: 'pending' };
+    }
+
+    return { status: 'partial', label: 'Partial', color: 'partial' };
   };
 
   const filteredPayments = payments.filter((payment) => {
@@ -947,7 +991,6 @@ export default function ReceivePaymentPage() {
     );
   });
 
-  // ✅ Updated columns: User ID first (instead of Receipt)
   const columns = [
     { key: 'userId', header: 'User ID' },
     { key: 'customer', header: 'User' },
@@ -1066,7 +1109,7 @@ export default function ReceivePaymentPage() {
                   Rs. {totalReceivable.toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Expected monthly collection
+                  Expected total (all active months)
                 </p>
               </div>
               <div className="h-12 w-12 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
@@ -1086,8 +1129,9 @@ export default function ReceivePaymentPage() {
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   {totalReceivable > 0
-                    ? `${Math.round(
-                        (totalCollected / totalReceivable) * 100
+                    ? `${Math.min(
+                        100,
+                        Math.round((totalCollected / totalReceivable) * 100)
                       )}% recovered`
                     : '0% recovered'}
                 </p>

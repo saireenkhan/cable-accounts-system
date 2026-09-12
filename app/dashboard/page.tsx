@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Layout from '@/app/components/ui/Layout';
 import api from '@/app/lib/api';
-import { 
-  Users, 
-  DollarSign, 
-  CreditCard, 
+import {
+  Users,
+  DollarSign,
+  CreditCard,
   Clock,
   CheckCircle,
   XCircle,
@@ -56,33 +56,55 @@ export default function DashboardPage() {
       const suspendedCustomers = customers.filter((c: any) => c.status?.toLowerCase() === 'suspended').length;
 
       // ✅ ========== BILLING & COLLECTION STATS ==========
-      // Total Billing = sum of all customers' monthly fees
-      const totalBilling = customers.reduce((sum: number, c: any) => sum + (c.monthlyFee || 0), 0);
+      // ✅ Total Billing = sum of (monthlyFee × active months) per customer
+      // This matches the "total expected" logic used in the Receive Payments page,
+      // so totalRecovered can never exceed totalBilling.
+      const totalBilling = customers.reduce((sum: number, customer: any) => {
+        const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
+        if (monthlyFee === 0) return sum;
+
+        // Count distinct months this customer has payment activity in
+        const customerPayments = payments.filter(
+          (p: any) => p.customer?.name === customer.name && !p.isNoPayment
+        );
+        const activeMonths = new Set<string>();
+        customerPayments.forEach((p: any) => {
+          if (p.month) activeMonths.add(p.month);
+        });
+
+        // If no payments yet, expect 1 month (current month)
+        const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
+
+        return sum + monthlyFee * monthCount;
+      }, 0);
 
       // Total Recovered = sum of all payment amounts (excluding no-payments)
       const totalRecovered = payments
         .filter((p: any) => !p.isNoPayment)
-        .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+        .reduce((sum: number, p: any) => sum + (parseFloat(String(p.amount)) || 0), 0);
 
       // Outstanding = Total Billing - Total Recovered (but not negative)
       const totalOutstanding = Math.max(0, totalBilling - totalRecovered);
 
-      // Recovery Rate
-      const recoveryRate = totalBilling > 0 ? ((totalRecovered / totalBilling) * 100) : 0;
+      // ✅ Recovery Rate (clamped to 100%)
+      const recoveryRate = totalBilling > 0
+        ? Math.min(100, (totalRecovered / totalBilling) * 100)
+        : 0;
 
       // ✅ ========== UPCOMING EXPIRY (next 7 days) ==========
       const today = new Date();
       const sevenDaysLater = new Date(today);
       sevenDaysLater.setDate(today.getDate() + 7);
-      
+
       const upcomingExpiry = customers.filter((c: any) => {
         if (!c.expiryDate) return false;
         const expiryDate = new Date(c.expiryDate);
         return expiryDate >= today && expiryDate <= sevenDaysLater;
       }).length;
 
-      // ✅ ========== DEFAULTER USERS ==========
-      // A customer is a defaulter if they have unpaid PAST months (before current month)
+      // ============================================================
+      // ✅ ========== PER-MONTH STATUS COUNTS (same as Receive Payments) ==========
+      // ============================================================
       const now = new Date();
       const monthsList = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -91,59 +113,84 @@ export default function DashboardPage() {
 
       const currentMonthIndex = now.getMonth();
       const currentYear = now.getFullYear();
+      const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
 
-      // Helper: Check if a month string is before current month
-      const isPastMonth = (monthStr: string) => {
+      // Helper: Check if a month string is past or current
+      const isPastOrCurrentMonth = (monthStr: string) => {
         const [monthName, yearStr] = monthStr.split(' ');
         const year = parseInt(yearStr);
         const monthIndex = monthsList.indexOf(monthName);
-        
+
         if (isNaN(year) || monthIndex === -1) return false;
-        
-        // If year is before current year
+
         if (year < currentYear) return true;
-        // If year is same but month is before current month
-        if (year === currentYear && monthIndex < currentMonthIndex) return true;
-        
+        if (year === currentYear && monthIndex <= currentMonthIndex) return true;
+
         return false;
       };
 
-      let defaultUsers = 0;
+      // ✅ Count per-MONTH statuses (customer can appear in multiple categories)
+      const monthStatusCounts = {
+        paid: 0,
+        partial: 0,
+        notpaid: 0,
+      };
 
       customers.forEach((customer: any) => {
-        const monthlyFee = customer.monthlyFee || 0;
+        const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
         if (monthlyFee === 0) return;
-        
-        // Get all payments for this customer (excluding no-payments)
-        const customerPayments = payments.filter((p: any) => 
-          p.customer?.name === customer.name && 
-          !p.isNoPayment
+
+        const customerPayments = payments.filter(
+          (p: any) => p.customer?.name === customer.name && !p.isNoPayment
         );
-        
-        // Group payments by month
+
+        // ✅ No payments at all → Not Paid
+        if (customerPayments.length === 0) {
+          monthStatusCounts.notpaid += 1;
+          return;
+        }
+
+        // Group total paid per month
         const monthPaidMap: Record<string, number> = {};
         customerPayments.forEach((p: any) => {
           if (!monthPaidMap[p.month]) {
             monthPaidMap[p.month] = 0;
           }
-          monthPaidMap[p.month] += (p.amount || 0);
+          monthPaidMap[p.month] += parseFloat(String(p.amount)) || 0;
         });
-        
-        // Check if any PAST month has unpaid balance
-        let hasPastDue = false;
-        for (const [month, totalPaid] of Object.entries(monthPaidMap)) {
-          if (isPastMonth(month) && totalPaid < monthlyFee) {
-            hasPastDue = true;
-            break;
+
+        const activeMonths = Object.keys(monthPaidMap);
+        const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
+        const totalExpected = monthlyFee * activeMonths.length;
+
+        // ✅ If fully paid across ALL months → count as 1 Paid
+        if (totalPaid >= totalExpected) {
+          monthStatusCounts.paid += 1;
+          return;
+        }
+
+        // ✅ Otherwise, check each month individually
+        activeMonths.forEach((month) => {
+          const paid = monthPaidMap[month];
+          const remaining = monthlyFee - paid;
+
+          if (remaining <= 0) {
+            monthStatusCounts.paid += 1;
+          } else if (month === currentMonth) {
+            monthStatusCounts.partial += 1;
+          } else if (isPastOrCurrentMonth(month)) {
+            monthStatusCounts.notpaid += 1;
           }
-        }
-        
-        if (hasPastDue) {
-          defaultUsers++;
-        }
+        });
       });
 
-      console.log('👥 Default Users:', defaultUsers);
+      const paidCustomers = monthStatusCounts.paid;
+      const partialCustomers = monthStatusCounts.partial;
+      const notPaidCustomers = monthStatusCounts.notpaid;
+
+      console.log('✅ Paid:', paidCustomers);
+      console.log('🟡 Partial:', partialCustomers);
+      console.log('❌ Not Paid:', notPaidCustomers);
 
       // ✅ Save stats
       setStats({
@@ -156,7 +203,12 @@ export default function DashboardPage() {
         totalOutstanding,
         recoveryRate: Math.round(recoveryRate),
         upcomingExpiry,
-        defaultUsers,
+        // ✅ Per-month status counts
+        paidCustomers,
+        partialCustomers,
+        notPaidCustomers,
+        // Legacy: keep defaultUsers for backward compat (same as notPaidCustomers)
+        defaultUsers: notPaidCustomers,
       });
 
     } catch (error: any) {
@@ -182,12 +234,13 @@ export default function DashboardPage() {
     );
   }
 
-  const recoveryPercentage = stats?.totalBilling > 0 
-    ? Math.round((stats.totalRecovered / stats.totalBilling) * 100) 
+  // ✅ Clamped percentages (never exceed 100%)
+  const recoveryPercentage = stats?.totalBilling > 0
+    ? Math.min(100, Math.round((stats.totalRecovered / stats.totalBilling) * 100))
     : 0;
-  
-  const outstandingPercentage = stats?.totalBilling > 0 
-    ? Math.round((stats.totalOutstanding / stats.totalBilling) * 100) 
+
+  const outstandingPercentage = stats?.totalBilling > 0
+    ? Math.min(100, Math.round((stats.totalOutstanding / stats.totalBilling) * 100))
     : 0;
 
   return (
@@ -227,49 +280,49 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Expired Users */}
+          {/* ✅ Paid Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              EXPIRED USERS
+              PAID USERS
             </p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-              {(stats?.expiredCustomers || 0).toLocaleString()}
+            <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-2">
+              {(stats?.paidCustomers || 0).toLocaleString()}
             </p>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-              Service expired
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
+              Fully paid months
             </p>
           </div>
 
-          {/* Upcoming Expiry */}
+          {/* ✅ Partial Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              UPCOMING EXPIRY
+              PARTIAL USERS
             </p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-              {(stats?.upcomingExpiry || 0).toLocaleString()}
+            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">
+              {(stats?.partialCustomers || 0).toLocaleString()}
             </p>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-              Within next 7 days
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+              Current month partial
             </p>
           </div>
 
-          {/* Defaulter Users */}
+          {/* ✅ Not Paid Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              DEFAULTER USERS
+              NOT PAID USERS
             </p>
-            <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">
-              {(stats?.defaultUsers || 0).toLocaleString()}
+            <p className="text-3xl font-bold text-rose-600 dark:text-rose-400 mt-2">
+              {(stats?.notPaidCustomers || 0).toLocaleString()}
             </p>
-            <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-              Payment overdue
+            <p className="text-xs text-rose-600 dark:text-rose-400 mt-2">
+              Past due or no payment
             </p>
           </div>
         </div>
 
         {/* ========== BOTTOM ROW - 2 Sections ========== */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+
           {/* ========== USER COLLECTION SUMMARY (2/3 width) ========== */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
@@ -300,7 +353,7 @@ export default function DashboardPage() {
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500 rounded-full transition-all duration-700"
-                    style={{ width: `${Math.min(recoveryPercentage, 100)}%` }}
+                    style={{ width: `${recoveryPercentage}%` }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 text-right">
@@ -321,7 +374,7 @@ export default function DashboardPage() {
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-indigo-400 to-indigo-500 rounded-full transition-all duration-700"
-                    style={{ width: `${Math.min(outstandingPercentage, 100)}%` }}
+                    style={{ width: `${outstandingPercentage}%` }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 text-right">
