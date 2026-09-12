@@ -308,6 +308,19 @@ function ReceivePaymentModal({
   const receivedAmount = parseFloat(receiveAmount) || 0;
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
 
+  // ✅ Check if this customer already has a payment for the selected month
+  const existingMonthPayment =
+    customerDetails && selectedMonth
+      ? payments.find(
+          (p) =>
+            p.customer === customerDetails.name &&
+            p.month === selectedMonth &&
+            !p.isNoPayment
+        )
+      : null;
+
+  const isDuplicateMonth = !!existingMonthPayment;
+
   const handleSubmit = async () => {
     if (!selectedArea) {
       toast.error('Please select an area first');
@@ -323,6 +336,14 @@ function ReceivePaymentModal({
     }
     if (!receiveAmount || parseFloat(receiveAmount) <= 0) {
       toast.error('Please enter a valid amount');
+      return;
+    }
+
+    // ✅ Block duplicate month
+    if (isDuplicateMonth) {
+      toast.error(
+        `${customerDetails?.name} has already paid for ${selectedMonth}. Duplicate entries are not allowed.`
+      );
       return;
     }
 
@@ -445,6 +466,24 @@ function ReceivePaymentModal({
         </div>
 
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
+          {/* ✅ Duplicate month warning banner */}
+          {isDuplicateMonth && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
+              <XCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">
+                  Already paid for {selectedMonth}
+                </p>
+                <p className="text-xs mt-0.5">
+                  {customerDetails?.name} already has a payment of Rs.{' '}
+                  {(existingMonthPayment?.amount || 0).toLocaleString()} recorded
+                  for {selectedMonth} (Receipt: {existingMonthPayment?.receipt}).
+                  Duplicate entries are not allowed.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
               <div>
@@ -595,7 +634,13 @@ function ReceivePaymentModal({
                   value={receiveAmount}
                   onChange={(e) => setReceiveAmount(e.target.value)}
                   placeholder="0"
-                  className="w-full px-3 py-2 rounded-lg border border-green-500 dark:border-green-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold"
+                  disabled={isDuplicateMonth}
+                  className={cn(
+                    'w-full px-3 py-2 rounded-lg border bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none font-semibold',
+                    isDuplicateMonth
+                      ? 'border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed'
+                      : 'border-green-500 dark:border-green-600'
+                  )}
                 />
               </div>
 
@@ -696,7 +741,8 @@ function ReceivePaymentModal({
                 isSubmitting ||
                 !selectedCustomerId ||
                 !selectedArea ||
-                !receiveAmount
+                !receiveAmount ||
+                isDuplicateMonth
               }
               className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25"
             >
@@ -802,8 +848,6 @@ export default function ReceivePaymentPage() {
   // ============ STATS CALCULATIONS ============
   const totalCustomers = customers.length;
 
-  // ✅ Total Receivable = sum of (monthlyFee × active months) per customer
-  // This matches totalCollected (all-time), so % recovered stays ≤ 100%
   const totalReceivable = customers.reduce((sum: number, customer: any) => {
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
     if (monthlyFee === 0) return sum;
@@ -816,7 +860,6 @@ export default function ReceivePaymentPage() {
       if (p.month) activeMonths.add(p.month);
     });
 
-    // If no payments yet, expect 1 month (current month)
     const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
 
     return sum + monthlyFee * monthCount;
@@ -857,9 +900,6 @@ export default function ReceivePaymentPage() {
     return false;
   };
 
-  // ============================================================
-  // ✅ Count per-MONTH statuses (customer can appear in multiple categories)
-  // ============================================================
   const monthStatusCounts = {
     paid: 0,
     partial: 0,
@@ -876,13 +916,11 @@ export default function ReceivePaymentPage() {
       (p) => p.customer === customer.name && !p.isNoPayment
     );
 
-    // ✅ No payments at all → Not Paid
     if (customerPayments.length === 0) {
       monthStatusCounts.notpaid += 1;
       return;
     }
 
-    // Group total paid per month
     const monthPaidMap: Record<string, number> = {};
     customerPayments.forEach((p: any) => {
       if (!monthPaidMap[p.month]) {
@@ -895,13 +933,11 @@ export default function ReceivePaymentPage() {
     const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
     const totalExpected = monthlyFee * activeMonths.length;
 
-    // ✅ If fully paid across ALL months → count as 1 Paid
     if (totalPaid >= totalExpected) {
       monthStatusCounts.paid += 1;
       return;
     }
 
-    // ✅ Otherwise, check each month individually
     activeMonths.forEach((month) => {
       const paid = monthPaidMap[month];
       const remaining = monthlyFee - paid;
@@ -920,9 +956,6 @@ export default function ReceivePaymentPage() {
   const partialCustomers = monthStatusCounts.partial;
   const notPaidCustomers = monthStatusCounts.notpaid;
 
-  // ============================================================
-  // ✅ Table row status — per-month logic for each payment row
-  // ============================================================
   const getPaymentStatus = (payment: any) => {
     const customer = customers.find((c) => c.name === payment.customer);
     if (!customer) {
@@ -938,12 +971,10 @@ export default function ReceivePaymentPage() {
       (p) => p.customer === payment.customer && !p.isNoPayment
     );
 
-    // No payments at all
     if (allCustomerPayments.length === 0) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
 
-    // Group total paid per month
     const monthPaidMap: Record<string, number> = {};
     allCustomerPayments.forEach((p) => {
       if (!monthPaidMap[p.month]) monthPaidMap[p.month] = 0;
@@ -954,26 +985,21 @@ export default function ReceivePaymentPage() {
     const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
     const totalExpected = monthlyFee * activeMonths.length;
 
-    // ✅ Fully paid across all months → Paid
     if (totalPaid >= totalExpected) {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
 
-    // ✅ Check this specific payment's month
     const paidForThisMonth = monthPaidMap[payment.month] || 0;
     const remainingForThisMonth = monthlyFee - paidForThisMonth;
 
-    // This specific month is fully paid
     if (remainingForThisMonth <= 0) {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
 
-    // This month is the current month and partially paid → Partial
     if (payment.month === currentMonth) {
       return { status: 'partial', label: 'Partial', color: 'partial' };
     }
 
-    // This month is a past month and underpaid → Not Paid
     if (isPastOrCurrentMonth(payment.month)) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }

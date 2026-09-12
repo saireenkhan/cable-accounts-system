@@ -2,7 +2,9 @@ const Payment = require('../models/Payment');
 const Customer = require('../models/Customer');
 const logger = require('../utils/logger');
 
+// ============================================================
 // Generate unique receipt number
+// ============================================================
 const generateReceiptNo = async () => {
   try {
     const date = new Date();
@@ -138,6 +140,22 @@ exports.createPayment = async (req, res) => {
 
     console.log('👤 Customer:', customerDoc.name, 'Monthly Fee:', customerDoc.monthlyFee);
 
+    // ✅ Prevent duplicate payment for same customer + same month
+    if (!isNoPayment) {
+      const existingPayment = await Payment.findOne({
+        customer: customerDoc._id,
+        month: month,
+        isNoPayment: false,
+      });
+
+      if (existingPayment) {
+        return res.status(400).json({
+          success: false,
+          message: `${customerDoc.name} has already paid for ${month}. Duplicate entries are not allowed.`,
+        });
+      }
+    }
+
     let paymentMethodValue = paymentMethod || method || 'Cash';
     if (typeof paymentMethodValue === 'string') {
       paymentMethodValue = paymentMethodValue.toLowerCase().replace(/ /g, '_');
@@ -183,6 +201,14 @@ exports.createPayment = async (req, res) => {
     console.error('❌ Stack:', error.stack);
 
     if (error.code === 11000) {
+      // Distinguish between receiptNo duplicate and customer+month duplicate
+      const keyPattern = error.keyPattern || {};
+      if (keyPattern.customer && keyPattern.month) {
+        return res.status(400).json({
+          success: false,
+          message: 'This customer already has a payment recorded for this month.',
+        });
+      }
       return res.status(500).json({
         success: false,
         message: 'Duplicate receipt number. Please try again.',
