@@ -42,37 +42,24 @@ interface SidebarProps {
 }
 
 const menuItems: MenuItem[] = [
-  // USER MANAGEMENT
+    // ownwer MANAGEMENT
   {
-    label: 'Dashboard',
-    href: '/dashboard',
-    icon: <LayoutDashboard className="h-5 w-5" />,
+    label: 'Owner Management',
+    href: '#',
+    icon: <Truck className="h-5 w-5" />,
     section: 'user',
+    children: [
+      { label: 'Dashboard', href: '/dashboard', icon:<LayoutDashboard className="h-5 w-5" /> },
+      { label: 'Add User', href: '/users', icon: <UserPlus className="h-5 w-5" /> },
+      { label: 'Recieve Payment', href: '/billing', icon: <FileText className="h-5 w-5" /> },
+      { label: 'Add Area', href: '/areas', icon: <MapPin className="h-4 w-4" /> },
+      { label: 'Add Package',href: '/packages',icon: <Package className="h-5 w-5" />,},
+    ],
   },
-  {
-    label: 'Add User',
-    href: '/users',
-    icon: <UserPlus className="h-5 w-5" />,
-    section: 'user',
-  },
-  {
-    label: 'Add Area',
-    href: '/areas',
-    icon: <MapPin className="h-5 w-5" />,
-    section: 'user',
-  },
-  {
-    label: 'Add Package',
-    href: '/packages',
-    icon: <Package className="h-5 w-5" />,
-    section: 'user',
-  },
-  {
-    label: 'Recieve Payment',
-    href: '/billing',
-    icon: <FileText className="h-5 w-5" />,
-    section: 'user',
-  },
+
+
+
+
 
   // DEALER MANAGEMENT
   {
@@ -265,7 +252,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         <nav className="flex-1 overflow-y-auto py-2 px-3 space-y-0.5 scrollbar-hide">
           {/* Section labels */}
           <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-3 py-2">
-            User Management
+            Owner Management
           </div>
           {menuItems
             .filter(item => item.section === 'user')

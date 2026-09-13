@@ -437,8 +437,11 @@ export default function DashboardPage() {
 
         {/* ========== ADDITIONAL INFO CARDS ========== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Active Users */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Active Users — clickable */}
+          <button
+            onClick={() => router.push('/users?status=active')}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 hover:scale-[1.02] transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -447,15 +450,21 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                   {stats?.activeCustomers || 0}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Click to view →
+                </p>
               </div>
               <div className="h-11 w-11 bg-emerald-50 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center">
                 <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               </div>
             </div>
-          </div>
+          </button>
 
-          {/* ✅ NEW — Inactive Users */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Inactive Users — clickable */}
+          <button
+            onClick={() => router.push('/users?status=inactive')}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-gray-400 dark:hover:border-gray-600 hover:scale-[1.02] transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -464,15 +473,21 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
                   {stats?.inactiveCustomers || 0}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Click to view →
+                </p>
               </div>
               <div className="h-11 w-11 bg-gray-50 dark:bg-gray-900/30 rounded-xl flex items-center justify-center">
                 <XCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               </div>
             </div>
-          </div>
+          </button>
 
-          {/* ✅ NEW — Expired Users */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Expired Users — clickable */}
+          <button
+            onClick={() => router.push('/users?status=expired')}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-rose-300 dark:hover:border-rose-700 hover:scale-[1.02] transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -481,15 +496,21 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
                   {stats?.expiredCustomers || 0}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Click to view →
+                </p>
               </div>
               <div className="h-11 w-11 bg-rose-50 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
                 <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               </div>
             </div>
-          </div>
+          </button>
 
-          {/* Suspended */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Suspended — clickable */}
+          <button
+            onClick={() => router.push('/users?status=suspended')}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-yellow-300 dark:hover:border-yellow-700 hover:scale-[1.02] transition-all cursor-pointer"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -498,12 +519,16 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
                   {stats?.suspendedCustomers || 0}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Click to view →
+                </p>
               </div>
               <div className="h-11 w-11 bg-rose-50 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
                 <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               </div>
             </div>
-          </div>
+          </button>
+
           {/* Recovery Rate */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">

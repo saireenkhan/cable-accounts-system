@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
@@ -31,7 +32,8 @@ import {
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
-export default function UsersPage() {
+function UsersPageContent() {
+  const searchParams = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [viewingUser, setViewingUser] = useState<any>(null);
@@ -41,7 +43,15 @@ export default function UsersPage() {
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('all'); // ✅ NEW
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // ✅ Read status filter from URL on mount
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status');
+    if (statusFromUrl) {
+      setStatusFilter(statusFromUrl.toLowerCase());
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetchUsers();
@@ -118,7 +128,6 @@ export default function UsersPage() {
   const inactiveUsers = users.filter((u) => u.status === 'Inactive').length;
   const expiredUsers = users.filter((u) => u.status === 'Expired').length;
 
-  // User form fields
   const userFields: Field[] = [
     {
       name: 'customerId',
@@ -260,7 +269,6 @@ export default function UsersPage() {
     setIsViewOpen(true);
   };
 
-  // ✅ Filter by status + search
   const filteredUsers = users.filter((user) => {
     const query = searchQuery.toLowerCase();
 
@@ -360,7 +368,7 @@ export default function UsersPage() {
 
         {/* ✅ Clickable stat cards — filter the table by status */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Users — resets to all */}
+          {/* Total Users */}
           <button
             onClick={() => setStatusFilter('all')}
             className={cn(
@@ -754,5 +762,22 @@ function ViewField({
         {value}
       </p>
     </div>
+  );
+}
+
+// ✅ Default export wraps the page in Suspense (required for useSearchParams)
+export default function UsersPage() {
+  return (
+    <Suspense
+      fallback={
+        <Layout>
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </Layout>
+      }
+    >
+      <UsersPageContent />
+    </Suspense>
   );
 }
