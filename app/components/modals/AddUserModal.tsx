@@ -35,6 +35,8 @@ interface AddUserModalProps {
   endpoint?: string;
   transformData?: (data: any) => any;
   context?: any;
+  method?: 'POST' | 'PUT' | 'PATCH';        // ✅ NEW — default 'POST'
+  initialData?: Record<string, any>;         // ✅ NEW — used in edit mode
 }
 
 const defaultFields: Field[] = [
@@ -225,6 +227,8 @@ export function AddUserModal({
   endpoint = '/customers',
   transformData,
   context = {},
+  method = 'POST',            // ✅ NEW — defaults to POST
+  initialData,                // ✅ NEW — optional
 }: AddUserModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -239,39 +243,54 @@ export function AddUserModal({
   }, [fields]);
 
   // ✅ Initialize form data when modal opens
-  // ✅ AND compute initial values for readOnly fields without dependsOn
+  //    Priority order:
+  //    1. initialData (edit mode) — if provided
+  //    2. readOnly + updateOnChange (auto-computed)
+  //    3. defaultValue
+  //    4. empty string
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
-      const initialData: Record<string, any> = {};
+      const formInit: Record<string, any> = {};
 
       finalFields.forEach((field) => {
-        // ✅ Auto-compute readOnly fields with updateOnChange but no dependsOn
+        // ✅ Priority 1: initialData (edit mode)
+        if (initialData && initialData[field.name] !== undefined) {
+          formInit[field.name] = initialData[field.name];
+          return;
+        }
+
+        // Priority 2: Auto-compute readOnly fields with updateOnChange but no dependsOn
         if (field.readOnly && field.updateOnChange && !field.dependsOn) {
           try {
             const initialValue = field.updateOnChange(null, {}, context);
-            initialData[field.name] = initialValue ?? '';
+            formInit[field.name] = initialValue ?? '';
             console.log(`🎫 Auto-generated ${field.name}:`, initialValue);
           } catch (e) {
             console.error(`Error computing initial value for ${field.name}:`, e);
-            initialData[field.name] = '';
+            formInit[field.name] = '';
           }
-        } else if (field.defaultValue !== undefined) {
-          // ✅ ADDED — use defaultValue if provided (e.g. pre-filled date)
-          initialData[field.name] = field.defaultValue;
-        } else {
-          initialData[field.name] = '';
+          return;
         }
+
+        // Priority 3: defaultValue
+        if (field.defaultValue !== undefined) {
+          formInit[field.name] = field.defaultValue;
+          return;
+        }
+
+        // Fallback
+        formInit[field.name] = '';
       });
 
-      initialData._context = context;
-      setFormData(initialData);
+      formInit._context = context;
+      setFormData(formInit);
       setApiError(null);
       retryCountRef.current = 0;
-      console.log('🔄 Modal opened, initial data:', initialData);
+      console.log('🔄 Modal opened, initial data:', formInit);
     }
 
     prevIsOpenRef.current = isOpen;
-  }, [isOpen, finalFields, context]);
+  }, [isOpen, finalFields, context, initialData]);
 
   // ✅ Handle dynamic field updates
   // ✅ TWO-PASS APPROACH: fixes cascading dependencies
@@ -296,7 +315,6 @@ export function AddUserModal({
       });
 
       // ✅ Pass 2: Re-run ALL fields with dependsOn to cascade
-      // (fixes case where field depends on 2+ things)
       finalFields.forEach((field) => {
         if (field.dependsOn && field.updateOnChange) {
           try {
@@ -353,10 +371,16 @@ export function AddUserModal({
     );
   };
 
-  // ✅ Submit with retry
+  // ✅ Submit with retry — now respects `method` prop
   const submitWithRetry = async (payload: any): Promise<any> => {
     try {
-      const response = await api.post(endpoint, payload);
+      const response =
+        method === 'PUT'
+          ? await api.put(endpoint, payload)
+          : method === 'PATCH'
+          ? await api.patch(endpoint, payload)
+          : await api.post(endpoint, payload);
+
       retryCountRef.current = 0;
       return response;
     } catch (error: any) {
@@ -428,7 +452,12 @@ export function AddUserModal({
           response.data;
         onSuccess?.(result);
         onClose();
-        toast.success('Record added successfully!');
+        // ✅ Adjust toast for edit mode
+        toast.success(
+          method === 'PUT'
+            ? 'Record updated successfully!'
+            : 'Record added successfully!'
+        );
       } else {
         setApiError(response.data.message || 'Failed to add record');
       }
