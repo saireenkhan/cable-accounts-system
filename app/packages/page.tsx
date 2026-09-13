@@ -29,13 +29,20 @@ export default function PackagesPage() {
     fetchPackages();
   }, []);
 
-  const fetchPackages = async () => {
+    const fetchPackages = async () => {
     try {
+      console.log('🔄 [Packages] Starting fetch...');
       const token = localStorage.getItem('token');
+      console.log('🔑 [Packages] Token present?', !!token);
+
       if (!token) {
+        console.warn('⚠️ [Packages] No token — aborting fetch');
         return;
       }
+
       const response = await api.get('/packages');
+      console.log('📥 [Packages] Response received:', response.data);
+
       if (response.data.success) {
         const formattedPackages = response.data.packages.map((pkg: any, index: number) => ({
           id: pkg._id,
@@ -49,42 +56,58 @@ export default function PackagesPage() {
           description: pkg.description || '',
         }));
         setPackages(formattedPackages);
+        console.log(`✅ [Packages] Loaded ${formattedPackages.length} packages`);
+      } else {
+        console.warn('⚠️ [Packages] success=false:', response.data);
+        toast.error(response.data.message || 'Failed to load packages');
       }
-    } catch (error) {
-      console.error('Error fetching packages:', error);
-      toast.error('Failed to load packages');
+    } catch (error: any) {
+      console.error('❌ [Packages] Fetch error:', error);
+      console.error('❌ [Packages] Response data:', error.response?.data);
+      console.error('❌ [Packages] Status:', error.response?.status);
+      toast.error(
+        error.response?.data?.message || 'Failed to load packages'
+      );
     } finally {
+      console.log('🏁 [Packages] Setting loading=false');
       setLoading(false);
     }
   };
 
-  // Package form fields for modal
-  const packageFields: Field[] = [
-    { 
-      name: 'name', 
-      label: 'Package Name', 
-      type: 'select', 
-      required: true, 
-      options: [
-        { label: 'BASIC', value: 'BASIC' },
-        { label: 'STANDARD', value: 'STANDARD' },
-        { label: 'PREMIUM', value: 'PREMIUM' },
-      ]
+   const packageFields: Field[] = [
+    {
+      name: 'name',
+      label: 'Package Name',
+      type: 'text',
+      required: true,
+      placeholder: 'e.g., BASIC, GOLD, PLATINUM, 4G Plus',
     },
-    { 
-      name: 'bandwidth', 
-      label: 'Bandwidth', 
-      type: 'select', 
-      required: true, 
-      options: [
-        { label: '25 Mbps', value: '25 Mbps' },
-        { label: '50 Mbps', value: '50 Mbps' },
-        { label: '100 Mbps', value: '100 Mbps' },
-      ]
+    {
+      name: 'bandwidth',
+      label: 'Bandwidth',
+      type: 'text',
+      placeholder: 'e.g., 25 Mbps, 200 Mbps, Unlimited',
     },
-    { name: 'sellingPrice', label: 'Selling Price (Rs.)', type: 'text', required: true, placeholder: '1200' },
-    { name: 'purchasePrice', label: 'Purchase Price (Rs.)', type: 'text', required: true, placeholder: '800' },
-    { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Package description' },
+    {
+      name: 'sellingPrice',
+      label: 'Selling Price (Rs.)',
+      type: 'text',
+      required: true,
+      placeholder: '1200',
+    },
+    {
+      name: 'purchasePrice',
+      label: 'Purchase Price (Rs.)',
+      type: 'text',
+      required: true,
+      placeholder: '800',
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      placeholder: 'Package description',
+    },
   ];
 
   // ✅ Transform package data before sending

@@ -478,3 +478,32 @@
 {"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-12T10:42:42.068Z"}
 {"level":"info","message":"📡 Environment: development","timestamp":"2026-09-12T10:42:42.077Z"}
 {"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-12T10:42:42.721Z"}
+{"level":"info","message":"✅ MongoDB reconnected","timestamp":"2026-09-12T14:08:11.564Z"}
+{"level":"info","message":"✅ MongoDB reconnected","timestamp":"2026-09-12T14:08:11.567Z"}
+{"level":"warn","message":"⚠️ MongoDB disconnected, will reconnect on next request","timestamp":"2026-09-13T07:19:24.535Z"}
+{"level":"info","message":"✅ MongoDB reconnected","timestamp":"2026-09-13T07:19:24.742Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-13T07:30:23.634Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-13T07:30:23.641Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-13T07:30:30.426Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-13T07:30:30.430Z"}
+{"level":"warn","message":"⚠️ MongoDB disconnected, will reconnect on next request","timestamp":"2026-09-13T07:30:40.434Z"}
+{"level":"error","message":"❌ MongoDB connection error: getaddrinfo ENOTFOUND ac-wofqtyj-shard-00-00.9f1a3ua.monmongodb","timestamp":"2026-09-13T07:30:40.436Z"}
+{"level":"error","message":"❌ MongoDB connection error event: getaddrinfo ENOTFOUND ac-wofqtyj-shard-00-00.9f1a3ua.monmongodb","timestamp":"2026-09-13T07:30:40.437Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:04.951Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:09.790Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:11.321Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:11.462Z"}
+{"level":"error","message":"Get payments error: Operation `payments.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:14.154Z"}
+{"level":"error","message":"Auth error: Operation `users.findOne()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:14.165Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:31.475Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:34.171Z"}
+{"level":"error","message":"Get payments error: Operation `payments.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:35.157Z"}
+{"level":"error","message":"Auth error: Operation `users.findOne()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:41.500Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:44.221Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:31:44.224Z"}
+{"level":"error","message":"Login error: Operation `users.findOne()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:32:01.726Z"}
+{"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:32:04.218Z"}
+{"level":"error","message":"Login error: Operation `users.findOne()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:33:57.508Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-13T07:35:28.192Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-13T07:35:28.196Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-13T07:35:29.273Z"}
