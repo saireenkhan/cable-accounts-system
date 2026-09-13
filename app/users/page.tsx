@@ -15,17 +15,32 @@ import {
   UserCheck,
   UserX,
   UserMinus,
+  X,
+  Phone,
+  MapPin,
+  Package as PackageIcon,
+  DollarSign,
+  Hash,
+  Home,
+  CheckCircle,
+  XCircle,
+  Clock,
+  User as UserIcon,
+  Percent,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
 export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [viewingUser, setViewingUser] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [editingUser, setEditingUser] = useState<any>(null);
 
   useEffect(() => {
     fetchUsers();
@@ -48,11 +63,19 @@ export default function UsersPage() {
           code: customer.code,
           name: customer.name,
           phone: customer.phone,
+          address: customer.address || '',
           area: customer.area?.name || 'N/A',
+          areaId: customer.area?._id || '',
+          package: customer.package || '',
+          packagePrice: customer.packagePrice || 0,
+          discount: customer.discount || 0,
+          discountRaw: customer.discount || 0,
+          monthlyFeeRaw: customer.monthlyFee || 0,
           monthlyFee: `Rs. ${customer.monthlyFee?.toLocaleString() || 0}`,
           status: customer.status
             ? customer.status.charAt(0).toUpperCase() + customer.status.slice(1)
             : 'Active',
+          statusRaw: customer.status || 'active',
         }));
         setUsers(formattedUsers);
       }
@@ -95,14 +118,13 @@ export default function UsersPage() {
   const inactiveUsers = users.filter((u) => u.status === 'Inactive').length;
   const expiredUsers = users.filter((u) => u.status === 'Expired').length;
 
-  // ✅ Updated: User ID field first, then rest
+  // ✅ Updated fields — discount added BEFORE monthlyFee
   const userFields: Field[] = [
     {
       name: 'customerId',
       label: 'User ID',
       type: 'text',
       required: true,
-      placeholder: 'e.g., USR-001',
     },
     {
       name: 'name',
@@ -147,17 +169,30 @@ export default function UsersPage() {
         value: pkg.name,
       })),
     },
+    // ✅ NEW — Discount field
+    {
+      name: 'discount',
+      label: 'Discount (Rs.)',
+      type: 'number',
+      placeholder: '0',
+      defaultValue: '0',
+    },
+    // ✅ Monthly fee now depends on BOTH package and discount
     {
       name: 'monthlyFee',
-      label: 'Monthly Fee',
+      label: 'Monthly Fee (Rs.)',
       type: 'text',
       required: true,
-      placeholder: 'Auto-filled from package',
+      placeholder: 'Auto-filled',
       dependsOn: 'package',
       updateOnChange: (value: any, formData: any, context: any) => {
         const packages = context?.packages || [];
         const selectedPkg = packages.find((p: any) => p.name === value);
-        return selectedPkg?.sellingPrice || '';
+        const packagePrice = selectedPkg?.sellingPrice || 0;
+
+        const discount = parseFloat(String(formData?.discount || 0)) || 0;
+
+        return Math.max(0, packagePrice - discount);
       },
     },
     {
@@ -173,10 +208,12 @@ export default function UsersPage() {
     },
   ];
 
+  // ✅ Transform — discount included, monthlyFee computed as (packagePrice - discount)
   const transformUserData = (data: any) => {
     const selectedPackage = packages.find((pkg: any) => pkg.name === data.package);
-    const monthlyFee =
-      selectedPackage?.sellingPrice || parseFloat(data.monthlyFee) || 0;
+    const packagePrice = selectedPackage?.sellingPrice || 0;
+    const discount = parseFloat(String(data.discount || 0)) || 0;
+    const monthlyFee = Math.max(0, packagePrice - discount);
 
     return {
       customerId: data.customerId,
@@ -186,30 +223,45 @@ export default function UsersPage() {
       address: data.address,
       area: data.area,
       package: data.package,
+      discount: discount,
       monthlyFee: monthlyFee,
       status: data.status || 'active',
     };
   };
 
   const handleUserAdded = (data: any) => {
-    toast.success(`${data.name} added successfully!`);
+    toast.success(
+      editingUser
+        ? `${data.name} updated successfully!`
+        : `${data.name} added successfully!`
+    );
+    setEditingUser(null);
+    setIsModalOpen(false);
     fetchUsers();
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete ${name}?`)) {
-      try {
-        await api.delete(`/customers/${id}`);
-        setUsers(users.filter((u) => u.id !== id));
-        toast.success(`${name} deleted`);
-      } catch (error) {
-        toast.error('Failed to delete user');
-      }
+    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+
+    try {
+      await api.delete(`/customers/${id}`);
+      setUsers(users.filter((u) => u.id !== id));
+      toast.success(`${name} deleted`);
+      if (editingUser?.id === id) setEditingUser(null);
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete user');
     }
   };
 
-  const handleEdit = (name: string) => {
-    toast.success(`Editing ${name}`);
+  const handleEdit = (user: any) => {
+    setEditingUser(user);
+    setIsModalOpen(true);
+  };
+
+  const handleView = (user: any) => {
+    setViewingUser(user);
+    setIsViewOpen(true);
   };
 
   const filteredUsers = users.filter((user) => {
@@ -217,17 +269,34 @@ export default function UsersPage() {
     return (
       user.name?.toLowerCase().includes(query) ||
       user.customerId?.toLowerCase().includes(query) ||
-      user.code?.toLowerCase().includes(query) ||
       user.phone?.includes(query)
     );
   });
 
+  // ✅ Updated columns — Discount replaces Code
   const columns = [
     { key: 'customerId', header: 'User ID' },
-    { key: 'code', header: 'Code' },
     { key: 'name', header: 'Customer' },
     { key: 'phone', header: 'Phone' },
     { key: 'area', header: 'Area' },
+    {
+      key: 'discount',
+      header: 'Discount',
+      render: (item: any) => (
+        <span
+          className={cn(
+            'font-medium',
+            item.discount > 0
+              ? 'text-orange-600 dark:text-orange-400'
+              : 'text-gray-500 dark:text-gray-400'
+          )}
+        >
+          {item.discount > 0
+            ? `Rs. ${item.discount.toLocaleString()}`
+            : 'Rs. 0'}
+        </span>
+      ),
+    },
     { key: 'monthlyFee', header: 'Monthly Fee' },
     {
       key: 'status',
@@ -276,7 +345,10 @@ export default function UsersPage() {
             </p>
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setEditingUser(null);
+              setIsModalOpen(true);
+            }}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
           >
             <UserPlus className="h-4 w-4" />
@@ -304,7 +376,9 @@ export default function UsersPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">ACTIVE</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  ACTIVE
+                </p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   {activeUsers}
                 </p>
@@ -349,7 +423,7 @@ export default function UsersPage() {
         </div>
 
         <SearchBar
-          placeholder="Search by name, user ID, code or phone..."
+          placeholder="Search by name, user ID or phone..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
@@ -369,17 +443,14 @@ export default function UsersPage() {
               columns={columns}
               actions={[
                 {
-                  label: 'Edit',
                   value: 'edit',
                   icon: <Edit className="h-4 w-4" />,
                 },
                 {
-                  label: 'View',
                   value: 'view',
                   icon: <Eye className="h-4 w-4" />,
                 },
                 {
-                  label: 'Delete',
                   value: 'delete',
                   icon: <Trash2 className="h-4 w-4" />,
                 },
@@ -388,9 +459,9 @@ export default function UsersPage() {
                 if (action === 'delete') {
                   handleDelete(item.id, item.name);
                 } else if (action === 'edit') {
-                  handleEdit(item.name);
+                  handleEdit(item);
                 } else if (action === 'view') {
-                  toast.success(`Viewing ${item.name}`);
+                  handleView(item);
                 }
               }}
               accordionTitle="name"
@@ -400,20 +471,220 @@ export default function UsersPage() {
           </div>
         </div>
 
+        {/* ✅ Add / Edit User Modal — with discount */}
         <AddUserModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingUser(null);
+          }}
           onSuccess={handleUserAdded}
-          title="Add New User"
-          subtitle="Create a new cable connection for a customer"
+          title={editingUser ? 'Edit User' : 'Add New User'}
+          subtitle={
+            editingUser
+              ? 'Update the customer details below'
+              : 'Create a new cable connection for a customer'
+          }
           fields={userFields}
-          submitLabel="Add User"
+          submitLabel={editingUser ? 'Update User' : 'Add User'}
           color="blue"
-          endpoint="/customers"
+          endpoint={editingUser ? `/customers/${editingUser.id}` : '/customers'}
+          method={editingUser ? 'PUT' : 'POST'}
+          initialData={
+            editingUser
+              ? {
+                  customerId: editingUser.customerId,
+                  name: editingUser.name,
+                  phone: editingUser.phone,
+                  address: editingUser.address,
+                  area: editingUser.area,
+                  package: editingUser.package,
+                  discount: editingUser.discountRaw || 0,
+                  monthlyFee: editingUser.monthlyFeeRaw,
+                  status: editingUser.statusRaw,
+                }
+              : undefined
+          }
           transformData={transformUserData}
           context={{ packages, areas }}
         />
+
+        {/* ✅ View User Modal — with discount */}
+        {isViewOpen && viewingUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+              onClick={() => setIsViewOpen(false)}
+            />
+
+            <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center">
+                    <UserIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                      {viewingUser.name}
+                    </h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      User ID: {viewingUser.customerId}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsViewOpen(false)}
+                  className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                </button>
+              </div>
+
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)] space-y-4">
+                <div className="flex justify-center">
+                  <span
+                    className={cn(
+                      'px-4 py-1.5 rounded-full text-sm font-semibold inline-flex items-center gap-1.5',
+                      viewingUser.status === 'Active' &&
+                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                      viewingUser.status === 'Inactive' &&
+                        'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
+                      viewingUser.status === 'Expired' &&
+                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                      viewingUser.status === 'Suspended' &&
+                        'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                    )}
+                  >
+                    {viewingUser.status === 'Active' && (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    {viewingUser.status === 'Inactive' && (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    {viewingUser.status === 'Expired' && (
+                      <Clock className="h-4 w-4" />
+                    )}
+                    {viewingUser.status === 'Suspended' && (
+                      <XCircle className="h-4 w-4" />
+                    )}
+                    {viewingUser.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ViewField
+                    icon={<Hash className="h-4 w-4" />}
+                    label="User ID"
+                    value={viewingUser.customerId}
+                  />
+                  <ViewField
+                    icon={<UserIcon className="h-4 w-4" />}
+                    label="Full Name"
+                    value={viewingUser.name}
+                  />
+                  <ViewField
+                    icon={<Phone className="h-4 w-4" />}
+                    label="Phone"
+                    value={viewingUser.phone}
+                  />
+                  <ViewField
+                    icon={<MapPin className="h-4 w-4" />}
+                    label="Area"
+                    value={viewingUser.area}
+                  />
+                  <ViewField
+                    icon={<PackageIcon className="h-4 w-4" />}
+                    label="Package"
+                    value={viewingUser.package || 'No package assigned'}
+                  />
+                  <ViewField
+                    icon={<Percent className="h-4 w-4" />}
+                    label="Discount"
+                    value={
+                      viewingUser.discount > 0
+                        ? `Rs. ${viewingUser.discount.toLocaleString()}`
+                        : 'Rs. 0'
+                    }
+                  />
+                  <ViewField
+                    icon={<DollarSign className="h-4 w-4" />}
+                    label="Monthly Fee"
+                    value={`Rs. ${viewingUser.monthlyFeeRaw.toLocaleString()}`}
+                    highlight
+                  />
+                  <ViewField
+                    icon={<Home className="h-4 w-4" />}
+                    label="Address"
+                    value={viewingUser.address || 'N/A'}
+                    fullWidth
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                <button
+                  onClick={() => setIsViewOpen(false)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setIsViewOpen(false);
+                    handleEdit(viewingUser);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
+  );
+}
+
+// Helper component
+function ViewField({
+  icon,
+  label,
+  value,
+  highlight = false,
+  fullWidth = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: any;
+  highlight?: boolean;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'p-3 rounded-lg border',
+        fullWidth && 'sm:col-span-2',
+        highlight
+          ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'
+          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+      )}
+    >
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+        {icon}
+        {label}
+      </div>
+      <p
+        className={cn(
+          'font-semibold',
+          highlight
+            ? 'text-blue-700 dark:text-blue-400 text-lg'
+            : 'text-gray-900 dark:text-white'
+        )}
+      >
+        {value}
+      </p>
+    </div>
   );
 }

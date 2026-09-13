@@ -5,10 +5,6 @@ const customerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  code: {
-    type: String,
-    unique: true,
-  },
   name: {
     type: String,
     required: true,
@@ -37,6 +33,12 @@ const customerSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  // models/Customer.js — add this field
+discount: {
+  type: Number,
+  default: 0,
+  min: 0,
+},
   status: {
     type: String,
     enum: ['active', 'inactive', 'suspended', 'expired'],

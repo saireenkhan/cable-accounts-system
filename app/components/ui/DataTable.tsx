@@ -19,7 +19,7 @@ interface DataTableProps<T> {
   onRowClick?: (item: T) => void;
   onAction?: (item: T, action: string) => void;
   actions?: Array<{
-    label: string;
+    label?: string;         // ✅ now optional
     value: string;
     icon?: React.ReactNode;
     className?: string;
@@ -143,15 +143,17 @@ export function DataTable<T extends { id?: string | number }>({
                       e.stopPropagation();
                       onAction?.(item, action.value);
                     }}
+                    title={action.label}
+                    aria-label={action.label}
                     className={cn(
-                      'px-3 py-1.5 text-sm rounded-md transition-colors',
+                      'p-2 rounded-md transition-colors',
                       'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600',
                       'text-gray-700 dark:text-gray-300',
                       action.className
                     )}
                   >
                     {action.icon}
-                    {action.label}
+                    {action.label && <span className="ml-1">{action.label}</span>}
                   </button>
                 ))}
               </div>
@@ -211,13 +213,15 @@ export function DataTable<T extends { id?: string | number }>({
                               e.stopPropagation();
                               onAction?.(item, action.value);
                             }}
+                            title={action.label}
+                            aria-label={action.label}
                             className={cn(
-                              'p-1.5 rounded-md transition-colors hover:bg-gray-200 dark:hover:bg-gray-700',
+                              'p-2 rounded-md transition-colors hover:bg-gray-200 dark:hover:bg-gray-700',
                               action.className
                             )}
-                            title={action.label}
                           >
-                            {action.icon || action.label}
+                            {action.icon}
+                            {action.label && <span className="ml-1">{action.label}</span>}
                           </button>
                         ))}
                       </td>
@@ -284,15 +288,15 @@ export function DataTable<T extends { id?: string | number }>({
                             e.stopPropagation();
                             onAction?.(item, action.value);
                           }}
+                          title={action.label}
+                          aria-label={action.label}
                           className={cn(
-                            'px-3 py-1.5 text-xs rounded-md transition-colors',
-                            'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600',
-                            'text-gray-700 dark:text-gray-300',
+                            'p-2 rounded-md transition-colors hover:bg-gray-200 dark:hover:bg-gray-700',
                             action.className
                           )}
                         >
-                          {action.icon && <span className="mr-1">{action.icon}</span>}
-                          {action.label}
+                          {action.icon}
+                          {action.label && <span className="ml-1">{action.label}</span>}
                         </button>
                       ))}
                     </td>
