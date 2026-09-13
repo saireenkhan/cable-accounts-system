@@ -16,6 +16,7 @@ import {
   FileText,
   TrendingUp,
   Wallet,
+  Package,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -37,17 +38,20 @@ export default function DashboardPage() {
         return;
       }
 
-      // ✅ Fetch only customers and payments (no bills)
-      const [customersRes, paymentsRes] = await Promise.all([
+      // ✅ Fetch customers, payments and packages
+      const [customersRes, paymentsRes, packagesRes] = await Promise.all([
         api.get('/customers?limit=10000'),
         api.get('/payments?limit=10000'),
+        api.get('/packages'),
       ]);
 
       const customers = customersRes.data.customers || [];
       const payments = paymentsRes.data.payments || [];
+      const packages = packagesRes.data.packages || [];
 
       console.log('📊 Customers:', customers.length);
       console.log('💰 Payments:', payments.length);
+      console.log('📦 Packages:', packages.length);
 
       // ✅ ========== CUSTOMER STATS ==========
       const totalCustomers = customers.length;
@@ -56,14 +60,10 @@ export default function DashboardPage() {
       const suspendedCustomers = customers.filter((c: any) => c.status?.toLowerCase() === 'suspended').length;
 
       // ✅ ========== BILLING & COLLECTION STATS ==========
-      // ✅ Total Billing = sum of (monthlyFee × active months) per customer
-      // This matches the "total expected" logic used in the Receive Payments page,
-      // so totalRecovered can never exceed totalBilling.
       const totalBilling = customers.reduce((sum: number, customer: any) => {
         const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
         if (monthlyFee === 0) return sum;
 
-        // Count distinct months this customer has payment activity in
         const customerPayments = payments.filter(
           (p: any) => p.customer?.name === customer.name && !p.isNoPayment
         );
@@ -72,21 +72,17 @@ export default function DashboardPage() {
           if (p.month) activeMonths.add(p.month);
         });
 
-        // If no payments yet, expect 1 month (current month)
         const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
 
         return sum + monthlyFee * monthCount;
       }, 0);
 
-      // Total Recovered = sum of all payment amounts (excluding no-payments)
       const totalRecovered = payments
         .filter((p: any) => !p.isNoPayment)
         .reduce((sum: number, p: any) => sum + (parseFloat(String(p.amount)) || 0), 0);
 
-      // Outstanding = Total Billing - Total Recovered (but not negative)
       const totalOutstanding = Math.max(0, totalBilling - totalRecovered);
 
-      // ✅ Recovery Rate (clamped to 100%)
       const recoveryRate = totalBilling > 0
         ? Math.min(100, (totalRecovered / totalBilling) * 100)
         : 0;
@@ -103,7 +99,7 @@ export default function DashboardPage() {
       }).length;
 
       // ============================================================
-      // ✅ ========== PER-MONTH STATUS COUNTS (same as Receive Payments) ==========
+      // ✅ ========== PER-MONTH STATUS COUNTS ==========
       // ============================================================
       const now = new Date();
       const monthsList = [
@@ -115,7 +111,6 @@ export default function DashboardPage() {
       const currentYear = now.getFullYear();
       const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
 
-      // Helper: Check if a month string is past or current
       const isPastOrCurrentMonth = (monthStr: string) => {
         const [monthName, yearStr] = monthStr.split(' ');
         const year = parseInt(yearStr);
@@ -129,7 +124,6 @@ export default function DashboardPage() {
         return false;
       };
 
-      // ✅ Count per-MONTH statuses (customer can appear in multiple categories)
       const monthStatusCounts = {
         paid: 0,
         partial: 0,
@@ -144,13 +138,11 @@ export default function DashboardPage() {
           (p: any) => p.customer?.name === customer.name && !p.isNoPayment
         );
 
-        // ✅ No payments at all → Not Paid
         if (customerPayments.length === 0) {
           monthStatusCounts.notpaid += 1;
           return;
         }
 
-        // Group total paid per month
         const monthPaidMap: Record<string, number> = {};
         customerPayments.forEach((p: any) => {
           if (!monthPaidMap[p.month]) {
@@ -163,13 +155,11 @@ export default function DashboardPage() {
         const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
         const totalExpected = monthlyFee * activeMonths.length;
 
-        // ✅ If fully paid across ALL months → count as 1 Paid
         if (totalPaid >= totalExpected) {
           monthStatusCounts.paid += 1;
           return;
         }
 
-        // ✅ Otherwise, check each month individually
         activeMonths.forEach((month) => {
           const paid = monthPaidMap[month];
           const remaining = monthlyFee - paid;
@@ -203,11 +193,11 @@ export default function DashboardPage() {
         totalOutstanding,
         recoveryRate: Math.round(recoveryRate),
         upcomingExpiry,
-        // ✅ Per-month status counts
         paidCustomers,
         partialCustomers,
         notPaidCustomers,
-        // Legacy: keep defaultUsers for backward compat (same as notPaidCustomers)
+        // ✅ NEW: total packages
+        totalPackages: packages.length,
         defaultUsers: notPaidCustomers,
       });
 
@@ -234,7 +224,6 @@ export default function DashboardPage() {
     );
   }
 
-  // ✅ Clamped percentages (never exceed 100%)
   const recoveryPercentage = stats?.totalBilling > 0
     ? Math.min(100, Math.round((stats.totalRecovered / stats.totalBilling) * 100))
     : 0;
@@ -280,7 +269,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* ✅ Paid Users */}
+          {/* Paid Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               PAID USERS
@@ -293,7 +282,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* ✅ Partial Users */}
+          {/* Partial Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               PARTIAL USERS
@@ -306,7 +295,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* ✅ Not Paid Users */}
+          {/* Not Paid Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               NOT PAID USERS
@@ -322,8 +311,7 @@ export default function DashboardPage() {
 
         {/* ========== BOTTOM ROW - 2 Sections ========== */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* ========== USER COLLECTION SUMMARY (2/3 width) ========== */}
+          {/* USER COLLECTION SUMMARY (2/3 width) */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
               User Collection Summary
@@ -384,7 +372,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ========== QUICK ACTIONS (1/3 width) ========== */}
+          {/* QUICK ACTIONS (1/3 width) */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
               Quick Actions
@@ -408,8 +396,8 @@ export default function DashboardPage() {
         </div>
 
         {/* ========== ADDITIONAL INFO CARDS ========== */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Active Connections */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Active Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -476,6 +464,29 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* ✅ NEW — Total Packages (clickable → /packages) */}
+          <button
+            onClick={() => router.push('/packages')}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.02] transition-all cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  TOTAL PACKAGES
+                </p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400 mt-1">
+                  {stats?.totalPackages || 0}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Click to manage →
+                </p>
+              </div>
+              <div className="h-11 w-11 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
+                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+          </button>
         </div>
       </div>
     </Layout>
