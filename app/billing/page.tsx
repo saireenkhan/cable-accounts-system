@@ -88,9 +88,17 @@ function SearchableSelect({
         )}
         onClick={() => !disabled && setIsOpen(!isOpen)}
       >
-        <span className={displayValue ? 'text-gray-900 dark:text-white' : 'text-gray-400'}>
-          {displayValue || placeholder}
-        </span>
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          <span
+            className={cn(
+              'truncate',
+              displayValue ? 'text-gray-900 dark:text-white' : 'text-gray-400'
+            )}
+          >
+            {displayValue || placeholder}
+          </span>
+        </div>
         <span className="text-gray-400 ml-2">{isOpen ? '▲' : '▼'}</span>
       </div>
 
@@ -186,6 +194,12 @@ function ReceivePaymentModal({
 
   const uniqueAreas = getUniqueAreas();
   const filteredCustomers = getFilteredCustomers();
+
+  // ✅ Area options for searchable select
+  const areaOptions = uniqueAreas.map((a) => ({
+    label: a,
+    value: a,
+  }));
 
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.customerId || c.code || 'N/A';
@@ -324,7 +338,7 @@ function ReceivePaymentModal({
 
   const isDuplicateMonth = !!existingMonthPayment;
 
-  // ✅ Look up the customer's package details for profit calculation
+  // ✅ Package profit calculation — kept for logic, not displayed
   const packageDetails = (() => {
     if (!customerDetails) return null;
     const pkgName =
@@ -344,12 +358,12 @@ function ReceivePaymentModal({
     return { name: pkg.name, selling, cost, profit, profitRatio };
   })();
 
-  // ✅ Live pro-rated profit based on amount being received
+  // ✅ Live pro-rated profit — kept for logic, not displayed
   const liveProfit = packageDetails
     ? Math.round(receivedAmount * packageDetails.profitRatio)
     : 0;
 
-  // ✅ Profit if the whole package price is paid
+  // ✅ Profit per full month — kept for logic, not displayed
   const fullMonthProfit = packageDetails ? packageDetails.profit : 0;
 
   const handleSubmit = async () => {
@@ -517,23 +531,19 @@ function ReceivePaymentModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
+              {/* ✅ Searchable Area field */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <MapPin className="h-4 w-4 inline mr-1" />
                   Area *
                 </label>
-                <select
+                <SearchableSelect
+                  options={areaOptions}
                   value={selectedArea}
-                  onChange={(e) => setSelectedArea(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                >
-                  <option value="">Select Area</option>
-                  {uniqueAreas.map((area: any) => (
-                    <option key={area} value={area}>
-                      {area}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedArea}
+                  placeholder="Search & Select Area"
+                  label="Area"
+                />
               </div>
 
               <div>
@@ -609,66 +619,7 @@ function ReceivePaymentModal({
                 />
               </div>
 
-              {/* ✅ Package Profit Panel */}
-              {packageDetails && (
-                <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-3 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
-                      Package Profit
-                    </span>
-                    <span className="text-emerald-700 dark:text-emerald-400 font-mono">
-                      {packageDetails.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Selling Price
-                    </span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      Rs. {packageDetails.selling.toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600 dark:text-gray-400">
-                      Package Cost
-                    </span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      Rs. {packageDetails.cost.toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm border-t border-emerald-200 dark:border-emerald-800 pt-2">
-                    <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                      Profit (per full month)
-                    </span>
-                    <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                      Rs. {fullMonthProfit.toLocaleString()}
-                    </span>
-                  </div>
-
-                  {receivedAmount > 0 && (
-                    <div className="flex items-center justify-between text-sm border-t border-emerald-200 dark:border-emerald-800 pt-2">
-                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                        Earned this payment
-                      </span>
-                      <span className="font-bold text-emerald-700 dark:text-emerald-400">
-                        Rs. {liveProfit.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-
-                  <p className="text-[11px] text-emerald-700/70 dark:text-emerald-400/70 pt-1">
-                    Formula: Profit = Selling − Cost
-                    {packageDetails.selling > 0 && (
-                      <>
-                        {' '}· Ratio: {Math.round(packageDetails.profitRatio * 100)}%
-                      </>
-                    )}
-                  </p>
-                </div>
-              )}
+              {/* ❌ Profit panel REMOVED from UI — logic still runs in background */}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -968,7 +919,8 @@ export default function ReceivePaymentPage() {
     .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
 
   // ✅ TOTAL PROFIT — sum of profits earned from each payment
-  const totalProfit = payments    .filter((p) => !p.isNoPayment)
+  const totalProfit = payments
+    .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => {
       const customer = customers.find((c) => c.name === p.customer);
       if (!customer) return sum;
@@ -1220,7 +1172,7 @@ export default function ReceivePaymentPage() {
           </button>
         </div>
 
-        {/* ✅ 3 STAT CARDS — Total Profit is now inside Total Collection */}
+        {/* 3 STAT CARDS */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
@@ -1271,7 +1223,6 @@ export default function ReceivePaymentPage() {
             </div>
           </div>
 
-          {/* ✅ Total Collection card — now with Total Profit inside */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div className="flex-1">
@@ -1282,7 +1233,6 @@ export default function ReceivePaymentPage() {
                   Rs. {totalCollected.toLocaleString()}
                 </p>
 
-                {/* ✅ Profit line inside the same card */}
                 <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
