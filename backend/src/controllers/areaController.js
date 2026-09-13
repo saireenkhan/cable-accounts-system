@@ -59,18 +59,64 @@ exports.createArea = async (req, res) => {
 
 exports.updateArea = async (req, res) => {
   try {
+    const { name, code, description, isActive } = req.body;
+
+    const update = {};
+
+    if (name !== undefined) {
+      if (!String(name).trim()) {
+        return res.status(400).json({
+          success: false,
+          message: 'Area name cannot be empty',
+        });
+      }
+      update.name = String(name).trim();
+    }
+
+    if (code !== undefined) {
+      update.code = String(code).trim();
+    }
+
+    if (description !== undefined) {
+      update.description = String(description).trim();
+    }
+
+    if (isActive !== undefined) {
+      update.isActive = Boolean(isActive);
+    }
+
     const area = await Area.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
+
     if (!area) {
-      return res.status(404).json({ message: 'Area not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Area not found',
+      });
     }
-    res.json({ success: true, area });
+
+    res.json({
+      success: true,
+      area,
+      message: 'Area updated successfully',
+    });
   } catch (error) {
+    // Handle duplicate name
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'An area with this name already exists',
+      });
+    }
+
     logger.error(`Update area error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error',
+    });
   }
 };
 

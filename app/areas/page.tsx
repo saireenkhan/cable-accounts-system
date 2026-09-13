@@ -5,11 +5,11 @@ import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
-import { 
-  MapPin, 
-  PlusCircle, 
-  Users, 
-  Edit2, 
+import {
+  MapPin,
+  PlusCircle,
+  Users,
+  Edit2,
   Trash2,
   Building2,
   Home,
@@ -23,6 +23,7 @@ export default function AreasPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [areas, setAreas] = useState<any[]>([]);
+  const [editingArea, setEditingArea] = useState<any>(null); // ✅ NEW — edit mode
 
   // Fetch areas from API
   useEffect(() => {
@@ -36,13 +37,13 @@ export default function AreasPage() {
         setLoading(false);
         return;
       }
-      
+
       // ✅ Fetch all customers first to get area counts
       const [areasRes, customersRes] = await Promise.all([
         api.get('/areas'),
-        api.get('/customers?limit=10000') // Get all customers
+        api.get('/customers?limit=10000'),
       ]);
-      
+
       // ✅ Count customers by area name
       const customerCounts: Record<string, number> = {};
       if (customersRes.data.success) {
@@ -53,16 +54,20 @@ export default function AreasPage() {
           }
         });
       }
-      
+
       if (areasRes.data.success) {
-        const formattedAreas = areasRes.data.areas.map((area: any, index: number) => ({
-          id: area._id,
-          name: area.name,
-          customers: customerCounts[area.name] || 0,
-          color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][index % 6],
-          code: area.code,
-          description: area.description,
-        }));
+        const formattedAreas = areasRes.data.areas.map(
+          (area: any, index: number) => ({
+            id: area._id,
+            name: area.name,
+            customers: customerCounts[area.name] || 0,
+            color: ['blue', 'green', 'purple', 'orange', 'red', 'indigo'][
+              index % 6
+            ],
+            code: area.code,
+            description: area.description,
+          })
+        );
         setAreas(formattedAreas);
       }
     } catch (error) {
@@ -75,26 +80,43 @@ export default function AreasPage() {
 
   // Calculate stats
   const totalAreas = areas.length;
-  const totalCustomers = areas.reduce((sum, area) => sum + (area.customers || 0), 0);
+  const totalCustomers = areas.reduce(
+    (sum, area) => sum + (area.customers || 0),
+    0
+  );
 
   // Area fields for modal
   const areaFields: Field[] = [
-    { name: 'name', label: 'Area Name', type: 'text', required: true, placeholder: 'Enter area name' },
-    { name: 'code', label: 'Area Code', type: 'text', placeholder: 'e.g., GUL-001' },
-    { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description' },
+    {
+      name: 'name',
+      label: 'Area Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Enter area name',
+    },
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      placeholder: 'Optional description',
+    },
   ];
 
   // Transform area data before sending
-  const transformAreaData = (data: any) => {
-    return {
-      name: data.name,
-      code: data.code || '',
-      description: data.description || '',
-    };
-  };
+  const transformAreaData = (data: any) => ({
+    name: data.name,
+    code: data.code || '',
+    description: data.description || '',
+  });
 
   const handleAreaAdded = (data: any) => {
-    toast.success(`Area "${data.name}" added successfully!`);
+    toast.success(
+      editingArea
+        ? `Area "${data.name}" updated successfully!`
+        : `Area "${data.name}" added successfully!`
+    );
+    setEditingArea(null);
+    setIsModalOpen(false);
     fetchAreas();
   };
 
@@ -102,19 +124,22 @@ export default function AreasPage() {
     if (confirm(`Are you sure you want to delete "${name}"?`)) {
       try {
         await api.delete(`/areas/${id}`);
-        setAreas(areas.filter(area => area.id !== id));
+        setAreas(areas.filter((area) => area.id !== id));
         toast.success(`Area "${name}" deleted`);
+        if (editingArea?.id === id) setEditingArea(null);
       } catch (error) {
         toast.error('Failed to delete area');
       }
     }
   };
 
-  const handleEdit = (name: string) => {
-    toast.success(`Editing "${name}"`);
+  // ✅ NEW — open modal pre-filled for editing
+  const handleEdit = (area: any) => {
+    setEditingArea(area);
+    setIsModalOpen(true);
   };
 
-  const filteredAreas = areas.filter(area =>
+  const filteredAreas = areas.filter((area) =>
     area.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -148,9 +173,12 @@ export default function AreasPage() {
 
   const getAreaIcon = (name: string) => {
     const lower = name?.toLowerCase() || '';
-    if (lower.includes('gulshan') || lower.includes('garden')) return <Home className="h-6 w-6" />;
-    if (lower.includes('market') || lower.includes('mall')) return <Store className="h-6 w-6" />;
-    if (lower.includes('colony') || lower.includes('town')) return <Building2 className="h-6 w-6" />;
+    if (lower.includes('gulshan') || lower.includes('garden'))
+      return <Home className="h-6 w-6" />;
+    if (lower.includes('market') || lower.includes('mall'))
+      return <Store className="h-6 w-6" />;
+    if (lower.includes('colony') || lower.includes('town'))
+      return <Building2 className="h-6 w-6" />;
     return <MapPin className="h-6 w-6" />;
   };
 
@@ -179,7 +207,10 @@ export default function AreasPage() {
             </p>
           </div>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setEditingArea(null);
+              setIsModalOpen(true);
+            }}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
           >
             <PlusCircle className="h-4 w-4" />
@@ -192,7 +223,9 @@ export default function AreasPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL AREAS</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  TOTAL AREAS
+                </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {totalAreas}
                 </p>
@@ -205,7 +238,9 @@ export default function AreasPage() {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL CUSTOMERS</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  TOTAL CUSTOMERS
+                </p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   {totalCustomers.toLocaleString()}
                 </p>
@@ -240,24 +275,36 @@ export default function AreasPage() {
                   'overflow-hidden'
                 )}
               >
-                <div className={cn(
-                  'h-1.5 w-full',
-                  area.color === 'blue' && 'bg-blue-500',
-                  area.color === 'green' && 'bg-green-500',
-                  area.color === 'purple' && 'bg-purple-500',
-                  area.color === 'orange' && 'bg-orange-500',
-                  area.color === 'red' && 'bg-red-500',
-                  area.color === 'indigo' && 'bg-indigo-500',
-                )} />
+                <div
+                  className={cn(
+                    'h-1.5 w-full',
+                    area.color === 'blue' && 'bg-blue-500',
+                    area.color === 'green' && 'bg-green-500',
+                    area.color === 'purple' && 'bg-purple-500',
+                    area.color === 'orange' && 'bg-orange-500',
+                    area.color === 'red' && 'bg-red-500',
+                    area.color === 'indigo' && 'bg-indigo-500'
+                  )}
+                />
 
                 <div className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={cn(
-                        'p-2.5 rounded-xl',
-                        bgColorClasses[area.color as keyof typeof bgColorClasses]
-                      )}>
-                        <span className={iconColorClasses[area.color as keyof typeof iconColorClasses]}>
+                      <div
+                        className={cn(
+                          'p-2.5 rounded-xl',
+                          bgColorClasses[
+                            area.color as keyof typeof bgColorClasses
+                          ]
+                        )}
+                      >
+                        <span
+                          className={
+                            iconColorClasses[
+                              area.color as keyof typeof iconColorClasses
+                            ]
+                          }
+                        >
                           {getAreaIcon(area.name)}
                         </span>
                       </div>
@@ -266,28 +313,32 @@ export default function AreasPage() {
                           {area.name}
                         </h3>
                         {area.code && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{area.code}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {area.code}
+                          </p>
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => handleEdit(area.name)}
+                        onClick={() => handleEdit(area)}
                         className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        title="Edit"
                       >
                         <Edit2 className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                       </button>
                       <button
                         onClick={() => handleDelete(area.id, area.name)}
                         className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                        title="Delete"
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </button>
                     </div>
                   </div>
 
-                  {/* ✅ Show actual customer count */}
+                  {/* Customer count */}
                   <div className="flex items-center gap-2 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
                     <Users className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                     <span className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -303,17 +354,34 @@ export default function AreasPage() {
           </div>
         )}
 
-        {/* Add Area Modal */}
+        {/* Add / Edit Area Modal */}
         <AddUserModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingArea(null);
+          }}
           onSuccess={handleAreaAdded}
-          title="Add New Area"
-          subtitle="Create a new service area for customers"
+          title={editingArea ? 'Edit Area' : 'Add New Area'}
+          subtitle={
+            editingArea
+              ? 'Update the area details below'
+              : 'Create a new service area for customers'
+          }
           fields={areaFields}
-          submitLabel="Add Area"
+          submitLabel={editingArea ? 'Update Area' : 'Add Area'}
           color="blue"
-          endpoint="/areas"
+          endpoint={editingArea ? `/areas/${editingArea.id}` : '/areas'}
+          method={editingArea ? 'PUT' : 'POST'}
+          initialData={
+            editingArea
+              ? {
+                  name: editingArea.name,
+                  code: editingArea.code || '',
+                  description: editingArea.description || '',
+                }
+              : undefined
+          }
           transformData={transformAreaData}
         />
       </div>

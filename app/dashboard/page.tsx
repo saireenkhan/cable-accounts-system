@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Wallet,
   Package,
+  MapPin,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -38,20 +39,24 @@ export default function DashboardPage() {
         return;
       }
 
-      // ✅ Fetch customers, payments and packages
-      const [customersRes, paymentsRes, packagesRes] = await Promise.all([
-        api.get('/customers?limit=10000'),
-        api.get('/payments?limit=10000'),
-        api.get('/packages'),
-      ]);
+      // ✅ Fetch customers, payments, packages and areas
+      const [customersRes, paymentsRes, packagesRes, areasRes] =
+        await Promise.all([
+          api.get('/customers?limit=10000'),
+          api.get('/payments?limit=10000'),
+          api.get('/packages'),
+          api.get('/areas'),
+        ]);
 
       const customers = customersRes.data.customers || [];
       const payments = paymentsRes.data.payments || [];
       const packages = packagesRes.data.packages || [];
+      const areas = areasRes.data.areas || [];
 
       console.log('📊 Customers:', customers.length);
       console.log('💰 Payments:', payments.length);
       console.log('📦 Packages:', packages.length);
+      console.log('📍 Areas:', areas.length);
 
       // ✅ ========== CUSTOMER STATS ==========
       const totalCustomers = customers.length;
@@ -196,8 +201,8 @@ export default function DashboardPage() {
         paidCustomers,
         partialCustomers,
         notPaidCustomers,
-        // ✅ NEW: total packages
         totalPackages: packages.length,
+        totalAreas: areas.length,
         defaultUsers: notPaidCustomers,
       });
 
@@ -256,7 +261,6 @@ export default function DashboardPage() {
 
         {/* ========== STATS CARDS - TOP ROW (4 cards) ========== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Users - Dark Card */}
           <div className="bg-gradient-to-br from-slate-700 to-slate-900 rounded-xl shadow-lg p-5">
             <p className="text-xs font-medium text-slate-300 uppercase tracking-wider">
               TOTAL USERS
@@ -269,7 +273,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Paid Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               PAID USERS
@@ -282,7 +285,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Partial Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               PARTIAL USERS
@@ -295,7 +297,6 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Not Paid Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               NOT PAID USERS
@@ -318,7 +319,6 @@ export default function DashboardPage() {
             </h2>
 
             <div className="space-y-6">
-              {/* Total Billing */}
               <div className="flex items-center justify-between">
                 <span className="text-sm text-gray-700 dark:text-gray-300">
                   Total Billing
@@ -328,7 +328,6 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              {/* Recovered with Progress Bar */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -349,7 +348,6 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* Outstanding with Progress Bar */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -396,7 +394,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ========== ADDITIONAL INFO CARDS ========== */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Active Users */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
@@ -465,7 +463,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ✅ NEW — Total Packages (clickable → /packages) */}
+          {/* ✅ Total Packages (clickable → /packages) */}
           <button
             onClick={() => router.push('/packages')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.02] transition-all cursor-pointer"
@@ -484,6 +482,29 @@ export default function DashboardPage() {
               </div>
               <div className="h-11 w-11 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center">
                 <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+            </div>
+          </button>
+
+          {/* ✅ NEW — Total Areas (clickable → /areas) */}
+          <button
+            onClick={() => router.push('/areas')}
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700 hover:scale-[1.02] transition-all cursor-pointer"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  TOTAL AREAS
+                </p>
+                <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 mt-1">
+                  {stats?.totalAreas || 0}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Click to manage →
+                </p>
+              </div>
+              <div className="h-11 w-11 bg-violet-50 dark:bg-violet-900/30 rounded-xl flex items-center justify-center">
+                <MapPin className="h-5 w-5 text-violet-600 dark:text-violet-400" />
               </div>
             </div>
           </button>
