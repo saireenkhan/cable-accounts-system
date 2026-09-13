@@ -60,7 +60,6 @@ export default function UsersPage() {
         const formattedUsers = response.data.customers.map((customer: any) => ({
           id: customer._id,
           customerId: customer.customerId || 'N/A',
-          code: customer.code,
           name: customer.name,
           phone: customer.phone,
           address: customer.address || '',
@@ -199,6 +198,7 @@ export default function UsersPage() {
       name: 'status',
       label: 'Status',
       type: 'select',
+      required:true,
       options: [
         { label: 'Active', value: 'active' },
         { label: 'Inactive', value: 'inactive' },

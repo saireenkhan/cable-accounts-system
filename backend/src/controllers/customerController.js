@@ -15,7 +15,6 @@ exports.getCustomers = async (req, res) => {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { customerId: { $regex: search, $options: 'i' } },
-        { code: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
       ];
     }
@@ -81,7 +80,6 @@ exports.createCustomer = async (req, res) => {
 
     console.log('📝 Creating customer with data:', req.body);
 
-    // ✅ Validate required fields
     if (!customerId) {
       return res.status(400).json({
         success: false,
@@ -96,7 +94,6 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // ✅ Check for duplicate customerId
     const existingCustomerId = await Customer.findOne({ customerId });
     if (existingCustomerId) {
       return res.status(400).json({
@@ -105,7 +102,7 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // ✅ Find area by name if provided
+    // ✅ Find area by name
     let areaDoc = null;
     if (area) {
       areaDoc = await Area.findOne({ name: area });
@@ -118,43 +115,10 @@ exports.createCustomer = async (req, res) => {
       }
     }
 
-    // ✅ Generate unique customer code
-    const lastCustomer = await Customer.findOne({
-      code: { $regex: /^LC-\d+$/ },
-    }).sort({ code: -1 });
-
-    let nextNumber = 1;
-    if (lastCustomer && lastCustomer.code) {
-      const lastNum = parseInt(lastCustomer.code.replace('LC-', ''));
-      if (!isNaN(lastNum)) {
-        nextNumber = lastNum + 1;
-      }
-    }
-
-    let code = `LC-${String(nextNumber).padStart(4, '0')}`;
-
-    // ✅ Safety loop
-    let attempts = 0;
-    while ((await Customer.findOne({ code })) && attempts < 100) {
-      nextNumber++;
-      code = `LC-${String(nextNumber).padStart(4, '0')}`;
-      attempts++;
-    }
-
-    if (attempts >= 100) {
-      return res.status(500).json({
-        success: false,
-        message: 'Could not generate unique customer code. Please try again.',
-      });
-    }
-
-    // ✅ Parse discount
     const parsedDiscount = parseFloat(discount) || 0;
 
-    // ✅ Create customer
     const customer = await Customer.create({
       customerId,
-      code,
       name,
       phone,
       cnic: cnic || '',
@@ -171,14 +135,7 @@ exports.createCustomer = async (req, res) => {
       .populate('area', 'name')
       .populate('createdBy', 'name');
 
-    console.log(
-      '✅ Customer created:',
-      populatedCustomer.customerId,
-      'Code:',
-      populatedCustomer.code,
-      'Discount:',
-      populatedCustomer.discount
-    );
+    console.log('✅ Customer created:', populatedCustomer.customerId);
 
     res.status(201).json({
       success: true,
@@ -230,7 +187,6 @@ exports.updateCustomer = async (req, res) => {
     if (address !== undefined) update.address = address;
     if (status !== undefined) update.status = status;
 
-    // ✅ Resolve area name → ObjectId
     if (area !== undefined) {
       if (area) {
         const areaDoc = await Area.findOne({ name: area });
@@ -249,7 +205,6 @@ exports.updateCustomer = async (req, res) => {
 
     if (pkg !== undefined) update.package = pkg;
 
-    // ✅ Discount update
     if (discount !== undefined) {
       update.discount = parseFloat(discount) || 0;
     }
@@ -273,13 +228,6 @@ exports.updateCustomer = async (req, res) => {
       });
     }
 
-    console.log(
-      '✅ Customer updated:',
-      customer.customerId,
-      'Discount:',
-      customer.discount
-    );
-
     res.json({
       success: true,
       customer,
@@ -291,7 +239,7 @@ exports.updateCustomer = async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: 'A customer with this ID or code already exists',
+        message: 'A customer with this ID already exists',
       });
     }
 
@@ -343,7 +291,6 @@ exports.getDashboardStats = async (req, res) => {
     const recoveryRate =
       totalBilling > 0 ? (totalCollection / totalBilling) * 100 : 0;
 
-    // Area-wise collection
     const areaPaymentMap = {};
     const populatedPayments = await Payment.find({
       isNoPayment: { $ne: true },
