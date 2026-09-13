@@ -9,8 +9,16 @@ if (!cached) {
 }
 
 const connectDB = async () => {
-  if (cached.conn) {
+  // ✅ Check if cached connection is actually healthy
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
+  }
+
+  // ✅ Reset stale connection so we force a fresh connect
+  if (cached.conn && mongoose.connection.readyState !== 1) {
+    console.log('🔄 Stale connection detected, reconnecting...');
+    cached.conn = null;
+    cached.promise = null;
   }
 
   if (!process.env.MONGODB_URI) {
@@ -19,14 +27,13 @@ const connectDB = async () => {
   }
 
   if (!cached.promise) {
- const opts = {
-  serverSelectionTimeoutMS: 10000,
-  socketTimeoutMS: 45000,
-  maxPoolSize: 10,
-  minPoolSize: 1,
-  bufferCommands: true,
-  bufferTimeoutMS: 30000, // wait up to 10s for connection instead of failing instantly
-};
+    const opts = {
+      serverSelectionTimeoutMS: 30000, // ✅ 30s — enough for cold-start reconnect on Vercel
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      // ✅ Removed bufferCommands/bufferTimeoutMS — Mongoose defaults work better on serverless
+    };
 
     cached.promise = mongoose
       .connect(process.env.MONGODB_URI, opts)

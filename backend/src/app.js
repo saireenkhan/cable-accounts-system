@@ -50,6 +50,15 @@ const limiter = rateLimit({
 });
 
 // Middleware
+// ✅ Ensure MongoDB is connected before handling API requests
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error('❌ DB not ready:', err.message);
+  }
+  next();
+});
 app.use(helmet());
 app.use(
   cors({
