@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Users,
   DollarSign,
+  HomeIcon,
   MapPin,
   Package,
   FileText,
@@ -30,7 +31,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery';
 interface MenuItem {
   label: string;
   href: string;
-  icon?: React.ReactNode;
+  icon: React.ReactNode;
   section?: string;
   children?: MenuItem[];
   badge?: number;
@@ -46,6 +47,7 @@ const menuItems: MenuItem[] = [
   {
     label: 'Owner Management',
     href: '#',
+    icon: <HomeIcon className="h-5 w-5" />,
     section: 'user',
     children: [
       { label: 'Dashboard', href: '/dashboard', icon:<LayoutDashboard className="h-4 w-4" /> },
@@ -55,10 +57,12 @@ const menuItems: MenuItem[] = [
       { label: 'Add Package',href: '/packages',icon: <Package className="h-4 w-4" />,},
     ],
   },
+
   // DEALER MANAGEMENT
   {
     label: 'Dealer Management',
     href: '#',
+    icon: <Truck className="h-5 w-5" />,
     section: 'dealer',
     children: [
       { label: 'Dashboard', href: '/dealers', icon: <LayoutDashboard className="h-4 w-4" /> },
@@ -72,6 +76,7 @@ const menuItems: MenuItem[] = [
   {
     label: 'Staff Management',
     href: '#',
+    icon: <User className="h-5 w-5" />,
     section: 'staff',
     children: [
       { label: 'Staff Profile', href: '/staff', icon: <User className="h-4 w-4" /> },
@@ -83,6 +88,7 @@ const menuItems: MenuItem[] = [
   {
     label: 'Expense Management',
     href: '#',
+    icon: <ShoppingBag className="h-5 w-5" />,
     section: 'expense',
     children: [
       { label: 'Purchasing', href: '/purchasing', icon: <ShoppingBag className="h-4 w-4" /> },
@@ -94,6 +100,7 @@ const menuItems: MenuItem[] = [
   {
     label: 'General',
     href: '#',
+    icon: <Settings className="h-5 w-5" />,
     section: 'general',
     children: [
       { label: 'All Report', href: '/reports', icon: <PieChart className="h-4 w-4" /> },
