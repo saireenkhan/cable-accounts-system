@@ -60,9 +60,18 @@ export default function DashboardPage() {
 
       // ✅ ========== CUSTOMER STATS ==========
       const totalCustomers = customers.length;
-      const activeCustomers = customers.filter((c: any) => c.status?.toLowerCase() === 'active').length;
-      const expiredCustomers = customers.filter((c: any) => c.status?.toLowerCase() === 'expired').length;
-      const suspendedCustomers = customers.filter((c: any) => c.status?.toLowerCase() === 'suspended').length;
+      const activeCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'active'
+      ).length;
+      const inactiveCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'inactive'
+      ).length;
+      const expiredCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'expired'
+      ).length;
+      const suspendedCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'suspended'
+      ).length;
 
       // ✅ ========== BILLING & COLLECTION STATS ==========
       const totalBilling = customers.reduce((sum: number, customer: any) => {
@@ -84,13 +93,17 @@ export default function DashboardPage() {
 
       const totalRecovered = payments
         .filter((p: any) => !p.isNoPayment)
-        .reduce((sum: number, p: any) => sum + (parseFloat(String(p.amount)) || 0), 0);
+        .reduce(
+          (sum: number, p: any) => sum + (parseFloat(String(p.amount)) || 0),
+          0
+        );
 
       const totalOutstanding = Math.max(0, totalBilling - totalRecovered);
 
-      const recoveryRate = totalBilling > 0
-        ? Math.min(100, (totalRecovered / totalBilling) * 100)
-        : 0;
+      const recoveryRate =
+        totalBilling > 0
+          ? Math.min(100, (totalRecovered / totalBilling) * 100)
+          : 0;
 
       // ✅ ========== UPCOMING EXPIRY (next 7 days) ==========
       const today = new Date();
@@ -108,8 +121,18 @@ export default function DashboardPage() {
       // ============================================================
       const now = new Date();
       const monthsList = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
       ];
 
       const currentMonthIndex = now.getMonth();
@@ -124,7 +147,8 @@ export default function DashboardPage() {
         if (isNaN(year) || monthIndex === -1) return false;
 
         if (year < currentYear) return true;
-        if (year === currentYear && monthIndex <= currentMonthIndex) return true;
+        if (year === currentYear && monthIndex <= currentMonthIndex)
+          return true;
 
         return false;
       };
@@ -157,7 +181,10 @@ export default function DashboardPage() {
         });
 
         const activeMonths = Object.keys(monthPaidMap);
-        const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
+        const totalPaid = activeMonths.reduce(
+          (sum, m) => sum + monthPaidMap[m],
+          0
+        );
         const totalExpected = monthlyFee * activeMonths.length;
 
         if (totalPaid >= totalExpected) {
@@ -186,11 +213,14 @@ export default function DashboardPage() {
       console.log('✅ Paid:', paidCustomers);
       console.log('🟡 Partial:', partialCustomers);
       console.log('❌ Not Paid:', notPaidCustomers);
+      console.log('⚪ Inactive:', inactiveCustomers);
+      console.log('🔴 Expired:', expiredCustomers);
 
       // ✅ Save stats
       setStats({
         totalCustomers,
         activeCustomers,
+        inactiveCustomers,
         expiredCustomers,
         suspendedCustomers,
         totalBilling,
@@ -205,11 +235,15 @@ export default function DashboardPage() {
         totalAreas: areas.length,
         defaultUsers: notPaidCustomers,
       });
-
     } catch (error: any) {
       console.error('Error fetching dashboard:', error);
-      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-        toast.error('Cannot connect to server. Please check if backend is running.');
+      if (
+        error.code === 'ERR_NETWORK' ||
+        error.message === 'Network Error'
+      ) {
+        toast.error(
+          'Cannot connect to server. Please check if backend is running.'
+        );
       } else {
         toast.error('Failed to load dashboard data');
       }
@@ -229,13 +263,21 @@ export default function DashboardPage() {
     );
   }
 
-  const recoveryPercentage = stats?.totalBilling > 0
-    ? Math.min(100, Math.round((stats.totalRecovered / stats.totalBilling) * 100))
-    : 0;
+  const recoveryPercentage =
+    stats?.totalBilling > 0
+      ? Math.min(
+          100,
+          Math.round((stats.totalRecovered / stats.totalBilling) * 100)
+        )
+      : 0;
 
-  const outstandingPercentage = stats?.totalBilling > 0
-    ? Math.min(100, Math.round((stats.totalOutstanding / stats.totalBilling) * 100))
-    : 0;
+  const outstandingPercentage =
+    stats?.totalBilling > 0
+      ? Math.min(
+          100,
+          Math.round((stats.totalOutstanding / stats.totalBilling) * 100)
+        )
+      : 0;
 
   return (
     <Layout>
@@ -412,6 +454,56 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* ✅ NEW — Inactive Users */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  INACTIVE USERS
+                </p>
+                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
+                  {stats?.inactiveCustomers || 0}
+                </p>
+              </div>
+              <div className="h-11 w-11 bg-gray-50 dark:bg-gray-900/30 rounded-xl flex items-center justify-center">
+                <XCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* ✅ NEW — Expired Users */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  EXPIRED USERS
+                </p>
+                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+                  {stats?.expiredCustomers || 0}
+                </p>
+              </div>
+              <div className="h-11 w-11 bg-rose-50 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
+                <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+            </div>
+          </div>
+
+          {/* Suspended */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                  SUSPENDED
+                </p>
+                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+                  {stats?.suspendedCustomers || 0}
+                </p>
+              </div>
+              <div className="h-11 w-11 bg-rose-50 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
+                <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+            </div>
+          </div>
           {/* Recovery Rate */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
@@ -446,24 +538,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Suspended */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  SUSPENDED
-                </p>
-                <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
-                  {stats?.suspendedCustomers || 0}
-                </p>
-              </div>
-              <div className="h-11 w-11 bg-rose-50 dark:bg-rose-900/30 rounded-xl flex items-center justify-center">
-                <XCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-              </div>
-            </div>
-          </div>
-
-          {/* ✅ Total Packages (clickable → /packages) */}
+          {/* Total Packages (clickable → /packages) */}
           <button
             onClick={() => router.push('/packages')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.02] transition-all cursor-pointer"
@@ -486,7 +561,7 @@ export default function DashboardPage() {
             </div>
           </button>
 
-          {/* ✅ NEW — Total Areas (clickable → /areas) */}
+          {/* Total Areas (clickable → /areas) */}
           <button
             onClick={() => router.push('/areas')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700 hover:scale-[1.02] transition-all cursor-pointer"
