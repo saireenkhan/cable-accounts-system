@@ -41,6 +41,7 @@ export default function UsersPage() {
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // ✅ NEW
 
   useEffect(() => {
     fetchUsers();
@@ -117,7 +118,7 @@ export default function UsersPage() {
   const inactiveUsers = users.filter((u) => u.status === 'Inactive').length;
   const expiredUsers = users.filter((u) => u.status === 'Expired').length;
 
-  // ✅ Updated fields — discount added BEFORE monthlyFee
+  // User form fields
   const userFields: Field[] = [
     {
       name: 'customerId',
@@ -168,7 +169,6 @@ export default function UsersPage() {
         value: pkg.name,
       })),
     },
-    // ✅ NEW — Discount field
     {
       name: 'discount',
       label: 'Discount (Rs.)',
@@ -176,7 +176,6 @@ export default function UsersPage() {
       placeholder: '0',
       defaultValue: '0',
     },
-    // ✅ Monthly fee now depends on BOTH package and discount
     {
       name: 'monthlyFee',
       label: 'Monthly Fee (Rs.)',
@@ -188,9 +187,7 @@ export default function UsersPage() {
         const packages = context?.packages || [];
         const selectedPkg = packages.find((p: any) => p.name === value);
         const packagePrice = selectedPkg?.sellingPrice || 0;
-
         const discount = parseFloat(String(formData?.discount || 0)) || 0;
-
         return Math.max(0, packagePrice - discount);
       },
     },
@@ -198,7 +195,7 @@ export default function UsersPage() {
       name: 'status',
       label: 'Status',
       type: 'select',
-      required:true,
+      required: true,
       options: [
         { label: 'Active', value: 'active' },
         { label: 'Inactive', value: 'inactive' },
@@ -208,7 +205,6 @@ export default function UsersPage() {
     },
   ];
 
-  // ✅ Transform — discount included, monthlyFee computed as (packagePrice - discount)
   const transformUserData = (data: any) => {
     const selectedPackage = packages.find((pkg: any) => pkg.name === data.package);
     const packagePrice = selectedPackage?.sellingPrice || 0;
@@ -264,16 +260,22 @@ export default function UsersPage() {
     setIsViewOpen(true);
   };
 
+  // ✅ Filter by status + search
   const filteredUsers = users.filter((user) => {
     const query = searchQuery.toLowerCase();
-    return (
+
+    const matchesStatus =
+      statusFilter === 'all' ||
+      user.status?.toLowerCase() === statusFilter.toLowerCase();
+
+    const matchesSearch =
       user.name?.toLowerCase().includes(query) ||
       user.customerId?.toLowerCase().includes(query) ||
-      user.phone?.includes(query)
-    );
+      user.phone?.includes(query);
+
+    return matchesStatus && matchesSearch;
   });
 
-  // ✅ Updated columns — Discount replaces Code
   const columns = [
     { key: 'customerId', header: 'User ID' },
     { key: 'name', header: 'Customer' },
@@ -356,8 +358,18 @@ export default function UsersPage() {
           </button>
         </div>
 
+        {/* ✅ Clickable stat cards — filter the table by status */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Total Users — resets to all */}
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={cn(
+              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
+              statusFilter === 'all'
+                ? 'border-blue-500 dark:border-blue-500 ring-2 ring-blue-500/30'
+                : 'border-gray-200 dark:border-gray-700'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -366,14 +378,28 @@ export default function UsersPage() {
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {totalUsers}
                 </p>
+                {statusFilter === 'all' && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Showing all
+                  </p>
+                )}
               </div>
               <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
                 <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Active */}
+          <button
+            onClick={() => setStatusFilter('active')}
+            className={cn(
+              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
+              statusFilter === 'active'
+                ? 'border-green-500 dark:border-green-500 ring-2 ring-green-500/30'
+                : 'border-gray-200 dark:border-gray-700'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -382,14 +408,28 @@ export default function UsersPage() {
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   {activeUsers}
                 </p>
+                {statusFilter === 'active' && (
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                    Filtered
+                  </p>
+                )}
               </div>
               <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
                 <UserCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Inactive */}
+          <button
+            onClick={() => setStatusFilter('inactive')}
+            className={cn(
+              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
+              statusFilter === 'inactive'
+                ? 'border-gray-500 dark:border-gray-500 ring-2 ring-gray-500/30'
+                : 'border-gray-200 dark:border-gray-700'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -398,14 +438,28 @@ export default function UsersPage() {
                 <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
                   {inactiveUsers}
                 </p>
+                {statusFilter === 'inactive' && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Filtered
+                  </p>
+                )}
               </div>
               <div className="h-12 w-12 bg-gray-50 dark:bg-gray-900/30 rounded-full flex items-center justify-center">
                 <UserX className="h-6 w-6 text-gray-600 dark:text-gray-400" />
               </div>
             </div>
-          </div>
+          </button>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          {/* Expired */}
+          <button
+            onClick={() => setStatusFilter('expired')}
+            className={cn(
+              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
+              statusFilter === 'expired'
+                ? 'border-red-500 dark:border-red-500 ring-2 ring-red-500/30'
+                : 'border-gray-200 dark:border-gray-700'
+            )}
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -414,12 +468,17 @@ export default function UsersPage() {
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
                   {expiredUsers}
                 </p>
+                {statusFilter === 'expired' && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    Filtered
+                  </p>
+                )}
               </div>
               <div className="h-12 w-12 bg-red-50 dark:bg-red-900/30 rounded-full flex items-center justify-center">
                 <UserMinus className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
-          </div>
+          </button>
         </div>
 
         <SearchBar
@@ -429,10 +488,21 @@ export default function UsersPage() {
         />
 
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
-              User List
-            </h2>
+          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
+                User List
+              </h2>
+              {statusFilter !== 'all' && (
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                >
+                  {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {filteredUsers.length} users found
             </span>
@@ -471,7 +541,6 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* ✅ Add / Edit User Modal — with discount */}
         <AddUserModal
           isOpen={isModalOpen}
           onClose={() => {
@@ -509,7 +578,6 @@ export default function UsersPage() {
           context={{ packages, areas }}
         />
 
-        {/* ✅ View User Modal — with discount */}
         {isViewOpen && viewingUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
@@ -647,7 +715,7 @@ export default function UsersPage() {
   );
 }
 
-// Helper component
+// Helper component for view modal fields
 function ViewField({
   icon,
   label,
