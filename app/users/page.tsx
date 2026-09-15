@@ -134,6 +134,7 @@ function UsersPageContent() {
       label: 'User ID',
       type: 'text',
       required: true,
+       readOnly: !!editingUser,
     },
     {
       name: 'name',
@@ -141,6 +142,7 @@ function UsersPageContent() {
       type: 'text',
       required: true,
       placeholder: 'Enter full name',
+       readOnly: !!editingUser,
     },
     {
       name: 'phone',

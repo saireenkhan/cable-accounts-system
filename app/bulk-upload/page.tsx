@@ -175,7 +175,9 @@ export default function BulkUploadPage() {
   return (
     <Layout>
       <div className="space-y-5 max-w-4xl">
-        {/* Header */}
+        {/* ============================================ */}
+        {/* PAGE HEADER */}
+        {/* ============================================ */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Upload className="h-6 w-6 text-blue-600" />
@@ -186,215 +188,40 @@ export default function BulkUploadPage() {
           </p>
         </div>
 
-        {/* INSTRUCTIONS */}
-        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl p-5">
-          <h2 className="font-semibold text-blue-900 dark:text-blue-200 mb-3 flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            CSV Format Instructions
-          </h2>
-
-          <div className="space-y-3 text-sm text-blue-900/80 dark:text-blue-200/80">
-            <p>
-              Your CSV file must have these <strong>4 required columns</strong> at
-              the start, in this exact order:
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {REQUIRED_HEADERS.map((h) => (
-                <span
-                  key={h}
-                  className="px-2.5 py-1 bg-blue-600 text-white rounded-md font-mono text-xs font-medium"
-                >
-                  {h}
-                </span>
-              ))}
+        {/* ============================================ */}
+        {/* STEP 1 — AREA SELECTOR (required first) */}
+        {/* ============================================ */}
+        <div
+          className={cn(
+            'rounded-xl shadow-sm border p-5 transition-all',
+            selectedArea
+              ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800'
+              : 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-800 ring-2 ring-blue-500/20'
+          )}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div
+              className={cn(
+                'h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0',
+                selectedArea
+                  ? 'bg-green-600 text-white'
+                  : 'bg-blue-600 text-white'
+              )}
+            >
+              {selectedArea ? <Check className="h-4 w-4" /> : '1'}
             </div>
-
-            <p className="pt-2">
-              You may also include these <strong>optional columns</strong> after
-              the required ones (in any order):
-            </p>
-
-            <div className="flex flex-wrap gap-1.5">
-              {OPTIONAL_HEADERS.map((h) => (
-                <span
-                  key={h}
-                  className="px-2.5 py-1 bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-200 rounded-md font-mono text-xs font-medium"
-                >
-                  {h}
-                </span>
-              ))}
-            </div>
-
-            <div className="pt-3 text-xs space-y-1">
-              <p>
-                <strong>Rules:</strong>
+            <div>
+              <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-blue-600" />
+                Select Area
+                <span className="text-red-500">*</span>
+              </h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Required — all customers in this file will be assigned to this
+                area
               </p>
-              <ul className="list-disc pl-5 space-y-0.5">
-                <li>Column names must match exactly (case-sensitive)</li>
-                <li>
-                  <strong>Required:</strong> customerId, name, phone, address
-                </li>
-                <li>
-                  <strong>Area is chosen on this page</strong> — not in the CSV
-                </li>
-                <li>
-                  <strong>Optional:</strong> package, discount, monthlyFee, status
-                </li>
-                <li>
-                  Missing optional columns default to:{' '}
-                  <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded">
-                    package=&quot;&quot;, discount=0, monthlyFee=0, status=active
-                  </code>
-                </li>
-                <li>Duplicate customerId will be skipped</li>
-                <li>Phone numbers missing leading 0 (10 digits) get auto-fixed</li>
-                <li>File size limit: 10 MB</li>
-              </ul>
             </div>
           </div>
-        </div>
-
-        {/* SAMPLE CSV PREVIEW */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-600" />
-              Sample CSV
-            </h2>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCopySample}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3 w-3 text-green-600" />
-                    Copied
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    Copy
-                  </>
-                )}
-              </button>
-              <button
-                onClick={handleDownloadSample}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-              >
-                <Download className="h-3 w-3" />
-                Download
-              </button>
-            </div>
-          </div>
-
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            This is what a valid CSV file should look like. Use this exact format.
-          </p>
-
-          {/* Sample preview table */}
-          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  {[
-                    'customerId',
-                    'name',
-                    'phone',
-                    'address',
-                    'package',
-                    'discount',
-                    'monthlyFee',
-                    'status',
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className={cn(
-                        'px-3 py-2 text-left font-mono font-semibold whitespace-nowrap',
-                        REQUIRED_HEADERS.includes(h)
-                          ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
-                          : 'text-gray-600 dark:text-gray-400'
-                      )}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-mono">
-                <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-001</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">John Doe</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0300-1234567</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">House 5, Street 3</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">BASIC</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">1500</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">active</td>
-                </tr>
-                <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-002</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Jane Smith</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0321-9876543</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Flat B-12, Block 1</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">PREMIUM</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">500</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">3500</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">active</td>
-                </tr>
-                <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-003</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Ahmed Khan</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0333-5555555</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Shop 12, Main Market</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">STANDARD</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">2500</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">active</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 bg-blue-100 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 rounded" />
-              Required
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded" />
-              Optional
-            </div>
-          </div>
-
-          {/* Raw CSV view */}
-          <details className="mt-4 group">
-            <summary className="cursor-pointer text-xs text-blue-600 dark:text-blue-400 hover:underline select-none flex items-center gap-1">
-              <FileText className="h-3 w-3" />
-              View raw CSV text
-            </summary>
-            <pre className="mt-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-mono overflow-x-auto text-gray-700 dark:text-gray-300">
-              {SAMPLE_CSV}
-            </pre>
-          </details>
-        </div>
-
-        {/* ============================================ */}
-        {/* AREA SELECTOR */}
-        {/* ============================================ */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-          <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-3 flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-blue-600" />
-            Select Area
-          </h2>
-
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-            All customers in this file will be assigned to the selected area.
-            Choose from your existing areas list.
-          </p>
 
           {areasLoading ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -407,7 +234,11 @@ export default function BulkUploadPage() {
               <div>
                 <p className="font-medium">No areas found</p>
                 <p className="text-xs mt-1">
-                  Please add areas on the Areas page first, then come back here.
+                  Please add areas on the{' '}
+                  <a href="/areas" className="underline font-medium">
+                    Areas page
+                  </a>{' '}
+                  first, then come back here.
                 </p>
               </div>
             </div>
@@ -415,7 +246,12 @@ export default function BulkUploadPage() {
             <select
               value={selectedArea}
               onChange={(e) => setSelectedArea(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className={cn(
+                'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-colors',
+                selectedArea
+                  ? 'border-green-500 dark:border-green-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500/50'
+                  : 'border-blue-500 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50'
+              )}
             >
               <option value="">-- Select an Area --</option>
               {areas.map((area: any) => (
@@ -427,99 +263,382 @@ export default function BulkUploadPage() {
           )}
 
           {selectedArea && (
-            <p className="mt-2 text-xs text-green-700 dark:text-green-400 flex items-center gap-1">
-              <CheckCircle className="h-3 w-3" />
-              All imported customers will be assigned to:{' '}
-              <strong>{selectedArea}</strong>
-            </p>
+            <div className="mt-3 p-3 bg-green-100 dark:bg-green-950/40 border border-green-300 dark:border-green-800 rounded-lg flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <p className="text-sm text-green-800 dark:text-green-300">
+                All imported customers will be assigned to:{' '}
+                <strong>{selectedArea}</strong>
+              </p>
+            </div>
           )}
         </div>
 
         {/* ============================================ */}
-        {/* UPLOAD ZONE */}
+        {/* REST OF PAGE — only shown after area selected */}
         {/* ============================================ */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-          <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-3">
-            Upload CSV File
-          </h2>
+        {!selectedArea ? (
+          <div className="bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
+            <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 dark:text-gray-400 font-medium">
+              Select an area above to continue
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+              The CSV format instructions, sample, and upload will appear here
+              once an area is chosen.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* ============================================ */}
+            {/* STEP 2 — INSTRUCTIONS */}
+            {/* ============================================ */}
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  2
+                </div>
+                <h2 className="font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2 text-sm">
+                  <FileText className="h-4 w-4" />
+                  CSV Format Instructions
+                </h2>
+              </div>
 
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            className={cn(
-              'border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer',
-              isDragging
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
-            )}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Upload className="h-10 w-10 text-gray-400 mx-auto mb-3" />
-            {file ? (
-              <div className="flex items-center justify-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {file.name}
-                </span>
-                <span className="text-xs text-gray-500">
-                  ({(file.size / 1024).toFixed(1)} KB)
-                </span>
+              <div className="space-y-3 text-sm text-blue-900/80 dark:text-blue-200/80">
+                <p>
+                  Your CSV file must have these <strong>4 required columns</strong>{' '}
+                  at the start, in this exact order:
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {REQUIRED_HEADERS.map((h) => (
+                    <span
+                      key={h}
+                      className="px-2.5 py-1 bg-blue-600 text-white rounded-md font-mono text-xs font-medium"
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+
+                <p className="pt-2">
+                  You may also include these <strong>optional columns</strong>{' '}
+                  after the required ones (in any order):
+                </p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {OPTIONAL_HEADERS.map((h) => (
+                    <span
+                      key={h}
+                      className="px-2.5 py-1 bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-200 rounded-md font-mono text-xs font-medium"
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="pt-3 text-xs space-y-1">
+                  <p>
+                    <strong>Rules:</strong>
+                  </p>
+                  <ul className="list-disc pl-5 space-y-0.5">
+                    <li>Column names must match exactly (case-sensitive)</li>
+                    <li>
+                      <strong>Required:</strong> customerId, name, phone, address
+                    </li>
+                    <li>
+                      <strong>Area is chosen above</strong> — not in the CSV
+                    </li>
+                    <li>
+                      <strong>Optional:</strong> package, discount, monthlyFee,
+                      status
+                    </li>
+                    <li>
+                      Missing optional columns default to:{' '}
+                      <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded">
+                        package=&quot;&quot;, discount=0, monthlyFee=0,
+                        status=active
+                      </code>
+                    </li>
+                    <li>Duplicate customerId will be skipped</li>
+                    <li>
+                      Phone numbers missing leading 0 (10 digits) get auto-fixed
+                    </li>
+                    <li>File size limit: 10 MB</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* ============================================ */}
+            {/* SAMPLE CSV PREVIEW */}
+            {/* ============================================ */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  Sample CSV
+                </h2>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopySample}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="h-3 w-3 text-green-600" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        Copy
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleDownloadSample}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                  >
+                    <Download className="h-3 w-3" />
+                    Download
+                  </button>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                This is what a valid CSV file should look like. Use this exact
+                format.
+              </p>
+
+              {/* Sample preview table */}
+              <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 dark:bg-gray-900">
+                    <tr>
+                      {[
+                        'customerId',
+                        'name',
+                        'phone',
+                        'address',
+                        'package',
+                        'discount',
+                        'monthlyFee',
+                        'status',
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className={cn(
+                            'px-3 py-2 text-left font-mono font-semibold whitespace-nowrap',
+                            REQUIRED_HEADERS.includes(h)
+                              ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                              : 'text-gray-600 dark:text-gray-400'
+                          )}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-mono">
+                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        USR-001
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        John Doe
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        0300-1234567
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        House 5, Street 3
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        BASIC
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        0
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        1500
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        active
+                      </td>
+                    </tr>
+                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        USR-002
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        Jane Smith
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        0321-9876543
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        Flat B-12, Block 1
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        PREMIUM
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        500
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        3500
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        active
+                      </td>
+                    </tr>
+                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        USR-003
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        Ahmed Khan
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        0333-5555555
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        Shop 12, Main Market
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        STANDARD
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        0
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        2500
+                      </td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        active
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Legend */}
+              <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-blue-100 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 rounded" />
+                  Required
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 bg-gray-100 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded" />
+                  Optional
+                </div>
+              </div>
+
+              {/* Raw CSV view */}
+              <details className="mt-4 group">
+                <summary className="cursor-pointer text-xs text-blue-600 dark:text-blue-400 hover:underline select-none flex items-center gap-1">
+                  <FileText className="h-3 w-3" />
+                  View raw CSV text
+                </summary>
+                <pre className="mt-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-mono overflow-x-auto text-gray-700 dark:text-gray-300">
+                  {SAMPLE_CSV}
+                </pre>
+              </details>
+            </div>
+
+            {/* ============================================ */}
+            {/* STEP 3 — UPLOAD ZONE */}
+            {/* ============================================ */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  3
+                </div>
+                <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
+                  Upload CSV File
+                </h2>
+              </div>
+
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+                className={cn(
+                  'border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer',
+                  isDragging
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                )}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+                {file ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {file.name}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      ({(file.size / 1024).toFixed(1)} KB)
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFile(null);
+                        setResult(null);
+                      }}
+                      className="ml-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      <X className="h-4 w-4 text-gray-500" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Drag and drop your CSV file here, or{' '}
+                      <span className="text-blue-600 font-medium">browse</span>
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Only .csv files, max 10 MB
+                    </p>
+                  </>
+                )}
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 mt-4">
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFile(null);
-                    setResult(null);
-                  }}
-                  className="ml-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={handleUpload}
+                  disabled={!file || !selectedArea || isUploading}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <X className="h-4 w-4 text-gray-500" />
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Upload & Import
+                    </>
+                  )}
                 </button>
               </div>
-            ) : (
-              <>
-                <p className="text-gray-600 dark:text-gray-400">
-                  Drag and drop your CSV file here, or{' '}
-                  <span className="text-blue-600 font-medium">browse</span>
-                </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                  Only .csv files, max 10 MB
-                </p>
-              </>
-            )}
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-          </div>
-
-          <div className="flex justify-end gap-3 mt-4">
-            <button
-              onClick={handleUpload}
-              disabled={!file || !selectedArea || isUploading}
-              className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4" />
-                  Upload & Import
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+            </div>
+          </>
+        )}
 
         {/* ============================================ */}
         {/* RESULT */}
