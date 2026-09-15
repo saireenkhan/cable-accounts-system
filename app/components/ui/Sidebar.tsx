@@ -20,6 +20,7 @@ import {
   PieChart,
   Settings,
   X,
+  Upload,
   ChevronRight,
   ChevronDown,
   LogOut,
@@ -105,6 +106,7 @@ const menuItems: MenuItem[] = [
     children: [
       { label: 'All Report', href: '/reports', icon: <PieChart className="h-4 w-4" /> },
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+      { label: 'Bulk Upload', href: '/bulk-upload', icon: <Upload className="h-4 w-4" /> },
     ],
   },
 ];

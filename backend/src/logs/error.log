@@ -37,3 +37,4 @@
 {"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:17:42.458Z"}
 {"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:24:23.971Z"}
 {"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:24:24.124Z"}
+{"level":"error","message":"500 - ENOENT: no such file or directory, open 'C:\\Users\\HP\\Documents\\Smart-Recovery\\smart-recovery\\backend\\uploads\\bulk-1789460155274-79358805.csv' - /api/customers/bulk-upload - POST - ::1","timestamp":"2026-09-15T08:15:55.278Z"}

@@ -45,7 +45,7 @@ export function DataTable<T extends { id?: string | number }>({
   className,
   accordionTitle,
   accordionSubtitle,
-  pageSize = 10,
+  pageSize = 20,
   showPagination = true,
 }: DataTableProps<T>) {
   const [expandedRows, setExpandedRows] = useState<Set<string | number>>(new Set());
