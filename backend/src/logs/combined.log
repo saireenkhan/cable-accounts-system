@@ -596,3 +596,6 @@
 {"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-15T06:05:34.036Z"}
 {"level":"info","message":"📡 Environment: development","timestamp":"2026-09-15T06:05:34.040Z"}
 {"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-15T06:05:34.627Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-15T06:07:24.627Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-15T06:07:24.631Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-15T06:07:25.302Z"}

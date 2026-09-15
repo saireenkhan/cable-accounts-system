@@ -48,7 +48,7 @@ export default function AreasPage() {
       const customerCounts: Record<string, number> = {};
       if (customersRes.data.success) {
         customersRes.data.customers.forEach((customer: any) => {
-          const areaName = customer.area?.name;
+          const areaName = customer.area;
           if (areaName) {
             customerCounts[areaName] = (customerCounts[areaName] || 0) + 1;
           }
