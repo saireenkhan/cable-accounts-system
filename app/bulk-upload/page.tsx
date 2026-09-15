@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import api from '@/app/lib/api';
 import {
@@ -14,6 +14,7 @@ import {
   X,
   Copy,
   Check,
+  MapPin,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -27,24 +28,45 @@ interface UploadResult {
   message: string;
 }
 
-// ✅ Sample CSV shown on the page
-const SAMPLE_CSV = `customerId,name,phone,address,area,package,discount,monthlyFee,status
-USR-001,John Doe,0300-1234567,"House 5, Street 3",Nazimabad,BASIC,0,1500,active
-USR-002,Jane Smith,0321-9876543,"Flat B-12, Gulshan Block 1",Gulshan,PREMIUM,500,3500,active
-USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",Model Colony,STANDARD,0,2500,active`;
+// ✅ Sample CSV — no `area` column (area is chosen on the page)
+const SAMPLE_CSV = `customerId,name,phone,address,package,discount,monthlyFee,status
+USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active
+USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active
+USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active`;
 
-const REQUIRED_HEADERS = ['customerId', 'name', 'phone', 'address', 'area'];
+const REQUIRED_HEADERS = ['customerId', 'name', 'phone', 'address'];
 const OPTIONAL_HEADERS = ['package', 'discount', 'monthlyFee', 'status'];
 
 export default function BulkUploadPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [selectedArea, setSelectedArea] = useState('');
+  const [areas, setAreas] = useState<any[]>([]);
+  const [areasLoading, setAreasLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ Download sample via API (server-generated)
+  // ✅ Fetch areas on mount
+  useEffect(() => {
+    const fetchAreas = async () => {
+      try {
+        const res = await api.get('/areas');
+        if (res.data.success) {
+          setAreas(res.data.areas || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch areas:', err);
+        toast.error('Failed to load areas');
+      } finally {
+        setAreasLoading(false);
+      }
+    };
+    fetchAreas();
+  }, []);
+
+  // ✅ Download sample via API
   const handleDownloadSample = () => {
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
     window.open(`${API_BASE}/customers/bulk-upload/sample`, '_blank');
@@ -89,65 +111,66 @@ export default function BulkUploadPage() {
   };
 
   const handleUpload = async () => {
-  if (!file) {
-    toast.error('Please select a file first');
-    return;
-  }
-
-  setIsUploading(true);
-  setResult(null);
-
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await api.post('/customers/bulk-upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-
-    const data = response.data;
-
-    // ✅ Always set result — success case
-    setResult({
-      total: data.total || 0,
-      inserted: data.inserted || 0,
-      skipped: data.skipped || 0,
-      insertedIds: data.insertedIds || [],
-      errors: data.errors || [],
-      message: data.message || 'Upload complete',
-    });
-
-    // Toast based on outcome
-    if (data.success && data.inserted > 0) {
-      toast.success(`Imported ${data.inserted} customers`);
-    } else if (data.success && data.inserted === 0) {
-      toast.error('No customers imported — check the result panel');
-    } else {
-      toast.error(data.message || 'Upload failed');
+    if (!selectedArea) {
+      toast.error('Please select an area first');
+      return;
     }
-  } catch (error: any) {
-    console.error('❌ Upload error:', error);
+    if (!file) {
+      toast.error('Please select a file first');
+      return;
+    }
 
-    const msg =
-      error.response?.data?.message ||
-      error.message ||
-      'Failed to upload file';
+    setIsUploading(true);
+    setResult(null);
 
-    // ✅ Set result — error case (400/500 from backend)
-    setResult({
-      total: 0,
-      inserted: 0,
-      skipped: 0,
-      insertedIds: [],
-      errors: [msg],
-      message: msg,
-    });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('area', selectedArea);
 
-    toast.error(msg);
-  } finally {
-    setIsUploading(false);
-  }
-};
+      const response = await api.post('/customers/bulk-upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const data = response.data;
+
+      setResult({
+        total: data.total || 0,
+        inserted: data.inserted || 0,
+        skipped: data.skipped || 0,
+        insertedIds: data.insertedIds || [],
+        errors: data.errors || [],
+        message: data.message || 'Upload complete',
+      });
+
+      if (data.success && data.inserted > 0) {
+        toast.success(`Imported ${data.inserted} customers`);
+      } else if (data.success && data.inserted === 0) {
+        toast.error('No customers imported — check the result panel');
+      } else {
+        toast.error(data.message || 'Upload failed');
+      }
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      const msg =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to upload file';
+
+      setResult({
+        total: 0,
+        inserted: 0,
+        skipped: 0,
+        insertedIds: [],
+        errors: [msg],
+        message: msg,
+      });
+
+      toast.error(msg);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <Layout>
@@ -163,9 +186,7 @@ export default function BulkUploadPage() {
           </p>
         </div>
 
-        {/* ============================================ */}
-        {/* INSTRUCTIONS + SAMPLE */}
-        {/* ============================================ */}
+        {/* INSTRUCTIONS */}
         <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl p-5">
           <h2 className="font-semibold text-blue-900 dark:text-blue-200 mb-3 flex items-center gap-2">
             <FileText className="h-4 w-4" />
@@ -174,11 +195,10 @@ export default function BulkUploadPage() {
 
           <div className="space-y-3 text-sm text-blue-900/80 dark:text-blue-200/80">
             <p>
-              Your CSV file must have these <strong>5 required columns</strong> at
+              Your CSV file must have these <strong>4 required columns</strong> at
               the start, in this exact order:
             </p>
 
-            {/* Required headers */}
             <div className="flex flex-wrap gap-1.5">
               {REQUIRED_HEADERS.map((h) => (
                 <span
@@ -195,7 +215,6 @@ export default function BulkUploadPage() {
               the required ones (in any order):
             </p>
 
-            {/* Optional headers */}
             <div className="flex flex-wrap gap-1.5">
               {OPTIONAL_HEADERS.map((h) => (
                 <span
@@ -214,7 +233,10 @@ export default function BulkUploadPage() {
               <ul className="list-disc pl-5 space-y-0.5">
                 <li>Column names must match exactly (case-sensitive)</li>
                 <li>
-                  <strong>Required:</strong> customerId, name, phone, address, area
+                  <strong>Required:</strong> customerId, name, phone, address
+                </li>
+                <li>
+                  <strong>Area is chosen on this page</strong> — not in the CSV
                 </li>
                 <li>
                   <strong>Optional:</strong> package, discount, monthlyFee, status
@@ -233,9 +255,7 @@ export default function BulkUploadPage() {
           </div>
         </div>
 
-        {/* ============================================ */}
         {/* SAMPLE CSV PREVIEW */}
-        {/* ============================================ */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
@@ -274,26 +294,33 @@ export default function BulkUploadPage() {
             This is what a valid CSV file should look like. Use this exact format.
           </p>
 
-          {/* Sample preview — table */}
+          {/* Sample preview table */}
           <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  {['customerId', 'name', 'phone', 'address', 'area', 'package', 'discount', 'monthlyFee', 'status'].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        className={cn(
-                          'px-3 py-2 text-left font-mono font-semibold whitespace-nowrap',
-                          REQUIRED_HEADERS.includes(h)
-                            ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
-                            : 'text-gray-600 dark:text-gray-400'
-                        )}
-                      >
-                        {h}
-                      </th>
-                    )
-                  )}
+                  {[
+                    'customerId',
+                    'name',
+                    'phone',
+                    'address',
+                    'package',
+                    'discount',
+                    'monthlyFee',
+                    'status',
+                  ].map((h) => (
+                    <th
+                      key={h}
+                      className={cn(
+                        'px-3 py-2 text-left font-mono font-semibold whitespace-nowrap',
+                        REQUIRED_HEADERS.includes(h)
+                          ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                          : 'text-gray-600 dark:text-gray-400'
+                      )}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-mono">
@@ -302,7 +329,6 @@ export default function BulkUploadPage() {
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">John Doe</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0300-1234567</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">House 5, Street 3</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Nazimabad</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">BASIC</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">1500</td>
@@ -312,8 +338,7 @@ export default function BulkUploadPage() {
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-002</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Jane Smith</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0321-9876543</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Flat B-12, Gulshan Block 1</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Gulshan</td>
+                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Flat B-12, Block 1</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">PREMIUM</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">500</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">3500</td>
@@ -324,7 +349,6 @@ export default function BulkUploadPage() {
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Ahmed Khan</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0333-5555555</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Shop 12, Main Market</td>
-                  <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Model Colony</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">STANDARD</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0</td>
                   <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">2500</td>
@@ -334,7 +358,7 @@ export default function BulkUploadPage() {
             </table>
           </div>
 
-          {/* Column legend */}
+          {/* Legend */}
           <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 bg-blue-100 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 rounded" />
@@ -346,7 +370,7 @@ export default function BulkUploadPage() {
             </div>
           </div>
 
-          {/* Raw CSV view (collapsible / smaller) */}
+          {/* Raw CSV view */}
           <details className="mt-4 group">
             <summary className="cursor-pointer text-xs text-blue-600 dark:text-blue-400 hover:underline select-none flex items-center gap-1">
               <FileText className="h-3 w-3" />
@@ -356,6 +380,59 @@ export default function BulkUploadPage() {
               {SAMPLE_CSV}
             </pre>
           </details>
+        </div>
+
+        {/* ============================================ */}
+        {/* AREA SELECTOR */}
+        {/* ============================================ */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-3 flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-blue-600" />
+            Select Area
+          </h2>
+
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            All customers in this file will be assigned to the selected area.
+            Choose from your existing areas list.
+          </p>
+
+          {areasLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading areas...
+            </div>
+          ) : areas.length === 0 ? (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">No areas found</p>
+                <p className="text-xs mt-1">
+                  Please add areas on the Areas page first, then come back here.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <select
+              value={selectedArea}
+              onChange={(e) => setSelectedArea(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+            >
+              <option value="">-- Select an Area --</option>
+              {areas.map((area: any) => (
+                <option key={area._id} value={area.name}>
+                  {area.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {selectedArea && (
+            <p className="mt-2 text-xs text-green-700 dark:text-green-400 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              All imported customers will be assigned to:{' '}
+              <strong>{selectedArea}</strong>
+            </p>
+          )}
         </div>
 
         {/* ============================================ */}
@@ -426,7 +503,7 @@ export default function BulkUploadPage() {
           <div className="flex justify-end gap-3 mt-4">
             <button
               onClick={handleUpload}
-              disabled={!file || isUploading}
+              disabled={!file || !selectedArea || isUploading}
               className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isUploading ? (
