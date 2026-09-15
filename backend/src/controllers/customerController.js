@@ -25,7 +25,7 @@ exports.getCustomers = async (req, res) => {
     let query = Customer.find(filter)
       .populate('area', 'name')
       .populate('createdBy', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ customerId: 1 });
 
     if (limit) {
       query = query.limit(parseInt(limit));

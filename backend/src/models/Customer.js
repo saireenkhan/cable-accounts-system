@@ -23,8 +23,9 @@ const customerSchema = new mongoose.Schema({
     required: true,
   },
   area: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Area',
+    type: String,
+    trim: true,
+    default: '',
   },
   package: {
     type: String,

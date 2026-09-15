@@ -31,3 +31,9 @@
 {"level":"error","message":"Login error: Operation `users.findOne()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:32:01.726Z"}
 {"level":"error","message":"Get packages error: Operation `packages.find()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:32:04.218Z"}
 {"level":"error","message":"Login error: Operation `users.findOne()` buffering timed out after 30000ms","timestamp":"2026-09-13T07:33:57.508Z"}
+{"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:17:34.751Z"}
+{"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:17:34.912Z"}
+{"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:17:42.286Z"}
+{"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:17:42.458Z"}
+{"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:24:23.971Z"}
+{"level":"error","message":"Get customers error: Cast to ObjectId failed for value \"Sector 5c4\" (type string) at path \"_id\" for model \"Area\"","timestamp":"2026-09-13T17:24:24.124Z"}

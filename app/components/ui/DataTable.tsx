@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 
@@ -19,7 +19,7 @@ interface DataTableProps<T> {
   onRowClick?: (item: T) => void;
   onAction?: (item: T, action: string) => void;
   actions?: Array<{
-    label?: string;         // ✅ now optional
+    label?: string;
     value: string;
     icon?: React.ReactNode;
     className?: string;
@@ -29,6 +29,9 @@ interface DataTableProps<T> {
   className?: string;
   accordionTitle?: string;
   accordionSubtitle?: string;
+  // ✅ NEW — pagination controls
+  pageSize?: number;           // default 10
+  showPagination?: boolean;    // default true
 }
 
 export function DataTable<T extends { id?: string | number }>({
@@ -42,10 +45,33 @@ export function DataTable<T extends { id?: string | number }>({
   className,
   accordionTitle,
   accordionSubtitle,
+  pageSize = 10,
+  showPagination = true,
 }: DataTableProps<T>) {
   const [expandedRows, setExpandedRows] = useState<Set<string | number>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
   const isMobile = useMediaQuery('(max-width: 768px)');
   const isTablet = useMediaQuery('(max-width: 1024px)');
+
+  // ✅ Reset to page 1 whenever the data array changes (e.g. filter/search)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data.length]);
+
+  // ✅ Pagination math
+  const totalPages = Math.max(1, Math.ceil(data.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages); // guard against stale page
+  const startIndex = (safePage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedData = useMemo(
+    () => data.slice(startIndex, endIndex),
+    [data, startIndex, endIndex]
+  );
+
+  const goToPage = (page: number) => {
+    const clamped = Math.max(1, Math.min(page, totalPages));
+    setCurrentPage(clamped);
+  };
 
   const toggleRow = (id: string | number) => {
     const newExpanded = new Set(expandedRows);
@@ -104,11 +130,6 @@ export function DataTable<T extends { id?: string | number }>({
             )}
           </div>
           <div className="flex items-center gap-2 ml-2">
-            {actions.length > 0 && (
-              <div onClick={(e) => e.stopPropagation()}>
-                {/* Action buttons would go here */}
-              </div>
-            )}
             {isExpanded ? (
               <ChevronUp className="h-5 w-5 text-gray-400" />
             ) : (
@@ -187,7 +208,7 @@ export function DataTable<T extends { id?: string | number }>({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.map((item) => {
+              {paginatedData.map((item) => {
                 const id = getRowId(item);
                 return (
                   <tr
@@ -259,7 +280,7 @@ export function DataTable<T extends { id?: string | number }>({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {data.map((item) => {
+            {paginatedData.map((item) => {
               const id = getRowId(item);
               return (
                 <tr
@@ -310,6 +331,100 @@ export function DataTable<T extends { id?: string | number }>({
     );
   };
 
+  // ✅ Pagination UI
+  const renderPagination = () => {
+    if (!showPagination || data.length <= pageSize) return null;
+
+    const startRecord = startIndex + 1;
+    const endRecord = Math.min(endIndex, data.length);
+
+    // Build page numbers with ellipsis
+    const pageNumbers: (number | '...')[] = [];
+    const maxVisible = 5;
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pageNumbers.push(i);
+    } else {
+      pageNumbers.push(1);
+      if (safePage > 3) pageNumbers.push('...');
+      const start = Math.max(2, safePage - 1);
+      const end = Math.min(totalPages - 1, safePage + 1);
+      for (let i = start; i <= end; i++) pageNumbers.push(i);
+      if (safePage < totalPages - 2) pageNumbers.push('...');
+      pageNumbers.push(totalPages);
+    }
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        {/* Record counter */}
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          Showing <span className="font-semibold text-gray-700 dark:text-gray-300">{startRecord}</span>
+          {' – '}
+          <span className="font-semibold text-gray-700 dark:text-gray-300">{endRecord}</span>
+          {' of '}
+          <span className="font-semibold text-gray-700 dark:text-gray-300">{data.length}</span> records
+        </div>
+
+        {/* Page controls */}
+        <div className="flex items-center gap-1">
+          {/* Prev */}
+          <button
+            onClick={() => goToPage(safePage - 1)}
+            disabled={safePage === 1}
+            className={cn(
+              'p-2 rounded-md transition-colors',
+              safePage === 1
+                ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            )}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+
+          {/* Page numbers */}
+          {pageNumbers.map((p, i) =>
+            p === '...' ? (
+              <span
+                key={`ellipsis-${i}`}
+                className="px-2 text-gray-400 dark:text-gray-500 text-sm"
+              >
+                …
+              </span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => goToPage(p)}
+                className={cn(
+                  'min-w-[32px] h-8 px-2 rounded-md text-sm font-medium transition-colors',
+                  safePage === p
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                )}
+              >
+                {p}
+              </button>
+            )
+          )}
+
+          {/* Next */}
+          <button
+            onClick={() => goToPage(safePage + 1)}
+            disabled={safePage === totalPages}
+            className={cn(
+              'p-2 rounded-md transition-colors',
+              safePage === totalPages
+                ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            )}
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -330,11 +445,14 @@ export function DataTable<T extends { id?: string | number }>({
     <div className={cn('w-full', className)}>
       {isMobile ? (
         <div className="space-y-2">
-          {data.map((item) => renderMobileCard(item))}
+          {paginatedData.map((item) => renderMobileCard(item))}
         </div>
       ) : (
         renderTable()
       )}
+
+      {/* ✅ Pagination */}
+      {renderPagination()}
     </div>
   );
 }
