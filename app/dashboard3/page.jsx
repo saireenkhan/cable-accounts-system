@@ -18,14 +18,15 @@ import {
   Wallet,
   Package,
   MapPin,
+  Handshake,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
-export default function DashboardPage() {
+export default function PartnerDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -39,30 +40,31 @@ export default function DashboardPage() {
         return;
       }
 
-      // ✅ Fetch customers, payments, packages and areas
-      const [customersRes, paymentsRes, packagesRes, areasRes] =
+      // ✅ Fetch partners, partner payments, packages, partner areas
+      const [partnersRes, paymentsRes, packagesRes, areasRes] =
         await Promise.all([
-          api.get('/customers?limit=10000'),
-          api.get('/payments?limit=10000'),
+          api.get('/partners?limit=10000'),
+          api.get('/partner-payments?limit=10000'),
           api.get('/packages'),
-          api.get('/areas'),
+          api.get('/partner-areas'),
         ]);
 
-      const customers = customersRes.data.customers || [];
+      const partners = partnersRes.data.partners || [];
       const payments = paymentsRes.data.payments || [];
       const packages = packagesRes.data.packages || [];
       const areas = areasRes.data.areas || [];
 
-      console.log('📊 Customers:', customers.length);
-      console.log('💰 Payments:', payments.length);
+      console.log('📊 Partners:', partners.length);
+      console.log('💰 Partner Payments:', payments.length);
       console.log('📦 Packages:', packages.length);
-      console.log('📍 Areas:', areas.length);
+      console.log('📍 Partner Areas:', areas.length);
 
-      // ✅ ========== CUSTOMER STATS ==========
-      const totalCustomers = customers.length;
+      // ✅ ========== PARTNER STATUS COUNTS ==========
+    // ✅ ========== PARTNER STATUS COUNTS ==========
+const totalCustomers = partners.length;
 const _now = new Date();
 
-const expiredCustomers = customers.filter((c: any) => {
+const expiredCustomers = partners.filter((c) => {
   const rawStatus = (c.status || '').toLowerCase();
   if (rawStatus === 'expired') return true;
 
@@ -73,26 +75,26 @@ const expiredCustomers = customers.filter((c: any) => {
   return expiry < _now && rawStatus !== 'inactive' && rawStatus !== 'suspended';
 }).length;
 
-const activeCustomers = customers.filter(
-  (c: any) => c.status?.toLowerCase() === 'active'
+const activeCustomers = partners.filter(
+  (c) => c.status?.toLowerCase() === 'active'
 ).length;
-const inactiveCustomers = customers.filter(
-  (c: any) => c.status?.toLowerCase() === 'inactive'
+const inactiveCustomers = partners.filter(
+  (c) => c.status?.toLowerCase() === 'inactive'
 ).length;
-const suspendedCustomers = customers.filter(
-  (c: any) => c.status?.toLowerCase() === 'suspended'
+const suspendedCustomers = partners.filter(
+  (c) => c.status?.toLowerCase() === 'suspended'
 ).length;
 
       // ✅ ========== BILLING & COLLECTION STATS ==========
-      const totalBilling = customers.reduce((sum: number, customer: any) => {
-        const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
+      const totalBilling = partners.reduce((sum, partner) => {
+        const monthlyFee = parseFloat(String(partner.monthlyFee)) || 0;
         if (monthlyFee === 0) return sum;
 
-        const customerPayments = payments.filter(
-          (p: any) => p.customer?.name === customer.name && !p.isNoPayment
+        const partnerPayments = payments.filter(
+          (p) => p.partner?.name === partner.name && !p.isNoPayment
         );
-        const activeMonths = new Set<string>();
-        customerPayments.forEach((p: any) => {
+        const activeMonths = new Set();
+        partnerPayments.forEach((p) => {
           if (p.month) activeMonths.add(p.month);
         });
 
@@ -102,9 +104,9 @@ const suspendedCustomers = customers.filter(
       }, 0);
 
       const totalRecovered = payments
-        .filter((p: any) => !p.isNoPayment)
+        .filter((p) => !p.isNoPayment)
         .reduce(
-          (sum: number, p: any) => sum + (parseFloat(String(p.amount)) || 0),
+          (sum, p) => sum + (parseFloat(String(p.amount)) || 0),
           0
         );
 
@@ -120,36 +122,24 @@ const suspendedCustomers = customers.filter(
       const sevenDaysLater = new Date(today);
       sevenDaysLater.setDate(today.getDate() + 7);
 
-      const upcomingExpiry = customers.filter((c: any) => {
+      const upcomingExpiry = partners.filter((c) => {
         if (!c.expiryDate) return false;
         const expiryDate = new Date(c.expiryDate);
         return expiryDate >= today && expiryDate <= sevenDaysLater;
       }).length;
 
-      // ============================================================
       // ✅ ========== PER-MONTH STATUS COUNTS ==========
-      // ============================================================
       const now = new Date();
       const monthsList = [
-        'January',
-        'February',
-        'March',
-        'April',
-        'May',
-        'June',
-        'July',
-        'August',
-        'September',
-        'October',
-        'November',
-        'December',
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
       ];
 
       const currentMonthIndex = now.getMonth();
       const currentYear = now.getFullYear();
       const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
 
-      const isPastOrCurrentMonth = (monthStr: string) => {
+      const isPastOrCurrentMonth = (monthStr) => {
         const [monthName, yearStr] = monthStr.split(' ');
         const year = parseInt(yearStr);
         const monthIndex = monthsList.indexOf(monthName);
@@ -169,21 +159,21 @@ const suspendedCustomers = customers.filter(
         notpaid: 0,
       };
 
-      customers.forEach((customer: any) => {
-        const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
+      partners.forEach((partner) => {
+        const monthlyFee = parseFloat(String(partner.monthlyFee)) || 0;
         if (monthlyFee === 0) return;
 
-        const customerPayments = payments.filter(
-          (p: any) => p.customer?.name === customer.name && !p.isNoPayment
+        const partnerPayments = payments.filter(
+          (p) => p.partner?.name === partner.name && !p.isNoPayment
         );
 
-        if (customerPayments.length === 0) {
+        if (partnerPayments.length === 0) {
           monthStatusCounts.notpaid += 1;
           return;
         }
 
-        const monthPaidMap: Record<string, number> = {};
-        customerPayments.forEach((p: any) => {
+        const monthPaidMap = {};
+        partnerPayments.forEach((p) => {
           if (!monthPaidMap[p.month]) {
             monthPaidMap[p.month] = 0;
           }
@@ -223,10 +213,7 @@ const suspendedCustomers = customers.filter(
       console.log('✅ Paid:', paidCustomers);
       console.log('🟡 Partial:', partialCustomers);
       console.log('❌ Not Paid:', notPaidCustomers);
-      console.log('⚪ Inactive:', inactiveCustomers);
-      console.log('🔴 Expired:', expiredCustomers);
 
-      // ✅ Save stats
       setStats({
         totalCustomers,
         activeCustomers,
@@ -243,10 +230,9 @@ const suspendedCustomers = customers.filter(
         notPaidCustomers,
         totalPackages: packages.length,
         totalAreas: areas.length,
-        defaultUsers: notPaidCustomers,
       });
-    } catch (error: any) {
-      console.error('Error fetching dashboard:', error);
+    } catch (error) {
+      console.error('Error fetching partner dashboard:', error);
       if (
         error.code === 'ERR_NETWORK' ||
         error.message === 'Network Error'
@@ -262,7 +248,6 @@ const suspendedCustomers = customers.filter(
     }
   };
 
-  // Handle loading state
   if (loading) {
     return (
       <Layout>
@@ -292,18 +277,19 @@ const suspendedCustomers = customers.filter(
   return (
     <Layout>
       <div className="space-y-6">
-        {/* ========== PAGE HEADER ========== */}
+        {/* HEADER */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              User Management Dashboard
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+              <Handshake className="h-8 w-8 text-cyan-600" />
+              Partner Management Dashboard
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Quick overview of customer accounts, billing and payment activity.
+              Quick overview of partner accounts, billing and payment activity.
             </p>
           </div>
           <button
-            onClick={() => router.push('/users')}
+            onClick={() => router.push('/partners')}
             className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/25"
           >
             <UserPlus className="h-4 w-4" />
@@ -311,23 +297,23 @@ const suspendedCustomers = customers.filter(
           </button>
         </div>
 
-        {/* ========== STATS CARDS - TOP ROW (4 cards) ========== */}
+        {/* TOP 4 STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-gradient-to-br from-slate-700 to-slate-900 rounded-xl shadow-lg p-5">
             <p className="text-xs font-medium text-slate-300 uppercase tracking-wider">
-              TOTAL USERS
+              TOTAL USER
             </p>
             <p className="text-3xl font-bold text-white mt-2">
               {(stats?.totalCustomers || 0).toLocaleString()}
             </p>
             <p className="text-xs text-slate-300 mt-2">
-              {stats?.activeCustomers || 0} active connections
+              {stats?.activeCustomers || 0} active partners
             </p>
           </div>
 
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              PAID USERS
+              PAID USER
             </p>
             <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-2">
               {(stats?.paidCustomers || 0).toLocaleString()}
@@ -339,7 +325,7 @@ const suspendedCustomers = customers.filter(
 
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              PARTIAL USERS
+              PARTIAL USER
             </p>
             <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">
               {(stats?.partialCustomers || 0).toLocaleString()}
@@ -351,7 +337,7 @@ const suspendedCustomers = customers.filter(
 
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              NOT PAID USERS
+              NOT PAID USER
             </p>
             <p className="text-3xl font-bold text-rose-600 dark:text-rose-400 mt-2">
               {(stats?.notPaidCustomers || 0).toLocaleString()}
@@ -362,12 +348,11 @@ const suspendedCustomers = customers.filter(
           </div>
         </div>
 
-        {/* ========== BOTTOM ROW - 2 Sections ========== */}
+        {/* COLLECTION SUMMARY + QUICK ACTIONS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* USER COLLECTION SUMMARY (2/3 width) */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-              User Collection Summary
+              Partner Collection Summary
             </h2>
 
             <div className="space-y-6">
@@ -422,7 +407,6 @@ const suspendedCustomers = customers.filter(
             </div>
           </div>
 
-          {/* QUICK ACTIONS (1/3 width) */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
               Quick Actions
@@ -430,13 +414,13 @@ const suspendedCustomers = customers.filter(
 
             <div className="flex flex-wrap gap-3">
               <button
-                onClick={() => router.push('/users')}
+                onClick={() => router.push('/partners')}
                 className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
               >
                 Add User
               </button>
               <button
-                onClick={() => router.push('/billing')}
+                onClick={() => router.push('/partners/receive-payments')}
                 className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
               >
                 Receive Payment
@@ -445,17 +429,16 @@ const suspendedCustomers = customers.filter(
           </div>
         </div>
 
-        {/* ========== ADDITIONAL INFO CARDS ========== */}
+        {/* BOTTOM GRID */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Active Users — clickable */}
           <button
-            onClick={() => router.push('/users?status=active')}
+            onClick={() => router.push('/partners?status=active')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 hover:scale-[1.02] transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  ACTIVE USERS
+                  ACTIVE USER
                 </p>
                 <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                   {stats?.activeCustomers || 0}
@@ -470,15 +453,14 @@ const suspendedCustomers = customers.filter(
             </div>
           </button>
 
-          {/* Inactive Users — clickable */}
           <button
-            onClick={() => router.push('/users?status=inactive')}
+            onClick={() => router.push('/partners?status=inactive')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-gray-400 dark:hover:border-gray-600 hover:scale-[1.02] transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  INACTIVE USERS
+                  INACTIVE User
                 </p>
                 <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
                   {stats?.inactiveCustomers || 0}
@@ -493,15 +475,14 @@ const suspendedCustomers = customers.filter(
             </div>
           </button>
 
-          {/* Expired Users — clickable */}
           <button
-            onClick={() => router.push('/users?status=expired')}
+            onClick={() => router.push('/partners?status=expired')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-rose-300 dark:hover:border-rose-700 hover:scale-[1.02] transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  EXPIRED USERS
+                  EXPIRED USER
                 </p>
                 <p className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
                   {stats?.expiredCustomers || 0}
@@ -516,9 +497,8 @@ const suspendedCustomers = customers.filter(
             </div>
           </button>
 
-          {/* Suspended — clickable */}
           <button
-            onClick={() => router.push('/users?status=suspended')}
+            onClick={() => router.push('/partners?status=suspended')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-yellow-300 dark:hover:border-yellow-700 hover:scale-[1.02] transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between">
@@ -539,7 +519,6 @@ const suspendedCustomers = customers.filter(
             </div>
           </button>
 
-          {/* Recovery Rate */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -556,7 +535,6 @@ const suspendedCustomers = customers.filter(
             </div>
           </div>
 
-          {/* Total Collection */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -573,7 +551,6 @@ const suspendedCustomers = customers.filter(
             </div>
           </div>
 
-          {/* Total Packages (clickable → /packages) */}
           <button
             onClick={() => router.push('/packages')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700 hover:scale-[1.02] transition-all cursor-pointer"
@@ -596,15 +573,14 @@ const suspendedCustomers = customers.filter(
             </div>
           </button>
 
-          {/* Total Areas (clickable → /areas) */}
           <button
-            onClick={() => router.push('/areas')}
+            onClick={() => router.push('/partner-areas')}
             className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 text-left hover:shadow-md hover:border-violet-300 dark:hover:border-violet-700 hover:scale-[1.02] transition-all cursor-pointer"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                  TOTAL AREAS
+                  TOTAL PARTNER AREAS
                 </p>
                 <p className="text-2xl font-bold text-violet-600 dark:text-violet-400 mt-1">
                   {stats?.totalAreas || 0}

@@ -6,6 +6,10 @@ const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database');
 const errorHandler = require('./middleware/error');
 const logger = require('./utils/logger');
+const partnerAreaRoutes = require('./routes/partnerAreaRoutes');
+const partnerRoutes = require('./routes/partnerRoutes');
+
+
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -71,6 +75,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', limiter);
 
 // Routes
+app.use('/api/partner-payments', require('./routes/partnerPaymentRoutes'));
 app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/bills', billRoutes);
@@ -86,7 +91,8 @@ app.use('/api/installation', installationRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dealer-areas', dealerAreaRoutes);
-
+app.use('/api/partner-areas', partnerAreaRoutes);
+app.use('/api/partners', partnerRoutes);
 // Health check — responds at both /health (local) and /api/health (via Vercel rewrite)
 const healthHandler = (req, res) => {
   res.json({

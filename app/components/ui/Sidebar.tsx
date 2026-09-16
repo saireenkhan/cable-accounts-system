@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Users,
   DollarSign,
+   Handshake,
   HomeIcon,
   MapPin,
   Package,
@@ -58,7 +59,21 @@ const menuItems: MenuItem[] = [
       { label: 'Add Package',href: '/packages',icon: <Package className="h-4 w-4" />,},
     ],
   },
+    // Partner MANAGEMENT
+  {
+    label: 'Partner Management',
+    href: '#',
+    icon: < Handshake className="h-5 w-5" />,
+    section: 'partner',
+    children: [
+      { label: 'Dashboard',href: '/dashboard3',icon: <LayoutDashboard className="h-4 w-4" /> ,},
+      { label: 'Add Area',href: '/partner-areas',icon: <MapPin className="h-4 w-4" />,},
+      { label: 'Add User',href: '/partners',icon: <UserPlus className="h-4 w-4" />,},
+      { label: 'Recieve Payment',href: '/payments',icon:  <FileText className="h-4 w-4" /> ,},
+  
 
+    ],
+  },
   // DEALER MANAGEMENT
   {
     label: 'Dealer Management',
@@ -255,6 +270,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
           {menuItems
             .filter(item => item.section === 'user')
+            .map((item) => renderMenuItem(item))}
+               <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-3 py-2">
+            Partner Management
+          </div>
+          {menuItems
+            .filter(item => item.section === 'partner')
             .map((item) => renderMenuItem(item))}
 
           <div className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider px-3 py-2 mt-2">

@@ -15,16 +15,30 @@ import {
   Copy,
   Check,
   MapPin,
+  Users,
+  Handshake,
+  AlertTriangle,
+  Ban,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
+
+type TargetType = 'customers' | 'partners';
+
+interface UploadError {
+  row?: number;
+  id?: string;
+  reason: string;
+  type: 'duplicate' | 'validation' | 'other';
+}
 
 interface UploadResult {
   total: number;
   inserted: number;
   skipped: number;
   insertedIds: string[];
-  errors: string[];
+  duplicateIds: string[];
+  errors: (string | UploadError)[];
   message: string;
 }
 
@@ -37,17 +51,19 @@ const formatDate = (d: Date) => {
 };
 
 // ✅ Generate sample CSV with today's dates
-const getSampleCSV = () => {
+const getSampleCSV = (target: TargetType) => {
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const dayAfter = new Date(today);
   dayAfter.setDate(dayAfter.getDate() + 2);
 
+  const idPrefix = target === 'customers' ? 'USR' : 'PTR';
+
   return `customerId,name,phone,address,package,discount,monthlyFee,status,activationDate
-USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active,${formatDate(today)}
-USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active,${formatDate(tomorrow)}
-USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`;
+${idPrefix}-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active,${formatDate(today)}
+${idPrefix}-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active,${formatDate(tomorrow)}
+${idPrefix}-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`;
 };
 
 const REQUIRED_HEADERS = ['customerId', 'name', 'phone', 'address'];
@@ -59,7 +75,47 @@ const OPTIONAL_HEADERS = [
   'activationDate',
 ];
 
+// ✅ Normalize an error into a structured object
+const normalizeError = (err: any): UploadError => {
+  // If backend sends a structured error object
+  if (err && typeof err === 'object') {
+    return {
+      row: err.row,
+      id: err.id || err.customerId || err.partnerId,
+      reason: err.reason || err.message || JSON.stringify(err),
+      type: err.type || (err.reason?.toLowerCase().includes('duplicate') ? 'duplicate' : 'other'),
+    };
+  }
+
+  // If backend sends a plain string
+  const str = String(err || 'Unknown error');
+  const lower = str.toLowerCase();
+
+  // Try to extract row number: "Row 3: ..."
+  const rowMatch = str.match(/row\s+(\d+)/i);
+  const row = rowMatch ? parseInt(rowMatch[1]) : undefined;
+
+  // Try to extract ID: "Customer with ID 'USR-001' already exists"
+  const idMatch = str.match(/["']([^"']+)["']/) || str.match(/id\s+([A-Z0-9-]+)/i);
+  const id = idMatch ? idMatch[1] : undefined;
+
+  // Detect type
+  let type: UploadError['type'] = 'other';
+  if (lower.includes('duplicate') || lower.includes('already exists')) {
+    type = 'duplicate';
+  } else if (
+    lower.includes('required') ||
+    lower.includes('invalid') ||
+    lower.includes('missing')
+  ) {
+    type = 'validation';
+  }
+
+  return { row, id, reason: str, type };
+};
+
 export default function BulkUploadPage() {
+  const [target, setTarget] = useState<TargetType>('customers');
   const [file, setFile] = useState<File | null>(null);
   const [selectedArea, setSelectedArea] = useState('');
   const [areas, setAreas] = useState<any[]>([]);
@@ -70,14 +126,23 @@ export default function BulkUploadPage() {
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ Compute sample on every render
-  const SAMPLE_CSV = getSampleCSV();
+  // ✅ Compute sample on every render (based on target)
+  const SAMPLE_CSV = getSampleCSV(target);
 
-  // ✅ Fetch areas on mount
+  // ✅ Reset file + result when target changes
+  useEffect(() => {
+    setFile(null);
+    setResult(null);
+  }, [target]);
+
+  // ✅ Fetch areas based on target
   useEffect(() => {
     const fetchAreas = async () => {
+      setAreasLoading(true);
+      setSelectedArea('');
       try {
-        const res = await api.get('/areas');
+        const endpoint = target === 'customers' ? '/areas' : '/partner-areas';
+        const res = await api.get(endpoint);
         if (res.data.success) {
           setAreas(res.data.areas || []);
         }
@@ -89,12 +154,16 @@ export default function BulkUploadPage() {
       }
     };
     fetchAreas();
-  }, []);
+  }, [target]);
 
-  // ✅ Download sample via API (keeps backend as the source of truth)
+  // ✅ Download sample via API
   const handleDownloadSample = () => {
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
-    window.open(`${API_BASE}/customers/bulk-upload/sample`, '_blank');
+    const path =
+      target === 'customers'
+        ? '/customers/bulk-upload/sample'
+        : '/partners/bulk-upload/sample';
+    window.open(`${API_BASE}${path}`, '_blank');
     toast.success('Sample CSV downloaded');
   };
 
@@ -153,25 +222,66 @@ export default function BulkUploadPage() {
       formData.append('file', file);
       formData.append('area', selectedArea);
 
-      const response = await api.post('/customers/bulk-upload', formData, {
+      const endpoint =
+        target === 'customers'
+          ? '/customers/bulk-upload'
+          : '/partners/bulk-upload';
+
+      const response = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
       const data = response.data;
+
+      // ✅ Extract duplicate IDs — check multiple possible field names
+      const duplicateIds: string[] = Array.isArray(data.duplicateIds)
+        ? data.duplicateIds
+        : Array.isArray(data.duplicates)
+          ? data.duplicates
+          : [];
+
+      // ✅ Normalize errors so they're always structured objects
+      const normalizedErrors = Array.isArray(data.errors)
+        ? data.errors.map(normalizeError)
+        : [];
+
+      // ✅ If backend didn't send duplicateIds separately, extract them from errors
+      const dupFromErrors = normalizedErrors
+        .filter((e) => e.type === 'duplicate' && e.id)
+        .map((e) => e.id as string);
+
+      const allDuplicates = Array.from(
+        new Set([...duplicateIds, ...dupFromErrors])
+      );
 
       setResult({
         total: data.total || 0,
         inserted: data.inserted || 0,
         skipped: data.skipped || 0,
         insertedIds: data.insertedIds || [],
-        errors: data.errors || [],
+        duplicateIds: allDuplicates,
+        errors: normalizedErrors,
         message: data.message || 'Upload complete',
       });
 
+      const noun = target === 'customers' ? 'customers' : 'partners';
+
       if (data.success && data.inserted > 0) {
-        toast.success(`Imported ${data.inserted} customers`);
+        if (allDuplicates.length > 0) {
+          toast.success(
+            `Imported ${data.inserted} ${noun} · Skipped ${allDuplicates.length} duplicates`
+          );
+        } else {
+          toast.success(`Imported ${data.inserted} ${noun}`);
+        }
       } else if (data.success && data.inserted === 0) {
-        toast.error('No customers imported — check the result panel');
+        if (allDuplicates.length > 0) {
+          toast.error(
+            `No ${noun} imported — all ${allDuplicates.length} rows were duplicates`
+          );
+        } else {
+          toast.error(`No ${noun} imported — check the result panel`);
+        }
       } else {
         toast.error(data.message || 'Upload failed');
       }
@@ -187,7 +297,8 @@ export default function BulkUploadPage() {
         inserted: 0,
         skipped: 0,
         insertedIds: [],
-        errors: [msg],
+        duplicateIds: [],
+        errors: [normalizeError(msg)],
         message: msg,
       });
 
@@ -197,6 +308,30 @@ export default function BulkUploadPage() {
     }
   };
 
+  // ✅ Dynamic labels based on target
+  const targetNounSingular = target === 'customers' ? 'Customer' : 'Partner';
+  const targetNounPlural = target === 'customers' ? 'Customers' : 'Partners';
+  const idLabel = target === 'customers' ? 'User ID' : 'Partner ID';
+  const areaLabel = target === 'customers' ? 'Area' : 'Partner Area';
+  const areaRoute = target === 'customers' ? '/areas' : '/partner-areas';
+
+  // ✅ Separate errors by type for display
+  const duplicateErrors =
+    result?.errors.filter((e) => {
+      const err = typeof e === 'string' ? normalizeError(e) : e;
+      return err.type === 'duplicate';
+    }) || [];
+  const validationErrors =
+    result?.errors.filter((e) => {
+      const err = typeof e === 'string' ? normalizeError(e) : e;
+      return err.type === 'validation';
+    }) || [];
+  const otherErrors =
+    result?.errors.filter((e) => {
+      const err = typeof e === 'string' ? normalizeError(e) : e;
+      return err.type === 'other';
+    }) || [];
+
   return (
     <Layout>
       <div className="space-y-5 max-w-4xl">
@@ -204,11 +339,91 @@ export default function BulkUploadPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Upload className="h-6 w-6 text-blue-600" />
-            Bulk Upload Customers
+            Bulk Upload
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Import multiple customers at once from a CSV file.
+            Import multiple customers or partners at once from a CSV file.
           </p>
+        </div>
+
+        {/* STEP 0 — TARGET SELECTOR */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+              0
+            </div>
+            <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
+              What would you like to import?
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setTarget('customers')}
+              className={cn(
+                'flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all',
+                target === 'customers'
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 ring-2 ring-blue-500/30'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
+              )}
+            >
+              <div
+                className={cn(
+                  'h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                  target === 'customers'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                )}
+              >
+                <Users className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 dark:text-white text-sm">
+                  User Management
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Import customers into the main user list
+                </p>
+              </div>
+              {target === 'customers' && (
+                <CheckCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setTarget('partners')}
+              className={cn(
+                'flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all',
+                target === 'partners'
+                  ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30 ring-2 ring-cyan-500/30'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-cyan-300 dark:hover:border-cyan-700'
+              )}
+            >
+              <div
+                className={cn(
+                  'h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                  target === 'partners'
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400'
+                )}
+              >
+                <Handshake className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-gray-900 dark:text-white text-sm">
+                  Partner Management
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Import partners into the partner list
+                </p>
+              </div>
+              {target === 'partners' && (
+                <CheckCircle className="h-5 w-5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* STEP 1 — AREA SELECTOR */}
@@ -234,12 +449,12 @@ export default function BulkUploadPage() {
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-blue-600" />
-                Select Area
+                Select {areaLabel}
                 <span className="text-red-500">*</span>
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Required — all customers in this file will be assigned to this
-                area
+                Required — all {targetNounPlural.toLowerCase()} in this file will be
+                assigned to this {areaLabel.toLowerCase()}
               </p>
             </div>
           </div>
@@ -247,17 +462,19 @@ export default function BulkUploadPage() {
           {areasLoading ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Loading areas...
+              Loading {areaLabel.toLowerCase()}s...
             </div>
           ) : areas.length === 0 ? (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
               <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium">No areas found</p>
+                <p className="font-medium">
+                  No {areaLabel.toLowerCase()}s found
+                </p>
                 <p className="text-xs mt-1">
-                  Please add areas on the{' '}
-                  <a href="/areas" className="underline font-medium">
-                    Areas page
+                  Please add {areaLabel.toLowerCase()}s on the{' '}
+                  <a href={areaRoute} className="underline font-medium">
+                    {areaLabel}s page
                   </a>{' '}
                   first, then come back here.
                 </p>
@@ -274,7 +491,7 @@ export default function BulkUploadPage() {
                   : 'border-blue-500 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50'
               )}
             >
-              <option value="">-- Select an Area --</option>
+              <option value="">-- Select {areaLabel} --</option>
               {areas.map((area: any) => (
                 <option key={area._id} value={area.name}>
                   {area.name}
@@ -287,23 +504,24 @@ export default function BulkUploadPage() {
             <div className="mt-3 p-3 bg-green-100 dark:bg-green-950/40 border border-green-300 dark:border-green-800 rounded-lg flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
               <p className="text-sm text-green-800 dark:text-green-300">
-                All imported customers will be assigned to:{' '}
+                All imported {targetNounPlural.toLowerCase()} will be assigned to:{' '}
                 <strong>{selectedArea}</strong>
               </p>
             </div>
           )}
         </div>
 
-        {/* REST OF PAGE — only after area chosen */}
+        {/* REST OF PAGE */}
         {!selectedArea ? (
           <div className="bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
             <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 dark:text-gray-400 font-medium">
-              Select an area above to continue
+              Select a{areaLabel === 'Area' ? 'n' : ''} {areaLabel.toLowerCase()} above to continue
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
               The CSV format instructions, sample, and upload will appear here
-              once an area is chosen.
+              once {areaLabel.toLowerCase() === 'area' ? 'an' : 'a'}{' '}
+              {areaLabel.toLowerCase()} is chosen.
             </p>
           </div>
         ) : (
@@ -363,7 +581,7 @@ export default function BulkUploadPage() {
                       <strong>Required:</strong> customerId, name, phone, address
                     </li>
                     <li>
-                      <strong>Area is chosen above</strong> — not in the CSV
+                      <strong>{areaLabel} is chosen above</strong> — not in the CSV
                     </li>
                     <li>
                       <strong>Optional:</strong> package, discount, monthlyFee,
@@ -383,8 +601,12 @@ export default function BulkUploadPage() {
                       </code>{' '}
                       (e.g. 2026-09-15). Expiry is auto-computed as +1 month.
                     </li>
-                    <li>Duplicate customerId will be skipped</li>
-                    <li>Phone numbers missing leading 0 (10 digits) get auto-fixed</li>
+                    <li>
+                      Duplicate {idLabel.toLowerCase()} will be skipped
+                    </li>
+                    <li>
+                      Phone numbers missing leading 0 (10 digits) get auto-fixed
+                    </li>
                     <li>File size limit: 10 MB</li>
                   </ul>
                 </div>
@@ -431,7 +653,6 @@ export default function BulkUploadPage() {
                 format.
               </p>
 
-              {/* Sample preview table */}
               <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 dark:bg-gray-900">
@@ -463,7 +684,7 @@ export default function BulkUploadPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-mono">
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-001</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{target === 'customers' ? 'USR' : 'PTR'}-001</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">John Doe</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0300-1234567</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">House 5, Street 3</td>
@@ -474,7 +695,7 @@ export default function BulkUploadPage() {
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{formatDate(new Date())}</td>
                     </tr>
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-002</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{target === 'customers' ? 'USR' : 'PTR'}-002</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Jane Smith</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0321-9876543</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Flat B-12, Block 1</td>
@@ -487,7 +708,7 @@ export default function BulkUploadPage() {
                       </td>
                     </tr>
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-003</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{target === 'customers' ? 'USR' : 'PTR'}-003</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Ahmed Khan</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0333-5555555</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Shop 12, Main Market</td>
@@ -503,7 +724,6 @@ export default function BulkUploadPage() {
                 </table>
               </div>
 
-              {/* Legend */}
               <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 bg-blue-100 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 rounded" />
@@ -515,7 +735,6 @@ export default function BulkUploadPage() {
                 </div>
               </div>
 
-              {/* Raw CSV view */}
               <details className="mt-4 group">
                 <summary className="cursor-pointer text-xs text-blue-600 dark:text-blue-400 hover:underline select-none flex items-center gap-1">
                   <FileText className="h-3 w-3" />
@@ -599,7 +818,12 @@ export default function BulkUploadPage() {
                 <button
                   onClick={handleUpload}
                   disabled={!file || !selectedArea || isUploading}
-                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={cn(
+                    'flex items-center gap-2 px-6 py-2 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
+                    target === 'customers'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-cyan-600 hover:bg-cyan-700'
+                  )}
                 >
                   {isUploading ? (
                     <>
@@ -609,7 +833,7 @@ export default function BulkUploadPage() {
                   ) : (
                     <>
                       <Upload className="h-4 w-4" />
-                      Upload & Import
+                      Upload & Import {targetNounPlural}
                     </>
                   )}
                 </button>
@@ -622,9 +846,10 @@ export default function BulkUploadPage() {
         {result && (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-3">
-              Import Result
+              Import Result — {targetNounPlural}
             </h2>
 
+            {/* SUMMARY */}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 text-center">
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">
@@ -652,6 +877,7 @@ export default function BulkUploadPage() {
               </div>
             </div>
 
+            {/* STATUS BANNER */}
             <div
               className={cn(
                 'p-3 rounded-lg mb-4 flex items-start gap-2 text-sm',
@@ -668,21 +894,139 @@ export default function BulkUploadPage() {
               <span>{result.message}</span>
             </div>
 
-            {result.errors.length > 0 && (
+            {/* ✅ DUPLICATE IDs PANEL — shown prominently */}
+            {result.duplicateIds.length > 0 && (
+              <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg">
+                <div className="flex items-start gap-2 mb-2">
+                  <Ban className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                      Duplicate {idLabel}s — Skipped
+                    </h3>
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                      These {result.duplicateIds.length} {idLabel.toLowerCase()}(s)
+                      already exist in your system and were not imported.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {result.duplicateIds.map((id, i) => (
+                    <span
+                      key={`${id}-${i}`}
+                      className="px-2.5 py-1 bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 rounded-md font-mono text-xs font-medium border border-amber-300 dark:border-amber-800"
+                    >
+                      {id}
+                    </span>
+                  ))}
+                </div>
+
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-3">
+                  💡 To import these, use different {idLabel.toLowerCase()}s,
+                  or delete the existing records first.
+                </p>
+              </div>
+            )}
+
+            {/* ✅ DUPLICATE ROWS (with row numbers) */}
+            {duplicateErrors.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  Duplicate Row Details
+                </h3>
+                <ul className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3 text-xs space-y-1.5 max-h-64 overflow-y-auto">
+                  {duplicateErrors.map((err, i) => {
+                    const e = typeof err === 'string' ? normalizeError(err) : err;
+                    return (
+                      <li
+                        key={i}
+                        className="text-amber-900 dark:text-amber-300 flex items-start gap-2"
+                      >
+                        <span className="text-amber-500 flex-shrink-0 mt-0.5">•</span>
+                        <div>
+                          {e.row !== undefined && (
+                            <span className="font-mono font-semibold mr-1">
+                              Row {e.row}:
+                            </span>
+                          )}
+                          {e.id && (
+                            <span className="font-mono bg-amber-200 dark:bg-amber-900/60 px-1.5 py-0.5 rounded mr-1">
+                              {e.id}
+                            </span>
+                          )}
+                          <span>{e.reason}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {/* ✅ VALIDATION ERRORS */}
+            {validationErrors.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 text-rose-500" />
+                  Validation Errors
+                </h3>
+                <ul className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg p-3 text-xs space-y-1.5 max-h-64 overflow-y-auto">
+                  {validationErrors.map((err, i) => {
+                    const e = typeof err === 'string' ? normalizeError(err) : err;
+                    return (
+                      <li
+                        key={i}
+                        className="text-rose-800 dark:text-rose-300 flex items-start gap-2"
+                      >
+                        <span className="text-rose-500 flex-shrink-0 mt-0.5">•</span>
+                        <div>
+                          {e.row !== undefined && (
+                            <span className="font-mono font-semibold mr-1">
+                              Row {e.row}:
+                            </span>
+                          )}
+                          <span>{e.reason}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+
+            {/* ✅ OTHER ERRORS */}
+            {otherErrors.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-amber-500" />
-                  Errors / Skipped Rows
+                  <AlertCircle className="h-4 w-4 text-gray-500" />
+                  Other Issues
                 </h3>
-                <ul className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg p-3 text-xs space-y-1 max-h-64 overflow-y-auto">
-                  {result.errors.map((err, i) => (
-                    <li
-                      key={i}
-                      className="text-red-800 dark:text-red-300 font-mono"
-                    >
-                      {err}
-                    </li>
-                  ))}
+                <ul className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs space-y-1.5 max-h-64 overflow-y-auto">
+                  {otherErrors.map((err, i) => {
+                    const e = typeof err === 'string' ? normalizeError(err) : err;
+                    return (
+                      <li
+                        key={i}
+                        className="text-gray-700 dark:text-gray-300 flex items-start gap-2"
+                      >
+                        <span className="text-gray-400 flex-shrink-0 mt-0.5">•</span>
+                        <div>
+                          {e.row !== undefined && (
+                            <span className="font-mono font-semibold mr-1">
+                              Row {e.row}:
+                            </span>
+                          )}
+                          {e.id && (
+                            <span className="font-mono bg-gray-200 dark:bg-gray-800 px-1.5 py-0.5 rounded mr-1">
+                              {e.id}
+                            </span>
+                          )}
+                          <span>{e.reason}</span>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
