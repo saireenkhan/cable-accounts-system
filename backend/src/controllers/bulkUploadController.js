@@ -7,7 +7,13 @@ const logger = require('../utils/logger');
 const REQUIRED_HEADERS = ['customerId', 'name', 'phone', 'address'];
 
 // ✅ Optional columns (any order after the required ones)
-const OPTIONAL_HEADERS = ['package', 'discount', 'monthlyFee', 'status'];
+const OPTIONAL_HEADERS = [
+  'package',
+  'discount',
+  'monthlyFee',
+  'status',
+  'activationDate',
+];
 
 // ✅ Default values for missing optional columns
 const DEFAULTS = {
@@ -15,6 +21,7 @@ const DEFAULTS = {
   discount: 0,
   monthlyFee: 0,
   status: 'active',
+  activationDate: null, // null → set to "now" during row processing
 };
 
 const VALID_STATUSES = ['active', 'inactive', 'suspended', 'expired'];
@@ -109,6 +116,27 @@ const parseNumber = (val, fallback = 0) => {
       .trim()
   );
   return isNaN(n) ? fallback : n;
+};
+
+// ============================================================
+// Parse a date safely. Accepts YYYY-MM-DD or any string Date() understands.
+// Returns null if invalid.
+// ============================================================
+const parseDate = (val) => {
+  if (val === undefined || val === null || String(val).trim() === '') {
+    return null;
+  }
+  const d = new Date(String(val).trim());
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// ============================================================
+// Compute expiryDate = activationDate + 1 month
+// ============================================================
+const addOneMonth = (date) => {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + 1);
+  return d;
 };
 
 // ============================================================
@@ -223,6 +251,26 @@ exports.bulkUpload = async (req, res) => {
           status = DEFAULTS.status;
         }
 
+        // ✅ activationDate: parse from CSV, fall back to "now"
+        const parsedActivation = parseDate(row.activationDate);
+        const activationDate = parsedActivation || new Date();
+
+        // ✅ Validate activationDate if column provided but value invalid
+        if (
+          row.activationDate !== undefined &&
+          String(row.activationDate).trim() !== '' &&
+          !parsedActivation
+        ) {
+          errors.push(
+            `Row ${rowNum}: invalid activationDate "${row.activationDate}" (expected YYYY-MM-DD)`
+          );
+          skipped.push(rowNum);
+          continue;
+        }
+
+        // ✅ expiryDate = activationDate + 1 month
+        const expiryDate = addOneMonth(activationDate);
+
         // Build document — area comes from request body, not CSV
         const doc = {
           customerId,
@@ -234,6 +282,8 @@ exports.bulkUpload = async (req, res) => {
           discount: Math.max(0, discount),
           monthlyFee: Math.max(0, monthlyFee),
           status,
+          activationDate,
+          expiryDate,
         };
 
         await Customer.create(doc);
@@ -288,20 +338,40 @@ exports.bulkUpload = async (req, res) => {
 
 // ============================================================
 // GET /api/customers/bulk-upload/sample
-// Returns a sample CSV template (no area column)
+// Returns a sample CSV template including activationDate
 // ============================================================
 exports.downloadSample = (req, res) => {
-  const sampleCSV = [
-    'customerId,name,phone,address,package,discount,monthlyFee,status',
-    'USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active',
-    'USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active',
-    'USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active',
-  ].join('\r\n');
+  // ✅ Format today's date as YYYY-MM-DD
+  const formatDate = (d) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
 
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dayAfter = new Date(today);
+  dayAfter.setDate(dayAfter.getDate() + 2);
+
+  const lines = [
+    'customerId,name,phone,address,package,discount,monthlyFee,status,activationDate',
+    `USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active,${formatDate(today)}`,
+    `USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active,${formatDate(tomorrow)}`,
+    `USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`,
+  ];
+
+  // ✅ Join with \r\n (Windows line endings)
+  const sampleCSV = lines.join('\r\n');
+
+  // ✅ Set proper headers
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader(
     'Content-Disposition',
     'attachment; filename="customer-import-sample.csv"'
   );
+
+  // ✅ BOM for Excel compatibility, then the CSV
   res.send('\uFEFF' + sampleCSV);
 };

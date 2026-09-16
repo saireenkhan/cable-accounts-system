@@ -1,181 +1,197 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import {
+  Users, UserPlus, Edit, Trash2, Eye, UserCheck, UserX, UserMinus,
+  X, Phone, MapPin, Package as PackageIcon, DollarSign, Hash, Home,
+  CheckCircle, XCircle, Clock, User as UserIcon, Percent, CalendarDays,
+} from 'lucide-react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
-import {
-  Users,
-  UserPlus,
-  Edit,
-  Trash2,
-  Eye,
-  UserCheck,
-  UserX,
-  UserMinus,
-  X,
-  Phone,
-  MapPin,
-  Package as PackageIcon,
-  DollarSign,
-  Hash,
-  Home,
-  CheckCircle,
-  XCircle,
-  Clock,
-  User as UserIcon,
-  Percent,
-} from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
+import {
+  areaName,
+  findPackage,
+  dateInput,
+  displayDate,
+  expiryDate,
+  effectiveStatus,
+  upcomingExpiry,
+  statusStyles,
+} from '@/app/lib/userUtils';
 
-// ✅ Helper — find a package by name (trim + case-insensitive)
-const findPackageByName = (packages: any[], name: any) => {
-  if (!name || !packages?.length) return null;
-  const key = String(name).trim().toLowerCase();
-  return packages.find(
-    (p: any) => String(p.name || '').trim().toLowerCase() === key
-  );
+const spinner = (
+  <Layout>
+    <div className="flex justify-center items-center h-64">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+    </div>
+  </Layout>
+);
+
+const colorClasses: Record<string, string> = {
+  blue: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-500 ring-blue-500/30',
+  green: 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border-green-500 ring-green-500/30',
+  gray: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/30 border-gray-500 ring-gray-500/30',
+  orange: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-500 ring-orange-500/30',
+  red: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-500 ring-red-500/30',
 };
+
+const statusLabels: Record<string, string> = {
+  active: 'Active',
+  inactive: 'Inactive',
+  'upcoming-expiry': 'Upcoming Expiries',
+  expired: 'Expired',
+  suspended: 'Suspended',
+};
+
+function ViewField({
+  icon, label, value, highlight, fullWidth,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: any;
+  highlight?: boolean;
+  fullWidth?: boolean;
+}) {
+  return (
+    <div className={cn(
+      'p-3 rounded-lg border',
+      fullWidth && 'sm:col-span-2',
+      highlight
+        ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'
+        : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+    )}>
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+        {icon}{label}
+      </div>
+      <p className={cn(
+        'font-semibold',
+        highlight
+          ? 'text-blue-700 dark:text-blue-400 text-lg'
+          : 'text-gray-900 dark:text-white'
+      )}>
+        {value}
+      </p>
+    </div>
+  );
+}
 
 function UsersPageContent() {
   const searchParams = useSearchParams();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isViewOpen, setIsViewOpen] = useState(false);
+
+  const [modal, setModal] = useState(false);
+  const [view, setView] = useState(false);
   const [viewingUser, setViewingUser] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [editingUser, setEditingUser] = useState<any>(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
-  const [editingUser, setEditingUser] = useState<any>(null);
-  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
-    const statusFromUrl = searchParams.get('status');
-    if (statusFromUrl) {
-      setStatusFilter(statusFromUrl.toLowerCase());
-    }
+    const status = searchParams.get('status');
+    if (status) setFilter(status.toLowerCase());
   }, [searchParams]);
 
-  useEffect(() => {
-    fetchUsers();
-    fetchPackages();
-    fetchAreas();
-  }, []);
-
-  const fetchUsers = async () => {
+  const fetchAreas = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      const response = await api.get('/customers?limit=10000');
-      if (response.data.success) {
-        const formattedUsers = response.data.customers.map((customer: any) => ({
-          id: customer._id,
-          customerId: customer.customerId || 'N/A',
-          name: customer.name,
-          phone: customer.phone,
-          address: customer.address || '',
-          area: customer.area || 'N/A',
-          areaId: customer.area?._id || '',
-          package: customer.package || '',
-          packagePrice: customer.packagePrice || 0,
-          discount: customer.discount || 0,
-          discountRaw: customer.discount || 0,
-          monthlyFeeRaw: customer.monthlyFee || 0,
-          monthlyFee: `Rs. ${customer.monthlyFee?.toLocaleString() || 0}`,
-          status: customer.status
-            ? customer.status.charAt(0).toUpperCase() + customer.status.slice(1)
-            : 'Active',
-          statusRaw: customer.status || 'active',
-        }));
-        setUsers(formattedUsers);
-      }
-    } catch (error) {
-      console.error('Error fetching users:', error);
+      if (!localStorage.getItem('token')) return [];
+      const { data } = await api.get('/areas');
+      const list = data.success ? data.areas || [] : [];
+      setAreas(list);
+      return list;
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
+  };
+
+  const fetchPackages = async () => {
+    try {
+      if (!localStorage.getItem('token')) return;
+      const { data } = await api.get('/packages');
+      if (data.success) setPackages(data.packages || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchUsers = async (areaList = areas) => {
+    try {
+      if (!localStorage.getItem('token')) return setLoading(false);
+
+      const { data } = await api.get('/customers?limit=10000');
+      if (!data.success) return;
+
+      setUsers((data.customers || []).map((c: any) => {
+        const activation = dateInput(c.activationDate);
+        const expiry = c.expiryDate
+          ? dateInput(c.expiryDate)
+          : expiryDate(activation);
+
+        const user = {
+          id: c._id,
+          customerId: c.customerId || 'N/A',
+          name: c.name || '',
+          phone: c.phone || '',
+          address: c.address || '',
+          area: areaName(c.area, areaList),
+          package: c.package || '',
+          packagePrice: Number(c.packagePrice || 0),
+          discount: Number(c.discount || 0),
+          discountRaw: Number(c.discount || 0),
+          monthlyFeeRaw: Number(c.monthlyFee || 0),
+          monthlyFee: `Rs. ${Number(c.monthlyFee || 0).toLocaleString()}`,
+          activationDate: activation,
+          expiryDate: expiry,
+          statusRaw: c.status || 'active',
+        };
+
+        return { ...user, status: effectiveStatus(user) };
+      }));
+    } catch (e) {
+      console.error('Error fetching users:', e);
       toast.error('Failed to load users');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchPackages = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const response = await api.get('/packages');
-      if (response.data.success) {
-        setPackages(response.data.packages);
-      }
-    } catch (error) {
-      console.error('Error fetching packages:', error);
-    }
-  };
+  useEffect(() => {
+    (async () => {
+      const list = await fetchAreas();
+      await fetchPackages();
+      await fetchUsers(list);
+    })();
+  }, []);
 
-  const fetchAreas = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-      const response = await api.get('/areas');
-      if (response.data.success) {
-        setAreas(response.data.areas);
-      }
-    } catch (error) {
-      console.error('Error fetching areas:', error);
-    }
-  };
-
-  const totalUsers = users.length;
-  const activeUsers = users.filter((u) => u.status === 'Active').length;
-  const inactiveUsers = users.filter((u) => u.status === 'Inactive').length;
-  const expiredUsers = users.filter((u) => u.status === 'Expired').length;
+  const stats = [
+    ['all', 'TOTAL USERS', users.length, Users, 'blue'],
+    ['active', 'ACTIVE', users.filter(u => effectiveStatus(u) === 'Active').length, UserCheck, 'green'],
+    ['inactive', 'INACTIVE', users.filter(u => effectiveStatus(u) === 'Inactive').length, UserX, 'gray'],
+    ['upcoming-expiry', 'UPCOMING EXPIRIES', users.filter(upcomingExpiry).length, Clock, 'orange', 'Within 7 days'],
+    ['expired', 'EXPIRED', users.filter(u => effectiveStatus(u) === 'Expired').length, UserMinus, 'red'],
+  ] as const;
 
   const userFields: Field[] = [
-    {
-      name: 'customerId',
-      label: 'User ID',
-      type: 'text',
-      required: true,
-      readOnly: !!editingUser,
-    },
-    {
-      name: 'name',
-      label: 'Full Name',
-      type: 'text',
-      required: true,
-      placeholder: 'Enter full name',
-      readOnly: !!editingUser,
-    },
-    {
-      name: 'phone',
-      label: 'Phone',
-      type: 'text',
-      required: true,
-      placeholder: '0300-1234567',
-    },
-    {
-      name: 'address',
-      label: 'Address',
-      type: 'text',
-      required: true,
-      placeholder: 'House #, Street',
-    },
+    { name: 'customerId', label: 'User ID', type: 'text', required: true, readOnly: !!editingUser },
+    { name: 'name', label: 'Full Name', type: 'text', required: true, placeholder: 'Enter full name', readOnly: !!editingUser },
+    { name: 'phone', label: 'Phone', type: 'text', required: true, placeholder: '0300-1234567' },
+    { name: 'address', label: 'Address', type: 'text', required: true, placeholder: 'House #, Street' },
     {
       name: 'area',
       label: 'Area',
       type: 'select',
       required: true,
       searchable: true,
-      options: areas.map((area: any) => ({
-        label: area.name,
-        value: area.name,
-      })),
+      options: areas.map(a => ({ label: a.name, value: a.name })),
     },
     {
       name: 'package',
@@ -183,10 +199,25 @@ function UsersPageContent() {
       type: 'select',
       required: true,
       searchable: true,
-      options: packages.map((pkg: any) => ({
-        label: `${pkg.name} - Rs. ${pkg.sellingPrice?.toLocaleString() || 0}`,
-        value: pkg.name,
+      options: packages.map(p => ({
+        label: `${p.name} - Rs. ${Number(p.sellingPrice || 0).toLocaleString()}`,
+        value: p.name,
       })),
+    },
+    {
+      name: 'activationDate',
+      label: 'Activation Date',
+      type: 'date',
+      required: true,
+      placeholder: 'Select activation date',
+    },
+    {
+      name: 'expiryDate',
+      label: 'Expiry Date',
+      type: 'date',
+      readOnly: true,
+      dependsOn: 'activationDate',
+      updateOnChange: expiryDate,
     },
     {
       name: 'discount',
@@ -195,14 +226,8 @@ function UsersPageContent() {
       placeholder: '0',
       defaultValue: '0',
       min: 0,
-      max: (formData: any, context: any) => {
-        const selectedPkg = findPackageByName(
-          context?.packages || [],
-          formData?.package
-        );
-        return parseFloat(String(selectedPkg?.sellingPrice)) || 0;
-      },
-      // ✅ NO dependsOn — user-input only
+      max: (data, context) =>
+        Number(findPackage(context?.packages || [], data?.package)?.sellingPrice || 0),
     },
     {
       name: 'monthlyFee',
@@ -211,12 +236,11 @@ function UsersPageContent() {
       required: true,
       placeholder: 'Auto-filled',
       dependsOn: 'package',
-      updateOnChange: (value: any, formData: any, context: any) => {
-        const packages = context?.packages || [];
-        const selectedPkg = findPackageByName(packages, formData?.package);
-        const packagePrice = parseFloat(String(selectedPkg?.sellingPrice)) || 0;
-        const discount = parseFloat(String(formData?.discount || 0)) || 0;
-        return Math.max(0, packagePrice - discount);
+      updateOnChange: (_, data, context) => {
+        const price = Number(
+          findPackage(context?.packages || [], data?.package)?.sellingPrice || 0
+        );
+        return Math.max(0, price - Number(data?.discount || 0));
       },
     },
     {
@@ -234,44 +258,44 @@ function UsersPageContent() {
   ];
 
   const transformUserData = (data: any) => {
-    const selectedPackage = findPackageByName(packages, data.package);
-    const packagePrice = parseFloat(String(selectedPackage?.sellingPrice)) || 0;
-    const discount = parseFloat(String(data.discount || 0)) || 0;
+    const pkg = findPackage(packages, data.package);
+    const price = Number(pkg?.sellingPrice || 0);
+    const discount = Number(data.discount || 0);
 
-    if (packagePrice > 0 && discount > packagePrice) {
+    if (discount < 0) throw new Error('Discount cannot be negative.');
+    if (price > 0 && discount > price) {
       throw new Error(
-        `Discount (Rs. ${discount.toLocaleString()}) cannot exceed the package price (Rs. ${packagePrice.toLocaleString()}).`
+        `Discount (Rs. ${discount.toLocaleString()}) cannot exceed the package price (Rs. ${price.toLocaleString()}).`
       );
     }
 
-    if (discount < 0) {
-      throw new Error('Discount cannot be negative.');
-    }
-
-    const monthlyFee = Math.max(0, packagePrice - discount);
+    const activation = dateInput(data.activationDate);
+    if (!activation) throw new Error('Activation Date is required.');
 
     return {
       customerId: data.customerId,
       name: data.name,
       phone: data.phone,
       address: data.address,
-      area: data.area,
+      area: areaName(data.area, areas),
       package: data.package,
-      discount: discount,
-      monthlyFee: monthlyFee,
+      activationDate: activation,
+      expiryDate: expiryDate(activation),
+      discount,
+      monthlyFee: Math.max(0, price - discount),
       status: data.status || 'active',
     };
   };
 
-  const handleUserAdded = (data: any) => {
+  const handleSuccess = (data: any) => {
     toast.success(
       editingUser
         ? `${data.name} updated successfully!`
         : `${data.name} added successfully!`
     );
     setEditingUser(null);
-    setIsModalOpen(false);
-    fetchUsers();
+    setModal(false);
+    fetchUsers(areas);
   };
 
   const handleDelete = async (id: string, name: string) => {
@@ -279,36 +303,31 @@ function UsersPageContent() {
 
     try {
       await api.delete(`/customers/${id}`);
-      setUsers(users.filter((u) => u.id !== id));
+      setUsers(prev => prev.filter(u => u.id !== id));
       toast.success(`${name} deleted`);
       if (editingUser?.id === id) setEditingUser(null);
-    } catch (error) {
-      console.error('Delete error:', error);
+    } catch (e) {
+      console.error(e);
       toast.error('Failed to delete user');
     }
   };
 
-  const handleEdit = (user: any) => {
-    setEditingUser(user);
-    setIsModalOpen(true);
-  };
-
-  const handleView = (user: any) => {
-    setViewingUser(user);
-    setIsViewOpen(true);
-  };
-
-  const filteredUsers = users.filter((user) => {
-    const query = searchQuery.toLowerCase();
+  const filteredUsers = users.filter(u => {
+    const status = effectiveStatus(u);
+    const q = search.toLowerCase();
 
     const matchesStatus =
-      statusFilter === 'all' ||
-      user.status?.toLowerCase() === statusFilter.toLowerCase();
+      filter === 'all' ||
+      (filter === 'active' && status === 'Active') ||
+      (filter === 'inactive' && status === 'Inactive') ||
+      (filter === 'expired' && status === 'Expired') ||
+      (filter === 'suspended' && status === 'Suspended') ||
+      (filter === 'upcoming-expiry' && upcomingExpiry(u));
 
     const matchesSearch =
-      user.name?.toLowerCase().includes(query) ||
-      user.customerId?.toLowerCase().includes(query) ||
-      user.phone?.includes(query);
+      u.name?.toLowerCase().includes(q) ||
+      u.customerId?.toLowerCase().includes(q) ||
+      u.phone?.includes(q);
 
     return matchesStatus && matchesSearch;
   });
@@ -319,20 +338,23 @@ function UsersPageContent() {
     { key: 'phone', header: 'Phone' },
     { key: 'area', header: 'Area' },
     {
+      key: 'activationDate',
+      header: 'Activation Date',
+      render: (u: any) => (
+        <span className="inline-flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
+          <CalendarDays className="h-3.5 w-3.5 text-blue-500" />
+          {displayDate(u.activationDate)}
+        </span>
+      ),
+    },
+    {
       key: 'discount',
       header: 'Discount',
-      render: (item: any) => (
-        <span
-          className={cn(
-            'font-medium',
-            item.discount > 0
-              ? 'text-orange-600 dark:text-orange-400'
-              : 'text-gray-500 dark:text-gray-400'
-          )}
-        >
-          {item.discount > 0
-            ? `Rs. ${item.discount.toLocaleString()}`
-            : 'Rs. 0'}
+      render: (u: any) => (
+        <span className={u.discount > 0
+          ? 'font-medium text-orange-600 dark:text-orange-400'
+          : 'text-gray-500'}>
+          Rs. {Number(u.discount || 0).toLocaleString()}
         </span>
       ),
     },
@@ -340,40 +362,27 @@ function UsersPageContent() {
     {
       key: 'status',
       header: 'Status',
-      render: (item: any) => (
-        <span
-          className={cn(
+      render: (u: any) => {
+        const status = effectiveStatus(u);
+        return (
+          <span className={cn(
             'px-2 py-1 rounded-full text-xs font-medium',
-            item.status === 'Active' &&
-              'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-            item.status === 'Inactive' &&
-              'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
-            item.status === 'Expired' &&
-              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-            item.status === 'Suspended' &&
-              'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-          )}
-        >
-          {item.status}
-        </span>
-      ),
+            statusStyles[status]
+          )}>
+            {status}
+          </span>
+        );
+      },
     },
   ];
 
-  if (loading) {
-    return (
-      <Layout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        </div>
-      </Layout>
-    );
-  }
+  if (loading) return spinner;
 
   return (
     <Layout>
       <div className="space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Users className="h-6 w-6 text-blue-600" />
@@ -383,162 +392,86 @@ function UsersPageContent() {
               Manage cable connections and customer details.
             </p>
           </div>
+
           <button
             onClick={() => {
               setEditingUser(null);
-              setIsModalOpen(true);
+              setModal(true);
             }}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
           >
             <UserPlus className="h-4 w-4" />
             Add User
           </button>
-        </div>
+        </header>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={cn(
-              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
-              statusFilter === 'all'
-                ? 'border-blue-500 dark:border-blue-500 ring-2 ring-blue-500/30'
-                : 'border-gray-200 dark:border-gray-700'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  TOTAL USERS
-                </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {totalUsers}
-                </p>
-                {statusFilter === 'all' && (
-                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                    Showing all
-                  </p>
-                )}
-              </div>
-              <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-            </div>
-          </button>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          {stats.map(([key, label, value, Icon, color, sub]) => {
+            const active = filter === key;
+            const c = colorClasses[color];
+            const parts = c.split(' ');
 
-          <button
-            onClick={() => setStatusFilter('active')}
-            className={cn(
-              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
-              statusFilter === 'active'
-                ? 'border-green-500 dark:border-green-500 ring-2 ring-green-500/30'
-                : 'border-gray-200 dark:border-gray-700'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  ACTIVE
-                </p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                  {activeUsers}
-                </p>
-                {statusFilter === 'active' && (
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    Filtered
-                  </p>
+            return (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={cn(
+                  'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
+                  active
+                    ? `${parts.slice(-3).join(' ')} ring-2`
+                    : 'border-gray-200 dark:border-gray-700'
                 )}
-              </div>
-              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <UserCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
-          </button>
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+                    <p className={cn('text-2xl font-bold mt-1', parts[0])}>{value}</p>
+                    <p className="text-xs mt-1 text-gray-500 dark:text-gray-400">
+                      {sub || (active ? 'Filtered' : '')}
+                    </p>
+                  </div>
 
-          <button
-            onClick={() => setStatusFilter('inactive')}
-            className={cn(
-              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
-              statusFilter === 'inactive'
-                ? 'border-gray-500 dark:border-gray-500 ring-2 ring-gray-500/30'
-                : 'border-gray-200 dark:border-gray-700'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  INACTIVE
-                </p>
-                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400 mt-1">
-                  {inactiveUsers}
-                </p>
-                {statusFilter === 'inactive' && (
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                    Filtered
-                  </p>
-                )}
-              </div>
-              <div className="h-12 w-12 bg-gray-50 dark:bg-gray-900/30 rounded-full flex items-center justify-center">
-                <UserX className="h-6 w-6 text-gray-600 dark:text-gray-400" />
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setStatusFilter('expired')}
-            className={cn(
-              'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
-              statusFilter === 'expired'
-                ? 'border-red-500 dark:border-red-500 ring-2 ring-red-500/30'
-                : 'border-gray-200 dark:border-gray-700'
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  EXPIRED
-                </p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
-                  {expiredUsers}
-                </p>
-                {statusFilter === 'expired' && (
-                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                    Filtered
-                  </p>
-                )}
-              </div>
-              <div className="h-12 w-12 bg-red-50 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-                <UserMinus className="h-6 w-6 text-red-600 dark:text-red-400" />
-              </div>
-            </div>
-          </button>
+                  <div className={cn(
+                    'h-12 w-12 rounded-full flex items-center justify-center',
+                    parts.slice(1, 3).join(' ')
+                  )}>
+                    <Icon className={cn('h-6 w-6', parts[0])} />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         <SearchBar
           placeholder="Search by name, user ID or phone..."
-          value={searchQuery}
-          onChange={setSearchQuery}
+          value={search}
+          onChange={setSearch}
         />
 
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+        <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
               <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
                 User List
               </h2>
-              {statusFilter !== 'all' && (
+
+              {filter !== 'all' && (
                 <button
-                  onClick={() => setStatusFilter('all')}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                  onClick={() => setFilter('all')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
                 >
-                  {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                  {statusLabels[filter] || 'All'}
                   <X className="h-3 w-3" />
                 </button>
               )}
             </div>
+
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {filteredUsers.length} users found
             </span>
           </div>
+
           <div className="p-4">
             <DataTable
               data={filteredUsers}
@@ -549,12 +482,14 @@ function UsersPageContent() {
                 { value: 'delete', icon: <Trash2 className="h-4 w-4" /> },
               ]}
               onAction={(item, action) => {
-                if (action === 'delete') {
-                  handleDelete(item.id, item.name);
-                } else if (action === 'edit') {
-                  handleEdit(item);
-                } else if (action === 'view') {
-                  handleView(item);
+                if (action === 'delete') handleDelete(item.id, item.name);
+                if (action === 'edit') {
+                  setEditingUser(item);
+                  setModal(true);
+                }
+                if (action === 'view') {
+                  setViewingUser(item);
+                  setView(true);
                 }
               }}
               accordionTitle="name"
@@ -562,54 +497,50 @@ function UsersPageContent() {
               emptyMessage="No users found matching your search"
             />
           </div>
-        </div>
+        </section>
 
         <AddUserModal
-          isOpen={isModalOpen}
+          isOpen={modal}
           onClose={() => {
-            setIsModalOpen(false);
+            setModal(false);
             setEditingUser(null);
           }}
-          onSuccess={handleUserAdded}
+          onSuccess={handleSuccess}
           title={editingUser ? 'Edit User' : 'Add New User'}
-          subtitle={
-            editingUser
-              ? 'Update the customer details below'
-              : 'Create a new cable connection for a customer'
-          }
+          subtitle={editingUser
+            ? 'Update the customer details below'
+            : 'Create a new cable connection for a customer'}
           fields={userFields}
           submitLabel={editingUser ? 'Update User' : 'Add User'}
           color="blue"
           endpoint={editingUser ? `/customers/${editingUser.id}` : '/customers'}
           method={editingUser ? 'PUT' : 'POST'}
-          initialData={
-            editingUser
-              ? {
-                  customerId: editingUser.customerId,
-                  name: editingUser.name,
-                  phone: editingUser.phone,
-                  address: editingUser.address,
-                  area: editingUser.area,
-                  package: editingUser.package,
-                  discount: editingUser.discountRaw || 0,
-                  monthlyFee: editingUser.monthlyFeeRaw,
-                  status: editingUser.statusRaw,
-                }
-              : undefined
-          }
+          initialData={editingUser ? {
+            customerId: editingUser.customerId,
+            name: editingUser.name,
+            phone: editingUser.phone,
+            address: editingUser.address,
+            area: areaName(editingUser.area, areas),
+            package: editingUser.package,
+            activationDate: dateInput(editingUser.activationDate),
+            expiryDate: dateInput(editingUser.expiryDate),
+            discount: editingUser.discountRaw || 0,
+            monthlyFee: editingUser.monthlyFeeRaw,
+            status: editingUser.statusRaw,
+          } : undefined}
           transformData={transformUserData}
           context={{ packages, areas }}
         />
 
-        {isViewOpen && viewingUser && (
+        {view && viewingUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
               className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={() => setIsViewOpen(false)}
+              onClick={() => setView(false)}
             />
 
             <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center">
                     <UserIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -623,84 +554,60 @@ function UsersPageContent() {
                     </p>
                   </div>
                 </div>
+
                 <button
-                  onClick={() => setIsViewOpen(false)}
-                  className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700 transition-colors"
+                  onClick={() => setView(false)}
+                  className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700"
                 >
-                  <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                  <X className="h-5 w-5 text-gray-500" />
                 </button>
               </div>
 
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)] space-y-4">
-                <div className="flex justify-center">
-                  <span
-                    className={cn(
-                      'px-4 py-1.5 rounded-full text-sm font-semibold inline-flex items-center gap-1.5',
-                      viewingUser.status === 'Active' &&
-                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                      viewingUser.status === 'Inactive' &&
-                        'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
-                      viewingUser.status === 'Expired' &&
-                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                      viewingUser.status === 'Suspended' &&
-                        'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                    )}
-                  >
-                    {viewingUser.status === 'Active' && (
-                      <CheckCircle className="h-4 w-4" />
-                    )}
-                    {viewingUser.status === 'Inactive' && (
-                      <XCircle className="h-4 w-4" />
-                    )}
-                    {viewingUser.status === 'Expired' && (
-                      <Clock className="h-4 w-4" />
-                    )}
-                    {viewingUser.status === 'Suspended' && (
-                      <XCircle className="h-4 w-4" />
-                    )}
-                    {viewingUser.status}
-                  </span>
-                </div>
+                {(() => {
+                  const status = effectiveStatus(viewingUser);
+                  const StatusIcon =
+                    status === 'Active'
+                      ? CheckCircle
+                      : status === 'Expired'
+                        ? Clock
+                        : XCircle;
+
+                  return (
+                    <div className="flex justify-center">
+                      <span className={cn(
+                        'px-4 py-1.5 rounded-full text-sm font-semibold inline-flex items-center gap-1.5',
+                        statusStyles[status]
+                      )}>
+                        <StatusIcon className="h-4 w-4" />
+                        {status}
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <ViewField icon={<Hash className="h-4 w-4" />} label="User ID" value={viewingUser.customerId} />
+                  <ViewField icon={<UserIcon className="h-4 w-4" />} label="Full Name" value={viewingUser.name} />
+                  <ViewField icon={<Phone className="h-4 w-4" />} label="Phone" value={viewingUser.phone} />
+                  <ViewField icon={<MapPin className="h-4 w-4" />} label="Area" value={areaName(viewingUser.area, areas)} />
+                  <ViewField icon={<PackageIcon className="h-4 w-4" />} label="Package" value={viewingUser.package || 'No package assigned'} />
+                  <ViewField icon={<CalendarDays className="h-4 w-4" />} label="Activation Date" value={displayDate(viewingUser.activationDate)} />
                   <ViewField
-                    icon={<Hash className="h-4 w-4" />}
-                    label="User ID"
-                    value={viewingUser.customerId}
-                  />
-                  <ViewField
-                    icon={<UserIcon className="h-4 w-4" />}
-                    label="Full Name"
-                    value={viewingUser.name}
-                  />
-                  <ViewField
-                    icon={<Phone className="h-4 w-4" />}
-                    label="Phone"
-                    value={viewingUser.phone}
-                  />
-                  <ViewField
-                    icon={<MapPin className="h-4 w-4" />}
-                    label="Area"
-                    value={viewingUser.area}
-                  />
-                  <ViewField
-                    icon={<PackageIcon className="h-4 w-4" />}
-                    label="Package"
-                    value={viewingUser.package || 'No package assigned'}
+                    icon={<CalendarDays className="h-4 w-4" />}
+                    label="Expiry Date"
+                    value={displayDate(viewingUser.expiryDate)}
+                    highlight={effectiveStatus(viewingUser) === 'Expired'}
                   />
                   <ViewField
                     icon={<Percent className="h-4 w-4" />}
                     label="Discount"
-                    value={
-                      viewingUser.discount > 0
-                        ? `Rs. ${viewingUser.discount.toLocaleString()}`
-                        : 'Rs. 0'
-                    }
+                    value={`Rs. ${Number(viewingUser.discount || 0).toLocaleString()}`}
                   />
                   <ViewField
                     icon={<DollarSign className="h-4 w-4" />}
                     label="Monthly Fee"
-                    value={`Rs. ${viewingUser.monthlyFeeRaw.toLocaleString()}`}
+                    value={`Rs. ${Number(viewingUser.monthlyFeeRaw || 0).toLocaleString()}`}
                     highlight
                   />
                   <ViewField
@@ -714,17 +621,19 @@ function UsersPageContent() {
 
               <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
                 <button
-                  onClick={() => setIsViewOpen(false)}
-                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+                  onClick={() => setView(false)}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-sm font-medium"
                 >
                   Close
                 </button>
+
                 <button
                   onClick={() => {
-                    setIsViewOpen(false);
-                    handleEdit(viewingUser);
+                    setView(false);
+                    setEditingUser(viewingUser);
+                    setModal(true);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
                 >
                   <Edit className="h-4 w-4" />
                   Edit
@@ -738,59 +647,6 @@ function UsersPageContent() {
   );
 }
 
-function ViewField({
-  icon,
-  label,
-  value,
-  highlight = false,
-  fullWidth = false,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: any;
-  highlight?: boolean;
-  fullWidth?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        'p-3 rounded-lg border',
-        fullWidth && 'sm:col-span-2',
-        highlight
-          ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'
-          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
-      )}
-    >
-      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
-        {icon}
-        {label}
-      </div>
-      <p
-        className={cn(
-          'font-semibold',
-          highlight
-            ? 'text-blue-700 dark:text-blue-400 text-lg'
-            : 'text-gray-900 dark:text-white'
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
 export default function UsersPage() {
-  return (
-    <Suspense
-      fallback={
-        <Layout>
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          </div>
-        </Layout>
-      }
-    >
-      <UsersPageContent />
-    </Suspense>
-  );
+  return <Suspense fallback={spinner}><UsersPageContent /></Suspense>;
 }

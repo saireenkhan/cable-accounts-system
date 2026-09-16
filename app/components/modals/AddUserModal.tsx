@@ -22,6 +22,7 @@ export interface Field {
   defaultValue?: any;
   min?: number;
   max?: number | ((formData: any, context?: any) => number);
+  maxLength?: number;
   step?: number;
   editable?: boolean;
 }
@@ -1162,7 +1163,7 @@ export function AddUserModal({
                       max={
                         fieldMax
                       }
-
+                   maxLength={field.maxLength}
                       step={
                         field.step
                       }

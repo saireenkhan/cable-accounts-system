@@ -28,14 +28,36 @@ interface UploadResult {
   message: string;
 }
 
-// ✅ Sample CSV — no `area` column (area is chosen on the page)
-const SAMPLE_CSV = `customerId,name,phone,address,package,discount,monthlyFee,status
-USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active
-USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active
-USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active`;
+// ✅ Format a date to YYYY-MM-DD
+const formatDate = (d: Date) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+// ✅ Generate sample CSV with today's dates
+const getSampleCSV = () => {
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dayAfter = new Date(today);
+  dayAfter.setDate(dayAfter.getDate() + 2);
+
+  return `customerId,name,phone,address,package,discount,monthlyFee,status,activationDate
+USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active,${formatDate(today)}
+USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active,${formatDate(tomorrow)}
+USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`;
+};
 
 const REQUIRED_HEADERS = ['customerId', 'name', 'phone', 'address'];
-const OPTIONAL_HEADERS = ['package', 'discount', 'monthlyFee', 'status'];
+const OPTIONAL_HEADERS = [
+  'package',
+  'discount',
+  'monthlyFee',
+  'status',
+  'activationDate',
+];
 
 export default function BulkUploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -47,6 +69,9 @@ export default function BulkUploadPage() {
   const [result, setResult] = useState<UploadResult | null>(null);
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ✅ Compute sample on every render
+  const SAMPLE_CSV = getSampleCSV();
 
   // ✅ Fetch areas on mount
   useEffect(() => {
@@ -66,7 +91,7 @@ export default function BulkUploadPage() {
     fetchAreas();
   }, []);
 
-  // ✅ Download sample via API
+  // ✅ Download sample via API (keeps backend as the source of truth)
   const handleDownloadSample = () => {
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
     window.open(`${API_BASE}/customers/bulk-upload/sample`, '_blank');
@@ -175,9 +200,7 @@ export default function BulkUploadPage() {
   return (
     <Layout>
       <div className="space-y-5 max-w-4xl">
-        {/* ============================================ */}
         {/* PAGE HEADER */}
-        {/* ============================================ */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Upload className="h-6 w-6 text-blue-600" />
@@ -188,9 +211,7 @@ export default function BulkUploadPage() {
           </p>
         </div>
 
-        {/* ============================================ */}
-        {/* STEP 1 — AREA SELECTOR (required first) */}
-        {/* ============================================ */}
+        {/* STEP 1 — AREA SELECTOR */}
         <div
           className={cn(
             'rounded-xl shadow-sm border p-5 transition-all',
@@ -273,9 +294,7 @@ export default function BulkUploadPage() {
           )}
         </div>
 
-        {/* ============================================ */}
-        {/* REST OF PAGE — only shown after area selected */}
-        {/* ============================================ */}
+        {/* REST OF PAGE — only after area chosen */}
         {!selectedArea ? (
           <div className="bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
             <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
@@ -289,9 +308,7 @@ export default function BulkUploadPage() {
           </div>
         ) : (
           <>
-            {/* ============================================ */}
             {/* STEP 2 — INSTRUCTIONS */}
-            {/* ============================================ */}
             <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -350,28 +367,31 @@ export default function BulkUploadPage() {
                     </li>
                     <li>
                       <strong>Optional:</strong> package, discount, monthlyFee,
-                      status
+                      status, activationDate
                     </li>
                     <li>
                       Missing optional columns default to:{' '}
                       <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded">
                         package=&quot;&quot;, discount=0, monthlyFee=0,
-                        status=active
+                        status=active, activationDate=today
                       </code>
                     </li>
-                    <li>Duplicate customerId will be skipped</li>
                     <li>
-                      Phone numbers missing leading 0 (10 digits) get auto-fixed
+                      <strong>activationDate</strong> format:{' '}
+                      <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded">
+                        YYYY-MM-DD
+                      </code>{' '}
+                      (e.g. 2026-09-15). Expiry is auto-computed as +1 month.
                     </li>
+                    <li>Duplicate customerId will be skipped</li>
+                    <li>Phone numbers missing leading 0 (10 digits) get auto-fixed</li>
                     <li>File size limit: 10 MB</li>
                   </ul>
                 </div>
               </div>
             </div>
 
-            {/* ============================================ */}
             {/* SAMPLE CSV PREVIEW */}
-            {/* ============================================ */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
@@ -425,6 +445,7 @@ export default function BulkUploadPage() {
                         'discount',
                         'monthlyFee',
                         'status',
+                        'activationDate',
                       ].map((h) => (
                         <th
                           key={h}
@@ -442,81 +463,40 @@ export default function BulkUploadPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-mono">
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-001</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">John Doe</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0300-1234567</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">House 5, Street 3</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">BASIC</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">1500</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">active</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{formatDate(new Date())}</td>
+                    </tr>
+                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-002</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Jane Smith</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0321-9876543</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Flat B-12, Block 1</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">PREMIUM</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">500</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">3500</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">active</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        USR-001
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        John Doe
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        0300-1234567
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        House 5, Street 3
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        BASIC
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        0
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        1500
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        active
+                        {formatDate(new Date(Date.now() + 86400000))}
                       </td>
                     </tr>
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">USR-003</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Ahmed Khan</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0333-5555555</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Shop 12, Main Market</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">STANDARD</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">2500</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">active</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        USR-002
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        Jane Smith
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        0321-9876543
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        Flat B-12, Block 1
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        PREMIUM
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        500
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        3500
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        active
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        USR-003
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        Ahmed Khan
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        0333-5555555
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        Shop 12, Main Market
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        STANDARD
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        0
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        2500
-                      </td>
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
-                        active
+                        {formatDate(new Date(Date.now() + 2 * 86400000))}
                       </td>
                     </tr>
                   </tbody>
@@ -547,9 +527,7 @@ export default function BulkUploadPage() {
               </details>
             </div>
 
-            {/* ============================================ */}
             {/* STEP 3 — UPLOAD ZONE */}
-            {/* ============================================ */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
@@ -640,16 +618,13 @@ export default function BulkUploadPage() {
           </>
         )}
 
-        {/* ============================================ */}
         {/* RESULT */}
-        {/* ============================================ */}
         {result && (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm mb-3">
               Import Result
             </h2>
 
-            {/* Summary */}
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 text-center">
                 <p className="text-xs text-gray-500 dark:text-gray-400 uppercase">
@@ -677,7 +652,6 @@ export default function BulkUploadPage() {
               </div>
             </div>
 
-            {/* Message */}
             <div
               className={cn(
                 'p-3 rounded-lg mb-4 flex items-start gap-2 text-sm',
@@ -694,7 +668,6 @@ export default function BulkUploadPage() {
               <span>{result.message}</span>
             </div>
 
-            {/* Errors */}
             {result.errors.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
