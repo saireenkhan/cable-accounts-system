@@ -32,6 +32,15 @@ import {
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
+// ✅ Helper — find a package by name (trim + case-insensitive)
+const findPackageByName = (packages: any[], name: any) => {
+  if (!name || !packages?.length) return null;
+  const key = String(name).trim().toLowerCase();
+  return packages.find(
+    (p: any) => String(p.name || '').trim().toLowerCase() === key
+  );
+};
+
 function UsersPageContent() {
   const searchParams = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -45,7 +54,6 @@ function UsersPageContent() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // ✅ Read status filter from URL on mount
   useEffect(() => {
     const statusFromUrl = searchParams.get('status');
     if (statusFromUrl) {
@@ -74,7 +82,7 @@ function UsersPageContent() {
           name: customer.name,
           phone: customer.phone,
           address: customer.address || '',
-          area: customer.area|| 'N/A',
+          area: customer.area || 'N/A',
           areaId: customer.area?._id || '',
           package: customer.package || '',
           packagePrice: customer.packagePrice || 0,
@@ -134,7 +142,7 @@ function UsersPageContent() {
       label: 'User ID',
       type: 'text',
       required: true,
-       readOnly: !!editingUser,
+      readOnly: !!editingUser,
     },
     {
       name: 'name',
@@ -142,7 +150,7 @@ function UsersPageContent() {
       type: 'text',
       required: true,
       placeholder: 'Enter full name',
-       readOnly: !!editingUser,
+      readOnly: !!editingUser,
     },
     {
       name: 'phone',
@@ -186,6 +194,15 @@ function UsersPageContent() {
       type: 'number',
       placeholder: '0',
       defaultValue: '0',
+      min: 0,
+      max: (formData: any, context: any) => {
+        const selectedPkg = findPackageByName(
+          context?.packages || [],
+          formData?.package
+        );
+        return parseFloat(String(selectedPkg?.sellingPrice)) || 0;
+      },
+      // ✅ NO dependsOn — user-input only
     },
     {
       name: 'monthlyFee',
@@ -196,8 +213,8 @@ function UsersPageContent() {
       dependsOn: 'package',
       updateOnChange: (value: any, formData: any, context: any) => {
         const packages = context?.packages || [];
-        const selectedPkg = packages.find((p: any) => p.name === value);
-        const packagePrice = selectedPkg?.sellingPrice || 0;
+        const selectedPkg = findPackageByName(packages, formData?.package);
+        const packagePrice = parseFloat(String(selectedPkg?.sellingPrice)) || 0;
         const discount = parseFloat(String(formData?.discount || 0)) || 0;
         return Math.max(0, packagePrice - discount);
       },
@@ -217,9 +234,20 @@ function UsersPageContent() {
   ];
 
   const transformUserData = (data: any) => {
-    const selectedPackage = packages.find((pkg: any) => pkg.name === data.package);
-    const packagePrice = selectedPackage?.sellingPrice || 0;
+    const selectedPackage = findPackageByName(packages, data.package);
+    const packagePrice = parseFloat(String(selectedPackage?.sellingPrice)) || 0;
     const discount = parseFloat(String(data.discount || 0)) || 0;
+
+    if (packagePrice > 0 && discount > packagePrice) {
+      throw new Error(
+        `Discount (Rs. ${discount.toLocaleString()}) cannot exceed the package price (Rs. ${packagePrice.toLocaleString()}).`
+      );
+    }
+
+    if (discount < 0) {
+      throw new Error('Discount cannot be negative.');
+    }
+
     const monthlyFee = Math.max(0, packagePrice - discount);
 
     return {
@@ -367,9 +395,7 @@ function UsersPageContent() {
           </button>
         </div>
 
-        {/* ✅ Clickable stat cards — filter the table by status */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total Users */}
           <button
             onClick={() => setStatusFilter('all')}
             className={cn(
@@ -399,7 +425,6 @@ function UsersPageContent() {
             </div>
           </button>
 
-          {/* Active */}
           <button
             onClick={() => setStatusFilter('active')}
             className={cn(
@@ -429,7 +454,6 @@ function UsersPageContent() {
             </div>
           </button>
 
-          {/* Inactive */}
           <button
             onClick={() => setStatusFilter('inactive')}
             className={cn(
@@ -459,7 +483,6 @@ function UsersPageContent() {
             </div>
           </button>
 
-          {/* Expired */}
           <button
             onClick={() => setStatusFilter('expired')}
             className={cn(
@@ -521,18 +544,9 @@ function UsersPageContent() {
               data={filteredUsers}
               columns={columns}
               actions={[
-                {
-                  value: 'edit',
-                  icon: <Edit className="h-4 w-4" />,
-                },
-                {
-                  value: 'view',
-                  icon: <Eye className="h-4 w-4" />,
-                },
-                {
-                  value: 'delete',
-                  icon: <Trash2 className="h-4 w-4" />,
-                },
+                { value: 'edit', icon: <Edit className="h-4 w-4" /> },
+                { value: 'view', icon: <Eye className="h-4 w-4" /> },
+                { value: 'delete', icon: <Trash2 className="h-4 w-4" /> },
               ]}
               onAction={(item, action) => {
                 if (action === 'delete') {
@@ -724,7 +738,6 @@ function UsersPageContent() {
   );
 }
 
-// Helper component for view modal fields
 function ViewField({
   icon,
   label,
@@ -766,7 +779,6 @@ function ViewField({
   );
 }
 
-// ✅ Default export wraps the page in Suspense (required for useSearchParams)
 export default function UsersPage() {
   return (
     <Suspense
