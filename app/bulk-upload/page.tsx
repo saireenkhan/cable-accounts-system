@@ -38,7 +38,7 @@ interface UploadResult {
   skipped: number;
   insertedIds: string[];
   duplicateIds: string[];
-  errors: (string | UploadError)[];
+  errors: UploadError[];
   message: string;
 }
 
@@ -77,29 +77,29 @@ const OPTIONAL_HEADERS = [
 
 // ✅ Normalize an error into a structured object
 const normalizeError = (err: any): UploadError => {
-  // If backend sends a structured error object
   if (err && typeof err === 'object') {
     return {
       row: err.row,
       id: err.id || err.customerId || err.partnerId,
       reason: err.reason || err.message || JSON.stringify(err),
-      type: err.type || (err.reason?.toLowerCase().includes('duplicate') ? 'duplicate' : 'other'),
+      type:
+        err.type ||
+        (err.reason?.toLowerCase().includes('duplicate')
+          ? 'duplicate'
+          : 'other'),
     };
   }
 
-  // If backend sends a plain string
   const str = String(err || 'Unknown error');
   const lower = str.toLowerCase();
 
-  // Try to extract row number: "Row 3: ..."
   const rowMatch = str.match(/row\s+(\d+)/i);
   const row = rowMatch ? parseInt(rowMatch[1]) : undefined;
 
-  // Try to extract ID: "Customer with ID 'USR-001' already exists"
-  const idMatch = str.match(/["']([^"']+)["']/) || str.match(/id\s+([A-Z0-9-]+)/i);
+  const idMatch =
+    str.match(/["']([^"']+)["']/) || str.match(/id\s+([A-Z0-9-]+)/i);
   const id = idMatch ? idMatch[1] : undefined;
 
-  // Detect type
   let type: UploadError['type'] = 'other';
   if (lower.includes('duplicate') || lower.includes('already exists')) {
     type = 'duplicate';
@@ -126,7 +126,7 @@ export default function BulkUploadPage() {
   const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ✅ Compute sample on every render (based on target)
+  // ✅ Compute sample on every render
   const SAMPLE_CSV = getSampleCSV(target);
 
   // ✅ Reset file + result when target changes
@@ -233,19 +233,19 @@ export default function BulkUploadPage() {
 
       const data = response.data;
 
-      // ✅ Extract duplicate IDs — check multiple possible field names
+      // ✅ Extract duplicate IDs
       const duplicateIds: string[] = Array.isArray(data.duplicateIds)
         ? data.duplicateIds
         : Array.isArray(data.duplicates)
-          ? data.duplicates
-          : [];
-
-      // ✅ Normalize errors so they're always structured objects
-      const normalizedErrors = Array.isArray(data.errors)
-        ? data.errors.map(normalizeError)
+        ? data.duplicates
         : [];
 
-      // ✅ If backend didn't send duplicateIds separately, extract them from errors
+      // ✅ Normalize errors
+      const normalizedErrors: UploadError[] = Array.isArray(data.errors)
+        ? data.errors.map((e: any) => normalizeError(e))
+        : [];
+
+      // ✅ Extract duplicates from errors if backend didn't send separately
       const dupFromErrors = normalizedErrors
         .filter((e) => e.type === 'duplicate' && e.id)
         .map((e) => e.id as string);
@@ -315,22 +315,13 @@ export default function BulkUploadPage() {
   const areaLabel = target === 'customers' ? 'Area' : 'Partner Area';
   const areaRoute = target === 'customers' ? '/areas' : '/partner-areas';
 
-  // ✅ Separate errors by type for display
+  // ✅ Separate errors by type (simplified — no union checks needed)
   const duplicateErrors =
-    result?.errors.filter((e) => {
-      const err = typeof e === 'string' ? normalizeError(e) : e;
-      return err.type === 'duplicate';
-    }) || [];
+    result?.errors.filter((e) => e.type === 'duplicate') || [];
   const validationErrors =
-    result?.errors.filter((e) => {
-      const err = typeof e === 'string' ? normalizeError(e) : e;
-      return err.type === 'validation';
-    }) || [];
+    result?.errors.filter((e) => e.type === 'validation') || [];
   const otherErrors =
-    result?.errors.filter((e) => {
-      const err = typeof e === 'string' ? normalizeError(e) : e;
-      return err.type === 'other';
-    }) || [];
+    result?.errors.filter((e) => e.type === 'other') || [];
 
   return (
     <Layout>
@@ -439,9 +430,7 @@ export default function BulkUploadPage() {
             <div
               className={cn(
                 'h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0',
-                selectedArea
-                  ? 'bg-green-600 text-white'
-                  : 'bg-blue-600 text-white'
+                selectedArea ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
               )}
             >
               {selectedArea ? <Check className="h-4 w-4" /> : '1'}
@@ -468,9 +457,7 @@ export default function BulkUploadPage() {
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
               <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-medium">
-                  No {areaLabel.toLowerCase()}s found
-                </p>
+                <p className="font-medium">No {areaLabel.toLowerCase()}s found</p>
                 <p className="text-xs mt-1">
                   Please add {areaLabel.toLowerCase()}s on the{' '}
                   <a href={areaRoute} className="underline font-medium">
@@ -601,9 +588,7 @@ export default function BulkUploadPage() {
                       </code>{' '}
                       (e.g. 2026-09-15). Expiry is auto-computed as +1 month.
                     </li>
-                    <li>
-                      Duplicate {idLabel.toLowerCase()} will be skipped
-                    </li>
+                    <li>Duplicate {idLabel.toLowerCase()} will be skipped</li>
                     <li>
                       Phone numbers missing leading 0 (10 digits) get auto-fixed
                     </li>
@@ -684,7 +669,9 @@ export default function BulkUploadPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700 font-mono">
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{target === 'customers' ? 'USR' : 'PTR'}-001</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        {target === 'customers' ? 'USR' : 'PTR'}-001
+                      </td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">John Doe</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0300-1234567</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">House 5, Street 3</td>
@@ -695,7 +682,9 @@ export default function BulkUploadPage() {
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{formatDate(new Date())}</td>
                     </tr>
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{target === 'customers' ? 'USR' : 'PTR'}-002</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        {target === 'customers' ? 'USR' : 'PTR'}-002
+                      </td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Jane Smith</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0321-9876543</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Flat B-12, Block 1</td>
@@ -708,7 +697,9 @@ export default function BulkUploadPage() {
                       </td>
                     </tr>
                     <tr className="hover:bg-gray-50 dark:hover:bg-gray-900/50">
-                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">{target === 'customers' ? 'USR' : 'PTR'}-003</td>
+                      <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">
+                        {target === 'customers' ? 'USR' : 'PTR'}-003
+                      </td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Ahmed Khan</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">0333-5555555</td>
                       <td className="px-3 py-2 text-gray-900 dark:text-gray-200 whitespace-nowrap">Shop 12, Main Market</td>
@@ -894,7 +885,7 @@ export default function BulkUploadPage() {
               <span>{result.message}</span>
             </div>
 
-            {/* ✅ DUPLICATE IDs PANEL — shown prominently */}
+            {/* DUPLICATE IDs PANEL */}
             {result.duplicateIds.length > 0 && (
               <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg">
                 <div className="flex items-start gap-2 mb-2">
@@ -928,7 +919,7 @@ export default function BulkUploadPage() {
               </div>
             )}
 
-            {/* ✅ DUPLICATE ROWS (with row numbers) */}
+            {/* DUPLICATE ROWS */}
             {duplicateErrors.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
@@ -936,35 +927,32 @@ export default function BulkUploadPage() {
                   Duplicate Row Details
                 </h3>
                 <ul className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-3 text-xs space-y-1.5 max-h-64 overflow-y-auto">
-                  {duplicateErrors.map((err, i) => {
-                    const e = typeof err === 'string' ? normalizeError(err) : err;
-                    return (
-                      <li
-                        key={i}
-                        className="text-amber-900 dark:text-amber-300 flex items-start gap-2"
-                      >
-                        <span className="text-amber-500 flex-shrink-0 mt-0.5">•</span>
-                        <div>
-                          {e.row !== undefined && (
-                            <span className="font-mono font-semibold mr-1">
-                              Row {e.row}:
-                            </span>
-                          )}
-                          {e.id && (
-                            <span className="font-mono bg-amber-200 dark:bg-amber-900/60 px-1.5 py-0.5 rounded mr-1">
-                              {e.id}
-                            </span>
-                          )}
-                          <span>{e.reason}</span>
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {duplicateErrors.map((err, i) => (
+                    <li
+                      key={i}
+                      className="text-amber-900 dark:text-amber-300 flex items-start gap-2"
+                    >
+                      <span className="text-amber-500 flex-shrink-0 mt-0.5">•</span>
+                      <div>
+                        {err.row !== undefined && (
+                          <span className="font-mono font-semibold mr-1">
+                            Row {err.row}:
+                          </span>
+                        )}
+                        {err.id && (
+                          <span className="font-mono bg-amber-200 dark:bg-amber-900/60 px-1.5 py-0.5 rounded mr-1">
+                            {err.id}
+                          </span>
+                        )}
+                        <span>{err.reason}</span>
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
 
-            {/* ✅ VALIDATION ERRORS */}
+            {/* VALIDATION ERRORS */}
             {validationErrors.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
@@ -972,30 +960,27 @@ export default function BulkUploadPage() {
                   Validation Errors
                 </h3>
                 <ul className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 rounded-lg p-3 text-xs space-y-1.5 max-h-64 overflow-y-auto">
-                  {validationErrors.map((err, i) => {
-                    const e = typeof err === 'string' ? normalizeError(err) : err;
-                    return (
-                      <li
-                        key={i}
-                        className="text-rose-800 dark:text-rose-300 flex items-start gap-2"
-                      >
-                        <span className="text-rose-500 flex-shrink-0 mt-0.5">•</span>
-                        <div>
-                          {e.row !== undefined && (
-                            <span className="font-mono font-semibold mr-1">
-                              Row {e.row}:
-                            </span>
-                          )}
-                          <span>{e.reason}</span>
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {validationErrors.map((err, i) => (
+                    <li
+                      key={i}
+                      className="text-rose-800 dark:text-rose-300 flex items-start gap-2"
+                    >
+                      <span className="text-rose-500 flex-shrink-0 mt-0.5">•</span>
+                      <div>
+                        {err.row !== undefined && (
+                          <span className="font-mono font-semibold mr-1">
+                            Row {err.row}:
+                          </span>
+                        )}
+                        <span>{err.reason}</span>
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
 
-            {/* ✅ OTHER ERRORS */}
+            {/* OTHER ERRORS */}
             {otherErrors.length > 0 && (
               <div>
                 <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center gap-2">
@@ -1003,30 +988,27 @@ export default function BulkUploadPage() {
                   Other Issues
                 </h3>
                 <ul className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-xs space-y-1.5 max-h-64 overflow-y-auto">
-                  {otherErrors.map((err, i) => {
-                    const e = typeof err === 'string' ? normalizeError(err) : err;
-                    return (
-                      <li
-                        key={i}
-                        className="text-gray-700 dark:text-gray-300 flex items-start gap-2"
-                      >
-                        <span className="text-gray-400 flex-shrink-0 mt-0.5">•</span>
-                        <div>
-                          {e.row !== undefined && (
-                            <span className="font-mono font-semibold mr-1">
-                              Row {e.row}:
-                            </span>
-                          )}
-                          {e.id && (
-                            <span className="font-mono bg-gray-200 dark:bg-gray-800 px-1.5 py-0.5 rounded mr-1">
-                              {e.id}
-                            </span>
-                          )}
-                          <span>{e.reason}</span>
-                        </div>
-                      </li>
-                    );
-                  })}
+                  {otherErrors.map((err, i) => (
+                    <li
+                      key={i}
+                      className="text-gray-700 dark:text-gray-300 flex items-start gap-2"
+                    >
+                      <span className="text-gray-400 flex-shrink-0 mt-0.5">•</span>
+                      <div>
+                        {err.row !== undefined && (
+                          <span className="font-mono font-semibold mr-1">
+                            Row {err.row}:
+                          </span>
+                        )}
+                        {err.id && (
+                          <span className="font-mono bg-gray-200 dark:bg-gray-800 px-1.5 py-0.5 rounded mr-1">
+                            {err.id}
+                          </span>
+                        )}
+                        <span>{err.reason}</span>
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
