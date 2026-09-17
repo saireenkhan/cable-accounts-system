@@ -20,6 +20,7 @@ import {
   Handshake,
   DollarSign,
   Save,
+  MessageCircle,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -50,7 +51,6 @@ interface RecoveryNotification {
   category: NotificationCategory;
   source: SourceType;
   contactNumber: string;
-  assignedTo: string;
   lastContact: string;
   nextFollowUp: string;
   message: string;
@@ -95,6 +95,41 @@ const daysBetween = (a: any, b: any): number => {
   if (!da || !db) return 0;
   return Math.floor((da.getTime() - db.getTime()) / (1000 * 60 * 60 * 24));
 };
+
+// ============================================================
+// ✅ WhatsApp helpers
+// ============================================================
+// Convert a Pakistani number like "0321-1234567" → "923211234567"
+function formatPhoneForWhatsApp(phone: string): string {
+  if (!phone) return '';
+  // Strip everything except digits
+  let digits = phone.replace(/\D/g, '');
+
+  // Remove leading zeros
+  digits = digits.replace(/^0+/, '');
+
+  // If it doesn't start with 92, prefix it (assume Pakistan)
+  if (!digits.startsWith('92')) {
+    digits = '92' + digits;
+  }
+
+  return digits;
+}
+
+// Open WhatsApp Web/App with a pre-filled message
+function openWhatsApp(phone: string, message: string) {
+  const formatted = formatPhoneForWhatsApp(phone);
+  if (!formatted) {
+    toast.error('Invalid phone number');
+    return false;
+  }
+
+  const encodedMessage = encodeURIComponent(message || '');
+  const url = `https://wa.me/${formatted}${encodedMessage ? `?text=${encodedMessage}` : ''}`;
+
+  window.open(url, '_blank');
+  return true;
+}
 
 // ============================================================
 // ✅ CORE: Allocate the ENTIRE payment pool oldest-first
@@ -252,7 +287,6 @@ const buildCustomerNotifications = (
       category,
       source: 'Customer',
       contactNumber: c.phone || 'N/A',
-      assignedTo: 'Recovery Officer 1',
       lastContact: c.updatedAt || new Date().toISOString(),
       nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString(),
       message: '',
@@ -350,7 +384,6 @@ const buildPartnerNotifications = (
       category,
       source: 'Partner',
       contactNumber: c.phone || 'N/A',
-      assignedTo: 'Recovery Officer 2',
       lastContact: c.updatedAt || new Date().toISOString(),
       nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString(),
       message: '',
@@ -425,7 +458,6 @@ export default function RecoveryNotificationsPage() {
   const [filterCategory, setFilterCategory] = useState('All Categories');
   const [filterSource, setFilterSource] = useState('All Sources');
   const [filterArea, setFilterArea] = useState('All Areas');
-  const [filterAssigned, setFilterAssigned] = useState('All Officers');
   const [filterDueDate, setFilterDueDate] = useState('');
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -441,7 +473,6 @@ export default function RecoveryNotificationsPage() {
           return;
         }
 
-        // Fetch each resource separately — don't let one failure kill the rest
         const safeGet = async (url: string) => {
           try {
             const res = await api.get(url);
@@ -468,7 +499,6 @@ export default function RecoveryNotificationsPage() {
           safeGet('/partner-areas'),
         ]);
 
-        // ✅ Robust extraction — handles any response shape
         const customers = customersData?.customers || customersData?.data || [];
         const partners = partnersData?.partners || partnersData?.data || [];
         const customerPayments =
@@ -488,9 +518,6 @@ export default function RecoveryNotificationsPage() {
           customerAreas: customerAreas.length,
           partnerAreas: partnerAreas.length,
         });
-        if (partners.length) console.log('👤 First partner:', partners[0]);
-        if (partnerPayments.length)
-          console.log('💰 First partner payment:', partnerPayments[0]);
 
         const customerNotifs = buildCustomerNotifications(
           customers,
@@ -522,7 +549,6 @@ export default function RecoveryNotificationsPage() {
     fetchAll();
   }, []);
 
-  // ✅ Sync message draft
   useEffect(() => {
     if (selected) {
       setMessageDraft(selected.message || '');
@@ -531,7 +557,6 @@ export default function RecoveryNotificationsPage() {
     }
   }, [selected]);
 
-  // ✅ Stats
   const stats = useMemo(() => {
     const pending = notifications.filter((n) => n.category === 'Pending').length;
     const partial = notifications.filter((n) => n.category === 'Partial').length;
@@ -542,7 +567,6 @@ export default function RecoveryNotificationsPage() {
     return { pending, partial, expired, upcoming };
   }, [notifications]);
 
-  // ✅ Filtering
   const filtered = useMemo(() => {
     return notifications.filter((n) => {
       const q = searchQuery.toLowerCase();
@@ -559,8 +583,6 @@ export default function RecoveryNotificationsPage() {
         filterSource === 'All Sources' || n.source === filterSource;
 
       const matchesArea = filterArea === 'All Areas' || n.area === filterArea;
-      const matchesAssigned =
-        filterAssigned === 'All Officers' || n.assignedTo === filterAssigned;
       const matchesDate = !filterDueDate || n.dueDate.startsWith(filterDueDate);
 
       return (
@@ -568,7 +590,6 @@ export default function RecoveryNotificationsPage() {
         matchesCategory &&
         matchesSource &&
         matchesArea &&
-        matchesAssigned &&
         matchesDate
       );
     });
@@ -578,23 +599,13 @@ export default function RecoveryNotificationsPage() {
     filterCategory,
     filterSource,
     filterArea,
-    filterAssigned,
     filterDueDate,
   ]);
 
-  // ✅ Reset page on filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [
-    searchQuery,
-    filterCategory,
-    filterSource,
-    filterArea,
-    filterAssigned,
-    filterDueDate,
-  ]);
+  }, [searchQuery, filterCategory, filterSource, filterArea, filterDueDate]);
 
-  // ✅ Pagination
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice(
     (currentPage - 1) * pageSize,
@@ -609,17 +620,12 @@ export default function RecoveryNotificationsPage() {
     () => Array.from(new Set(notifications.map((n) => n.area))).sort(),
     [notifications]
   );
-  const uniqueAssigned = useMemo(
-    () => Array.from(new Set(notifications.map((n) => n.assignedTo))).sort(),
-    [notifications]
-  );
 
   const handleReset = () => {
     setSearchQuery('');
     setFilterCategory('All Categories');
     setFilterSource('All Sources');
     setFilterArea('All Areas');
-    setFilterAssigned('All Officers');
     setFilterDueDate('');
     setCurrentPage(1);
   };
@@ -639,19 +645,26 @@ export default function RecoveryNotificationsPage() {
     toast.success('Message saved');
   };
 
-  const handleSendSMS = () => {
+  // ✅ NEW: Send WhatsApp instead of SMS
+  const handleSendWhatsApp = () => {
     if (!selected) return;
     if (!messageDraft.trim()) {
       toast.error('Please type a message before sending');
       return;
     }
+
+    // Save the message first
     setNotifications((prev) =>
       prev.map((n) =>
         n.id === selected.id ? { ...n, message: messageDraft } : n
       )
     );
     setSelected((prev) => (prev ? { ...prev, message: messageDraft } : prev));
-    toast.success(`SMS sent to ${selected.customerName}`);
+
+    const ok = openWhatsApp(selected.contactNumber, messageDraft);
+    if (ok) {
+      toast.success(`Opening WhatsApp for ${selected.customerName}`);
+    }
   };
 
   const handleCall = () => {
@@ -740,7 +753,7 @@ export default function RecoveryNotificationsPage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <FilterSelect
               label="Category"
               value={filterCategory}
@@ -764,12 +777,6 @@ export default function RecoveryNotificationsPage() {
               value={filterArea}
               onChange={setFilterArea}
               options={['All Areas', ...uniqueAreas]}
-            />
-            <FilterSelect
-              label="Assigned To"
-              value={filterAssigned}
-              onChange={setFilterAssigned}
-              options={['All Officers', ...uniqueAssigned]}
             />
             <div>
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
@@ -946,14 +953,14 @@ export default function RecoveryNotificationsPage() {
                               <Phone className="h-4 w-4" />
                             </RowAction>
                             <RowAction
-                              title="Send SMS"
+                              title="Send WhatsApp"
                               color="green"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setSelected(n);
                               }}
                             >
-                              <MessageSquare className="h-4 w-4" />
+                              <MessageCircle className="h-4 w-4" />
                             </RowAction>
                             <RowAction
                               title="Edit"
@@ -1053,9 +1060,6 @@ export default function RecoveryNotificationsPage() {
                               label="Remaining"
                               value={formatAmount(n.dueAmount)}
                             />
-                            <div className="col-span-2">
-                              <MiniField label="Assigned To" value={n.assignedTo} />
-                            </div>
                           </div>
 
                           <div>
@@ -1071,12 +1075,12 @@ export default function RecoveryNotificationsPage() {
                             <button
                               onClick={() => {
                                 setSelected(n);
-                                handleSendSMS();
+                                handleSendWhatsApp();
                               }}
                               className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
                             >
-                              <Send className="h-4 w-4" />
-                              SMS
+                              <MessageCircle className="h-4 w-4" />
+                              WhatsApp
                             </button>
                             <button
                               onClick={() =>
@@ -1154,7 +1158,6 @@ export default function RecoveryNotificationsPage() {
                   label="Next Follow-up"
                   value={formatDate(selected.nextFollowUp)}
                 />
-                <DetailRow label="Assigned To" value={selected.assignedTo} />
 
                 <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between text-sm">
@@ -1200,11 +1203,11 @@ export default function RecoveryNotificationsPage() {
 
               <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2 bg-gray-50 dark:bg-gray-900/50 mt-auto">
                 <button
-                  onClick={handleSendSMS}
+                  onClick={handleSendWhatsApp}
                   className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
                 >
-                  <Send className="h-4 w-4" />
-                  Send SMS
+                  <MessageCircle className="h-4 w-4" />
+                  Send WhatsApp
                 </button>
                 <button
                   onClick={handleCall}
