@@ -47,6 +47,11 @@ const partnerSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+        partner: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     status: {
       type: String,
       enum: ['active', 'inactive', 'suspended', 'expired'],

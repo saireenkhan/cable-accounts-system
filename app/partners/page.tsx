@@ -50,6 +50,114 @@ const statusLabels: Record<string, string> = {
   suspended: 'Suspended',
 };
 
+// ============================================================
+// ✅ Allocation helpers — determine REAL expired status
+// ============================================================
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const parseMonthKey = (monthStr: string) => {
+  const parts = (monthStr || '').split(' ');
+  return {
+    name: parts[0] || '',
+    year: parseInt(parts[1] || '0'),
+    idx: MONTHS.indexOf(parts[0]),
+  };
+};
+
+const compareMonths = (a: string, b: string) => {
+  const pa = parseMonthKey(a);
+  const pb = parseMonthKey(b);
+  if (isNaN(pa.year) || isNaN(pb.year) || pa.idx === -1 || pb.idx === -1) return 0;
+  if (pa.year !== pb.year) return pa.year - pb.year;
+  return pa.idx - pb.idx;
+};
+
+interface MonthAllocation {
+  month: string;
+  expected: number;
+  applied: number;
+  remaining: number;
+  isPaid: boolean;
+}
+
+function allocatePayments(
+  monthlyFee: number,
+  payments: { month: string; amount: number }[]
+): MonthAllocation[] {
+  if (!monthlyFee || monthlyFee <= 0) return [];
+
+  const byMonth: Record<string, number> = {};
+  payments.forEach((p) => {
+    if (!p.month) return;
+    byMonth[p.month] =
+      (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
+  });
+
+  const months = Object.keys(byMonth).sort(compareMonths);
+  if (months.length === 0) return [];
+
+  const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
+
+  let pool = totalPool;
+  const result: MonthAllocation[] = [];
+
+  for (const month of months) {
+    const applied = Math.min(pool, monthlyFee);
+    const remaining = Math.max(0, monthlyFee - applied);
+    pool -= applied;
+
+    result.push({
+      month,
+      expected: monthlyFee,
+      applied,
+      remaining,
+      isPaid: remaining === 0,
+    });
+  }
+
+  return result;
+}
+
+const toDateSafe = (val: any): Date | null => {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// ✅ Compute real effective status — Expired only if expiry month is UNPAID
+function computeEffectiveStatus(user: any, payments: any[]): string {
+  const baseStatus = effectiveStatus(user);
+
+  if (baseStatus !== 'Expired') return baseStatus;
+
+  const monthlyFee = Number(user.monthlyFeeRaw || 0);
+  if (!monthlyFee) return baseStatus;
+
+  const userPayments = payments.filter(
+    (p) => (p.partner?.name || p.partner) === user.name && !p.isNoPayment
+  );
+
+  const allocs = allocatePayments(
+    monthlyFee,
+    userPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+  );
+
+  const expDate = toDateSafe(user.expiryDate);
+  if (!expDate) return baseStatus;
+
+  const expiryMonth = `${MONTHS[expDate.getMonth()]} ${expDate.getFullYear()}`;
+  const expiryAlloc = allocs.find((a) => a.month === expiryMonth);
+
+  // ✅ If the expiry month is fully paid → not Expired
+  if (expiryAlloc?.isPaid) return 'Inactive';
+
+  return 'Expired';
+}
+
 function ViewField({
   icon, label, value, highlight, fullWidth,
 }: {
@@ -95,6 +203,7 @@ function PartnersPageContent() {
   const [users, setUsers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [partnerList, setPartnerList] = useState<any[]>([]);
 
   useEffect(() => {
     const status = searchParams.get('status');
@@ -125,40 +234,66 @@ function PartnersPageContent() {
     }
   };
 
-  // ✅ Fetch partners
+  // ✅ Fetch master partner list
+  const fetchPartnerList = async () => {
+    try {
+      if (!localStorage.getItem('token')) return [];
+      const { data } = await api.get('/partners-list');
+      const list = data.success ? data.partners || [] : [];
+      setPartnerList(list);
+      return list;
+    } catch (e) {
+      console.error('Error fetching partner list:', e);
+      return [];
+    }
+  };
+
+  // ✅ Fetch partners + partner payments
   const fetchUsers = async (areaList = areas) => {
     try {
       if (!localStorage.getItem('token')) return setLoading(false);
 
-      const { data } = await api.get('/partners?limit=10000');
-      if (!data.success) return;
+      // ✅ Fetch partners AND partner-payments together
+      const [partnersRes, paymentsRes] = await Promise.all([
+        api.get('/partners?limit=10000'),
+        api.get('/partner-payments'),
+      ]);
 
-      setUsers((data.partners || []).map((c: any) => {
-        const activation = dateInput(c.activationDate);
-        const expiry = c.expiryDate
-          ? dateInput(c.expiryDate)
-          : expiryDate(activation);
+      const partners = partnersRes.data.partners || [];
+      const payments = paymentsRes.data.payments || [];
 
-        const user = {
-          id: c._id,
-          customerId: c.partnerId || 'N/A',   // keep field name for shared UI
-          name: c.name || '',
-          phone: c.phone || '',
-          address: c.address || '',
-          area: areaName(c.area, areaList),
-          package: c.package || '',
-          packagePrice: Number(c.packagePrice || 0),
-          discount: Number(c.discount || 0),
-          discountRaw: Number(c.discount || 0),
-          monthlyFeeRaw: Number(c.monthlyFee || 0),
-          monthlyFee: `Rs. ${Number(c.monthlyFee || 0).toLocaleString()}`,
-          activationDate: activation,
-          expiryDate: expiry,
-          statusRaw: c.status || 'active',
-        };
+      if (!partnersRes.data.success) return;
 
-        return { ...user, status: effectiveStatus(user) };
-      }));
+      setUsers(
+        partners.map((c: any) => {
+          const activation = dateInput(c.activationDate);
+          const expiry = c.expiryDate
+            ? dateInput(c.expiryDate)
+            : expiryDate(activation);
+
+          const user = {
+            id: c._id,
+            customerId: c.partnerId || 'N/A',
+            name: c.name || '',
+            phone: c.phone || '',
+            address: c.address || '',
+            area: areaName(c.area, areaList),
+            package: c.package || '',
+            packagePrice: Number(c.packagePrice || 0),
+            discount: Number(c.discount || 0),
+            discountRaw: Number(c.discount || 0),
+            monthlyFeeRaw: Number(c.monthlyFee || 0),
+            monthlyFee: `Rs. ${Number(c.monthlyFee || 0).toLocaleString()}`,
+            activationDate: activation,
+            expiryDate: expiry,
+            statusRaw: c.status || 'active',
+            partner: c.partner || '',
+          };
+
+          // ✅ Use allocation-aware status
+          return { ...user, status: computeEffectiveStatus(user, payments) };
+        })
+      );
     } catch (e) {
       console.error('Error fetching User:', e);
       toast.error('Failed to load User');
@@ -171,16 +306,17 @@ function PartnersPageContent() {
     (async () => {
       const list = await fetchAreas();
       await fetchPackages();
+      await fetchPartnerList();
       await fetchUsers(list);
     })();
   }, []);
 
   const stats = [
     ['all', 'TOTAL USERS', users.length, Users, 'blue'],
-    ['active', 'ACTIVE', users.filter(u => effectiveStatus(u) === 'Active').length, UserCheck, 'green'],
-    ['inactive', 'INACTIVE', users.filter(u => effectiveStatus(u) === 'Inactive').length, UserX, 'gray'],
+    ['active', 'ACTIVE', users.filter(u => u.status === 'Active').length, UserCheck, 'green'],
+    ['inactive', 'INACTIVE', users.filter(u => u.status === 'Inactive').length, UserX, 'gray'],
     ['upcoming-expiry', 'UPCOMING EXPIRIES', users.filter(upcomingExpiry).length, Clock, 'orange', 'Within 7 days'],
-    ['expired', 'EXPIRED', users.filter(u => effectiveStatus(u) === 'Expired').length, UserMinus, 'red'],
+    ['expired', 'EXPIRED', users.filter(u => u.status === 'Expired').length, UserMinus, 'red'],
   ] as const;
 
   const userFields: Field[] = [
@@ -195,6 +331,21 @@ function PartnersPageContent() {
       required: true,
       searchable: true,
       options: areas.map(a => ({ label: a.name, value: a.name })),
+    },
+    {
+      name: 'partner',
+      label: 'Partner',
+      type: 'select',
+      required: true,
+      searchable: true,
+      placeholder: partnerList.length > 0 ? 'Select Partner' : 'No partners available',
+      options:
+        partnerList.length > 0
+          ? partnerList.map((p: any) => ({
+              label: `${p.partnerId} - ${p.name}`,
+              value: p.name,
+            }))
+          : [{ label: 'No partners available - add one first', value: '' }],
     },
     {
       name: 'package',
@@ -276,11 +427,12 @@ function PartnersPageContent() {
     if (!activation) throw new Error('Activation Date is required.');
 
     return {
-      partnerId: data.customerId,   // ✅ backend expects partnerId
+      partnerId: data.customerId,
       name: data.name,
       phone: data.phone,
       address: data.address,
       area: areaName(data.area, areas),
+      partner: data.partner,
       package: data.package,
       activationDate: activation,
       expiryDate: expiryDate(activation),
@@ -316,7 +468,7 @@ function PartnersPageContent() {
   };
 
   const filteredUsers = users.filter(u => {
-    const status = effectiveStatus(u);
+    const status = u.status;
     const q = search.toLowerCase();
 
     const matchesStatus =
@@ -330,52 +482,44 @@ function PartnersPageContent() {
     const matchesSearch =
       u.name?.toLowerCase().includes(q) ||
       u.customerId?.toLowerCase().includes(q) ||
-      u.phone?.includes(q);
+      u.phone?.includes(q) ||
+      u.partner?.toLowerCase().includes(q);
 
     return matchesStatus && matchesSearch;
   });
 
   const columns = [
     { key: 'customerId', header: 'User ID' },
-    { key: 'name', header: 'User Name' },
+    {
+      key: 'name',
+      header: 'User Name',
+      render: (u: any) => (
+        <div className="flex flex-col">
+          <span className="font-medium text-gray-900 dark:text-white">
+            {u.name}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <CalendarDays className="h-3 w-3 text-blue-500" />
+            Activated: {displayDate(u.activationDate)}
+          </span>
+        </div>
+      ),
+    },
     { key: 'phone', header: 'Phone' },
     { key: 'area', header: ' Area' },
-    {
-      key: 'activationDate',
-      header: 'Activation Date',
-      render: (u: any) => (
-        <span className="inline-flex items-center gap-1.5 text-gray-700 dark:text-gray-300">
-          <CalendarDays className="h-3.5 w-3.5 text-blue-500" />
-          {displayDate(u.activationDate)}
-        </span>
-      ),
-    },
-    {
-      key: 'discount',
-      header: 'Discount',
-      render: (u: any) => (
-        <span className={u.discount > 0
-          ? 'font-medium text-orange-600 dark:text-orange-400'
-          : 'text-gray-500'}>
-          Rs. {Number(u.discount || 0).toLocaleString()}
-        </span>
-      ),
-    },
+    { key: 'partner', header: 'Partner' },
     { key: 'monthlyFee', header: 'Monthly Fee' },
     {
       key: 'status',
       header: 'Status',
-      render: (u: any) => {
-        const status = effectiveStatus(u);
-        return (
-          <span className={cn(
-            'px-2 py-1 rounded-full text-xs font-medium',
-            statusStyles[status]
-          )}>
-            {status}
-          </span>
-        );
-      },
+      render: (u: any) => (
+        <span className={cn(
+          'px-2 py-1 rounded-full text-xs font-medium',
+          statusStyles[u.status]
+        )}>
+          {u.status}
+        </span>
+      ),
     },
   ];
 
@@ -447,7 +591,7 @@ function PartnersPageContent() {
         </div>
 
         <SearchBar
-          placeholder="Search by name, User ID or phone..."
+          placeholder="Search by name, User ID, phone or partner..."
           value={search}
           onChange={setSearch}
         />
@@ -524,6 +668,7 @@ function PartnersPageContent() {
             phone: editingUser.phone,
             address: editingUser.address,
             area: areaName(editingUser.area, areas),
+            partner: editingUser.partner || '',
             package: editingUser.package,
             activationDate: dateInput(editingUser.activationDate),
             expiryDate: dateInput(editingUser.expiryDate),
@@ -532,7 +677,7 @@ function PartnersPageContent() {
             status: editingUser.statusRaw,
           } : undefined}
           transformData={transformUserData}
-          context={{ packages, areas }}
+          context={{ packages, areas, partnerList }}
         />
 
         {view && viewingUser && (
@@ -568,7 +713,7 @@ function PartnersPageContent() {
 
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)] space-y-4">
                 {(() => {
-                  const status = effectiveStatus(viewingUser);
+                  const status = viewingUser.status;
                   const StatusIcon =
                     status === 'Active'
                       ? CheckCircle
@@ -594,13 +739,14 @@ function PartnersPageContent() {
                   <ViewField icon={<UserIcon className="h-4 w-4" />} label="Full Name" value={viewingUser.name} />
                   <ViewField icon={<Phone className="h-4 w-4" />} label="Phone" value={viewingUser.phone} />
                   <ViewField icon={<MapPin className="h-4 w-4" />} label="Area" value={areaName(viewingUser.area, areas)} />
+                  <ViewField icon={<Handshake className="h-4 w-4" />} label="Partner" value={viewingUser.partner || 'N/A'} />
                   <ViewField icon={<PackageIcon className="h-4 w-4" />} label="Package" value={viewingUser.package || 'No package assigned'} />
                   <ViewField icon={<CalendarDays className="h-4 w-4" />} label="Activation Date" value={displayDate(viewingUser.activationDate)} />
                   <ViewField
                     icon={<CalendarDays className="h-4 w-4" />}
                     label="Expiry Date"
                     value={displayDate(viewingUser.expiryDate)}
-                    highlight={effectiveStatus(viewingUser) === 'Expired'}
+                    highlight={viewingUser.status === 'Expired'}
                   />
                   <ViewField
                     icon={<Percent className="h-4 w-4" />}
@@ -651,5 +797,5 @@ function PartnersPageContent() {
 }
 
 export default function PartnersPage() {
-  return <Suspense fallback={spinner}><PartnersPageContent /></Suspense>;
+  return <Suspense fallback={spinner}>{<PartnersPageContent />}</Suspense>;
 }

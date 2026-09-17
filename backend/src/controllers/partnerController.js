@@ -31,6 +31,7 @@ exports.getPartners = async (req, res) => {
         { name: { $regex: search, $options: 'i' } },
         { partnerId: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
+        { partner: { $regex: search, $options: 'i' } },   // ✅ search by partner too
       ];
     }
 
@@ -104,6 +105,7 @@ exports.createPartner = async (req, res) => {
       cnic,
       address,
       area,
+      partner,          // ✅ NEW — partner selection
       package: pkg,
       discount,
       monthlyFee,
@@ -138,7 +140,7 @@ exports.createPartner = async (req, res) => {
       });
     }
 
-    // ✅ Area: verify against PartnerArea (do NOT auto-create — keep areas controlled)
+    // ✅ Area: verify against PartnerArea
     if (area) {
       const areaDoc = await PartnerArea.findOne({ name: area });
 
@@ -177,14 +179,15 @@ exports.createPartner = async (req, res) => {
       calculatedExpiryDate = calculateExpiryDate(parsedActivationDate);
     }
 
-    // Create partner
-    const partner = await Partner.create({
+    // ✅ Create partner — including partner field
+    const partnerDoc = await Partner.create({
       partnerId,
       name,
       phone,
       cnic: cnic || '',
       address,
       area: area || '',
+      partner: partner || '',       // ✅ NEW — save partner
       package: pkg,
       discount: parsedDiscount,
       monthlyFee: parseFloat(monthlyFee) || 0,
@@ -194,12 +197,13 @@ exports.createPartner = async (req, res) => {
       createdBy: req.user ? req.user.id : null,
     });
 
-    const populatedPartner = await Partner.findById(partner._id).populate(
+    const populatedPartner = await Partner.findById(partnerDoc._id).populate(
       'createdBy',
       'name'
     );
 
     console.log('✅ Partner created:', populatedPartner.partnerId);
+    console.log('✅ Partner field saved:', populatedPartner.partner);   // ✅ debug
 
     res.status(201).json({
       success: true,
@@ -248,6 +252,7 @@ exports.updatePartner = async (req, res) => {
       cnic,
       address,
       area,
+      partner,          // ✅ NEW
       package: pkg,
       discount,
       monthlyFee,
@@ -256,6 +261,7 @@ exports.updatePartner = async (req, res) => {
     } = req.body;
 
     console.log('📝 Updating partner:', req.params.id);
+    console.log('📦 Update data:', req.body);   // ✅ debug
 
     const existingPartner = await Partner.findById(req.params.id);
 
@@ -274,6 +280,7 @@ exports.updatePartner = async (req, res) => {
     if (cnic !== undefined) update.cnic = cnic;
     if (address !== undefined) update.address = address;
     if (status !== undefined) update.status = status;
+    if (partner !== undefined) update.partner = partner;   // ✅ NEW
 
     // Area — verify it exists in PartnerArea
     if (area !== undefined) {
@@ -341,16 +348,21 @@ exports.updatePartner = async (req, res) => {
       }
     }
 
-    const partner = await Partner.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-      runValidators: true,
-    }).populate('createdBy', 'name');
+    const partnerDoc = await Partner.findByIdAndUpdate(
+      req.params.id,
+      update,
+      {
+        new: true,
+        runValidators: true,
+      }
+    ).populate('createdBy', 'name');
 
-    console.log('✅ Partner updated:', partner.partnerId);
+    console.log('✅ Partner updated:', partnerDoc.partnerId);
+    console.log('✅ Partner field after update:', partnerDoc.partner);   // ✅ debug
 
     res.json({
       success: true,
-      partner,
+      partner: partnerDoc,
       message: 'Partner updated successfully',
     });
   } catch (error) {

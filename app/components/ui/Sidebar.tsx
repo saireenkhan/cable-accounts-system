@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Users,
+  UserRoundPlus,
+  Bell,
   DollarSign,
    Handshake,
   HomeIcon,
@@ -122,8 +124,10 @@ const menuItems: MenuItem[] = [
       { label: 'All Report', href: '/reports', icon: <PieChart className="h-4 w-4" /> },
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
       { label: 'Bulk Upload', href: '/bulk-upload', icon: <Upload className="h-4 w-4" /> },
+       { label: 'Add Partner', href: '/create-partner', icon: < UserRoundPlus className="h-4 w-4" /> },
     ],
   },
+  {label:'Notification',section:'notify', href :'/notification', icon:< Bell className="h-4 w-4" />, }
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
@@ -305,6 +309,12 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {menuItems
             .filter(item => item.section === 'general')
             .map((item) => renderMenuItem(item))}
+             <div className="text-xs font-semibold text-gray-400 dark:text-gray-500  tracking-wider mt-2">
+            {menuItems
+            .filter(item => item.section === 'notify')
+            .map((item) => renderMenuItem(item))}
+          </div>
+
         </nav>
 
         {/* User footer */}

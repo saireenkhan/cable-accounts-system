@@ -75,6 +75,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/api', limiter);
 
 // Routes
+app.use('/api/partners-list', require('./routes/partnerListRoutes'));
 app.use('/api/partner-payments', require('./routes/partnerPaymentRoutes'));
 app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);

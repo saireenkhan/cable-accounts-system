@@ -28,6 +28,85 @@ import {
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
+// ============================================================
+// MONTH UTILS
+// ============================================================
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const parseMonth = (monthStr: string) => {
+  const parts = (monthStr || '').split(' ');
+  return {
+    name: parts[0] || '',
+    year: parseInt(parts[1] || '0'),
+    idx: MONTHS.indexOf(parts[0]),
+  };
+};
+
+const compareMonths = (a: string, b: string) => {
+  const pa = parseMonth(a);
+  const pb = parseMonth(b);
+  if (isNaN(pa.year) || isNaN(pb.year) || pa.idx === -1 || pb.idx === -1) return 0;
+  if (pa.year !== pb.year) return pa.year - pb.year;
+  return pa.idx - pb.idx;
+};
+
+// ============================================================
+// ✅ CORE: allocate the ENTIRE payment pool oldest-first
+// Surplus from later months auto-covers earlier shortfalls.
+// ============================================================
+interface MonthAllocation {
+  month: string;
+  expected: number;
+  applied: number;
+  remaining: number;
+  isPaid: boolean;
+  overpaid: number;
+}
+
+function allocatePayments(
+  monthlyFee: number,
+  paymentsForCustomer: { month: string; amount: number }[]
+): MonthAllocation[] {
+  if (!monthlyFee || monthlyFee <= 0) return [];
+
+  // Group payments by month
+  const byMonth: Record<string, number> = {};
+  paymentsForCustomer.forEach((p) => {
+    if (!p.month) return;
+    byMonth[p.month] = (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
+  });
+
+  const months = Object.keys(byMonth).sort(compareMonths);
+  if (months.length === 0) return [];
+
+  // ✅ Total pool — treat all money as one bucket
+  const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
+
+  // ✅ Allocate the pool strictly by chronological month order
+  let pool = totalPool;
+  const result: MonthAllocation[] = [];
+
+  for (const month of months) {
+    const applied = Math.min(pool, monthlyFee);
+    const remaining = Math.max(0, monthlyFee - applied);
+    pool -= applied;
+
+    result.push({
+      month,
+      expected: monthlyFee,
+      applied,
+      remaining,
+      isPaid: remaining === 0,
+      overpaid: 0,
+    });
+  }
+
+  return result;
+}
+
 // ============ SEARCHABLE SELECT ============
 function SearchableSelect({
   options,
@@ -145,7 +224,7 @@ function SearchableSelect({
   );
 }
 
-// ============ PARTNER PAYMENT MODAL (exact clone of user modal) ============
+// ============ PARTNER PAYMENT MODAL ============
 function ReceivePartnerPaymentModal({
   isOpen,
   onClose,
@@ -173,7 +252,7 @@ function ReceivePartnerPaymentModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingNoPayment, setIsSubmittingNoPayment] = useState(false);
   const [customerDetails, setCustomerDetails] = useState<any>(null);
-  const [monthlySummary, setMonthlySummary] = useState<any>(null);
+  const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
 
   const getUniqueAreas = () => {
     const areaSet = new Set<string>();
@@ -208,17 +287,13 @@ function ReceivePartnerPaymentModal({
     };
   });
 
-  const monthsList = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
   const currentYear = new Date().getFullYear();
-  const monthOptions = monthsList.map((month) => `${month} ${currentYear}`);
+  const monthOptions = MONTHS.map((month) => `${month} ${currentYear}`);
 
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
-      const defaultMonth = `${monthsList[now.getMonth()]} ${now.getFullYear()}`;
+      const defaultMonth = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       setSelectedMonth(defaultMonth);
       setPaymentDate(now.toISOString().split('T')[0]);
       setSelectedArea('');
@@ -227,7 +302,7 @@ function ReceivePartnerPaymentModal({
       setPaymentMethod('Cash');
       setNotes('');
       setCustomerDetails(null);
-      setMonthlySummary(null);
+      setMonthlySummary([]);
     }
   }, [isOpen]);
 
@@ -237,37 +312,27 @@ function ReceivePartnerPaymentModal({
       setCustomerDetails(customer || null);
 
       if (customer) {
-        // ✅ FIX: filter by p.customer (formatted field), not p.partner
-        const customerPayments = payments.filter((p) => p.customer === customer.name);
+        const customerPayments = payments.filter(
+          (p) => p.customer === customer.name && !p.isNoPayment
+        );
 
-        const monthMap: Record<string, { totalPaid: number }> = {};
-        customerPayments.forEach((p: any) => {
-          if (!monthMap[p.month]) {
-            monthMap[p.month] = { totalPaid: 0 };
-          }
-          monthMap[p.month].totalPaid += p.amount;
-        });
+        const allocs = allocatePayments(
+          customer.monthlyFee || 0,
+          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+        );
 
-        const monthlyFee = customer.monthlyFee || 0;
-        const summary = Object.keys(monthMap).map((month) => ({
-          month,
-          totalPaid: monthMap[month].totalPaid,
-          remaining: Math.max(0, monthlyFee - monthMap[month].totalPaid),
-          isPaid: monthMap[month].totalPaid >= monthlyFee,
-        }));
-
-        setMonthlySummary(summary);
+        setMonthlySummary(allocs);
       }
     } else {
       setCustomerDetails(null);
-      setMonthlySummary(null);
+      setMonthlySummary([]);
     }
   }, [selectedCustomerId, customers, payments]);
 
   useEffect(() => {
     setSelectedCustomerId('');
     setCustomerDetails(null);
-    setMonthlySummary(null);
+    setMonthlySummary([]);
   }, [selectedArea]);
 
   const getPackageName = () => {
@@ -282,26 +347,21 @@ function ReceivePartnerPaymentModal({
   };
 
   const getCurrentMonthBalance = () => {
-    if (!monthlySummary || !selectedMonth || !customerDetails) {
+    if (!customerDetails) {
       return { previousBalance: 0, currentBalance: 0, totalBalance: 0 };
     }
 
     const monthlyFee = customerDetails.monthlyFee || 0;
-    const currentMonthData = monthlySummary.find((m: any) => m.month === selectedMonth);
-    const otherMonths = monthlySummary.filter(
-      (m: any) => m.month !== selectedMonth && !m.isPaid
-    );
-    const previousBalance = otherMonths.reduce(
-      (sum: number, m: any) => sum + m.remaining,
-      0
-    );
+    const allocs = monthlySummary || [];
 
-    let currentBalance = 0;
-    if (currentMonthData) {
-      currentBalance = currentMonthData.remaining;
-    } else {
-      currentBalance = monthlyFee;
-    }
+    // Previous balance = unpaid months STRICTLY BEFORE the selected month
+    const previousBalance = allocs
+      .filter((a) => compareMonths(a.month, selectedMonth) < 0 && !a.isPaid)
+      .reduce((sum, a) => sum + a.remaining, 0);
+
+    // Current balance = remaining for selected month (or full fee if unpaid)
+    const selectedAlloc = allocs.find((a) => a.month === selectedMonth);
+    const currentBalance = selectedAlloc ? selectedAlloc.remaining : monthlyFee;
 
     return {
       previousBalance,
@@ -315,43 +375,12 @@ function ReceivePartnerPaymentModal({
   const receivedAmount = parseFloat(receiveAmount) || 0;
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
 
-  // ✅ FIX: use p.customer to match formatted field
-  const existingMonthPayment =
-    customerDetails && selectedMonth
-      ? payments.find(
-          (p) =>
-            p.customer === customerDetails.name &&
-            p.month === selectedMonth &&
-            !p.isNoPayment
-        )
-      : null;
-
-  const isDuplicateMonth = !!existingMonthPayment;
-
-  const packageDetails = (() => {
-    if (!customerDetails) return null;
-    const pkgName =
-      typeof customerDetails.package === 'string'
-        ? customerDetails.package
-        : customerDetails.package?.name;
-    if (!pkgName) return null;
-
-    const pkg = packages.find((p: any) => p.name === pkgName);
-    if (!pkg) return null;
-
-    const selling = parseFloat(String(pkg.sellingPrice)) || 0;
-    const cost = parseFloat(String(pkg.purchasePrice)) || 0;
-    const profit = selling - cost;
-    const profitRatio = selling > 0 ? profit / selling : 0;
-
-    return { name: pkg.name, selling, cost, profit, profitRatio };
-  })();
-
-  const liveProfit = packageDetails
-    ? Math.round(receivedAmount * packageDetails.profitRatio)
-    : 0;
-
-  const fullMonthProfit = packageDetails ? packageDetails.profit : 0;
+  // ✅ Only block if the selected month is FULLY paid
+  const selectedAllocation = (monthlySummary || []).find(
+    (a) => a.month === selectedMonth
+  );
+  const isDuplicateMonth = !!selectedAllocation?.isPaid;
+  const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
 
   const handleSubmit = async () => {
     if (!selectedArea) {
@@ -373,7 +402,7 @@ function ReceivePartnerPaymentModal({
 
     if (isDuplicateMonth) {
       toast.error(
-        `${customerDetails?.name} has already paid for ${selectedMonth}. Duplicate entries are not allowed.`
+        `${customerDetails?.name} has already fully paid for ${selectedMonth}. Duplicate entries are not allowed.`
       );
       return;
     }
@@ -387,7 +416,6 @@ function ReceivePartnerPaymentModal({
         return;
       }
 
-      // ✅ Send to /partner-payments with `partner` field (backend expects it)
       const payload = {
         partner: customerObj.name,
         month: selectedMonth,
@@ -502,14 +530,26 @@ function ReceivePartnerPaymentModal({
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
               <XCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">
-                  Already paid for {selectedMonth}
-                </p>
+                <p className="font-semibold">Already fully paid for {selectedMonth}</p>
                 <p className="text-xs mt-0.5">
-                  {customerDetails?.name} already has a payment of Rs.{' '}
-                  {(existingMonthPayment?.amount || 0).toLocaleString()} recorded
-                  for {selectedMonth} (Receipt: {existingMonthPayment?.receipt}).
+                  {customerDetails?.name} has already fully paid Rs.{' '}
+                  {alreadyPaidThisMonth.toLocaleString()} for {selectedMonth}.
                   Duplicate entries are not allowed.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isDuplicateMonth && alreadyPaidThisMonth > 0 && (
+            <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300 text-sm flex items-start gap-2">
+              <Clock className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold">Partial payment already recorded</p>
+                <p className="text-xs mt-0.5">
+                  {customerDetails?.name} has paid Rs.{' '}
+                  {alreadyPaidThisMonth.toLocaleString()} for {selectedMonth}. You
+                  can record the remaining Rs.{' '}
+                  {(selectedAllocation?.remaining || 0).toLocaleString()}.
                 </p>
               </div>
             </div>
@@ -838,7 +878,7 @@ export default function ReceivePartnerPaymentPage() {
             id: payment._id,
             receipt: payment.receiptNo || 'N/A',
             userId: displayUserId,
-            customer: partnerName,     // ✅ keep field name `customer` for reuse
+            customer: partnerName,
             customerId: payment.partner?._id || '',
             month: payment.month || 'N/A',
             date: payment.paymentDate
@@ -929,17 +969,13 @@ export default function ReceivePartnerPaymentPage() {
     totalCollected > 0 ? Math.round((totalProfit / totalCollected) * 100) : 0;
 
   const now = new Date();
-  const monthsList = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
   const currentMonthIndex = now.getMonth();
   const currentYear = now.getFullYear();
 
   const isPastOrCurrentMonth = (monthStr: string) => {
     const [monthName, yearStr] = monthStr.split(' ');
     const year = parseInt(yearStr);
-    const monthIndex = monthsList.indexOf(monthName);
+    const monthIndex = MONTHS.indexOf(monthName);
 
     if (isNaN(year) || monthIndex === -1) return false;
 
@@ -950,7 +986,7 @@ export default function ReceivePartnerPaymentPage() {
   };
 
   const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
-  const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
+  const currentMonth = `${MONTHS[currentMonthIndex]} ${currentYear}`;
 
   customers.forEach((customer: any) => {
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
@@ -965,33 +1001,20 @@ export default function ReceivePartnerPaymentPage() {
       return;
     }
 
-    const monthPaidMap: Record<string, number> = {};
-    customerPayments.forEach((p: any) => {
-      if (!monthPaidMap[p.month]) monthPaidMap[p.month] = 0;
-      monthPaidMap[p.month] += parseFloat(String(p.amount)) || 0;
-    });
+    const allocs = allocatePayments(
+      monthlyFee,
+      customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+    );
 
-    const activeMonths = Object.keys(monthPaidMap);
-    const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
-    const totalExpected = monthlyFee * activeMonths.length;
+    const currentAlloc = allocs.find((a) => a.month === currentMonth);
 
-    if (totalPaid >= totalExpected) {
-      monthStatusCounts.paid += 1;
-      return;
+    if (currentAlloc) {
+      if (currentAlloc.isPaid) monthStatusCounts.paid += 1;
+      else if (currentAlloc.applied > 0) monthStatusCounts.partial += 1;
+      else monthStatusCounts.notpaid += 1;
+    } else {
+      monthStatusCounts.notpaid += 1;
     }
-
-    activeMonths.forEach((month) => {
-      const paid = monthPaidMap[month];
-      const remaining = monthlyFee - paid;
-
-      if (remaining <= 0) {
-        monthStatusCounts.paid += 1;
-      } else if (month === currentMonth) {
-        monthStatusCounts.partial += 1;
-      } else if (isPastOrCurrentMonth(month)) {
-        monthStatusCounts.notpaid += 1;
-      }
-    });
   });
 
   const paidCustomers = monthStatusCounts.paid;
@@ -1017,28 +1040,21 @@ export default function ReceivePartnerPaymentPage() {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
 
-    const monthPaidMap: Record<string, number> = {};
-    allCustomerPayments.forEach((p) => {
-      if (!monthPaidMap[p.month]) monthPaidMap[p.month] = 0;
-      monthPaidMap[p.month] += parseFloat(String(p.amount)) || 0;
-    });
+    const allocs = allocatePayments(
+      monthlyFee,
+      allCustomerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+    );
 
-    const activeMonths = Object.keys(monthPaidMap);
-    const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
-    const totalExpected = monthlyFee * activeMonths.length;
+    const thisMonth = allocs.find((a) => a.month === payment.month);
+    if (!thisMonth) {
+      return { status: 'partial', label: 'Partial', color: 'partial' };
+    }
 
-    if (totalPaid >= totalExpected) {
+    if (thisMonth.isPaid) {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
 
-    const paidForThisMonth = monthPaidMap[payment.month] || 0;
-    const remainingForThisMonth = monthlyFee - paidForThisMonth;
-
-    if (remainingForThisMonth <= 0) {
-      return { status: 'paid', label: 'Paid', color: 'paid' };
-    }
-
-    if (payment.month === currentMonth) {
+    if (thisMonth.applied > 0) {
       return { status: 'partial', label: 'Partial', color: 'partial' };
     }
 
