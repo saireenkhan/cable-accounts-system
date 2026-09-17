@@ -6,7 +6,6 @@ import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
 import {
   Bell,
-  Send,
   Search,
   RotateCcw,
   Phone,
@@ -54,6 +53,8 @@ interface RecoveryNotification {
   lastContact: string;
   nextFollowUp: string;
   message: string;
+  lastPaidAmount: number;   // ✅ NEW
+  lastPaidDate: string;     // ✅ NEW
   raw: any;
 }
 
@@ -99,24 +100,16 @@ const daysBetween = (a: any, b: any): number => {
 // ============================================================
 // ✅ WhatsApp helpers
 // ============================================================
-// Convert a Pakistani number like "0321-1234567" → "923211234567"
 function formatPhoneForWhatsApp(phone: string): string {
   if (!phone) return '';
-  // Strip everything except digits
   let digits = phone.replace(/\D/g, '');
-
-  // Remove leading zeros
   digits = digits.replace(/^0+/, '');
-
-  // If it doesn't start with 92, prefix it (assume Pakistan)
   if (!digits.startsWith('92')) {
     digits = '92' + digits;
   }
-
   return digits;
 }
 
-// Open WhatsApp Web/App with a pre-filled message
 function openWhatsApp(phone: string, message: string) {
   const formatted = formatPhoneForWhatsApp(phone);
   if (!formatted) {
@@ -201,6 +194,38 @@ function getCustomerNameFromPayment(payment: any): string {
 }
 
 // ============================================================
+// ✅ NEW: Find last paid info for a payment list
+// Returns the most recent non-no-payment payment (by paymentDate).
+// ============================================================
+function getLastPaidInfo(payments: any[]): {
+  amount: number;
+  date: string;
+} {
+  if (!payments.length) return { amount: 0, date: '' };
+
+  // Filter out "no payment" markers and any payment with amount <= 0
+  const paidOnly = payments.filter(
+    (p) => !p.isNoPayment && Number(p.amount || 0) > 0
+  );
+
+  if (!paidOnly.length) return { amount: 0, date: '' };
+
+  // Sort by paymentDate descending (fallback to createdAt)
+  const sorted = [...paidOnly].sort((a, b) => {
+    const da = toDate(a.paymentDate || a.createdAt)?.getTime() || 0;
+    const db = toDate(b.paymentDate || b.createdAt)?.getTime() || 0;
+    return db - da;
+  });
+
+  const latest = sorted[0];
+
+  return {
+    amount: Number(latest.amount || 0),
+    date: toDate(latest.paymentDate || latest.createdAt)?.toISOString() || '',
+  };
+}
+
+// ============================================================
 // Build notifications for customers
 // ============================================================
 const buildCustomerNotifications = (
@@ -229,17 +254,19 @@ const buildCustomerNotifications = (
     const status = effectiveStatus(shape);
     const isUpcoming = upcomingExpiry(shape);
 
-    const payments = customerPayments.filter(
-      (p) =>
-        getCustomerNameFromPayment(p) === (c.name || '').trim() &&
-        !p.isNoPayment
+    // ✅ Full payment list for this customer (used for allocation + last paid)
+    const allPayments = customerPayments.filter(
+      (p) => getCustomerNameFromPayment(p) === (c.name || '').trim()
     );
+
+    // Paid-only list (excludes "no payment" markers)
+    const paidPayments = allPayments.filter((p) => !p.isNoPayment);
 
     const monthlyFee = Number(c.monthlyFee || 0);
 
     const allocs = allocatePayments(
       monthlyFee,
-      payments.map((p) => ({ month: p.month, amount: p.amount }))
+      paidPayments.map((p) => ({ month: p.month, amount: p.amount }))
     );
 
     const totalShortfall = allocs.reduce((sum, a) => sum + a.remaining, 0);
@@ -252,7 +279,7 @@ const buildCustomerNotifications = (
       category = 'Expired';
     } else if (isUpcoming) {
       category = 'Upcoming Expiry';
-    } else if (payments.length === 0) {
+    } else if (paidPayments.length === 0) {
       category = 'Pending';
     } else if (totalShortfall > 0 && totalShortfall < monthlyFee * 2) {
       category = 'Partial';
@@ -274,6 +301,9 @@ const buildCustomerNotifications = (
         ? thisMonthRemaining
         : monthlyFee;
 
+    // ✅ Last paid info
+    const lastPaid = getLastPaidInfo(allPayments);
+
     result.push({
       id: `c-${c._id}`,
       customerName: c.name || 'Unknown',
@@ -290,6 +320,8 @@ const buildCustomerNotifications = (
       lastContact: c.updatedAt || new Date().toISOString(),
       nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString(),
       message: '',
+      lastPaidAmount: lastPaid.amount,   // ✅ NEW
+      lastPaidDate: lastPaid.date,       // ✅ NEW
       raw: c,
     });
   });
@@ -326,17 +358,17 @@ const buildPartnerNotifications = (
     const status = effectiveStatus(shape);
     const isUpcoming = upcomingExpiry(shape);
 
-    const payments = partnerPayments.filter(
-      (p) =>
-        getPartnerNameFromPayment(p) === (c.name || '').trim() &&
-        !p.isNoPayment
+    const allPayments = partnerPayments.filter(
+      (p) => getPartnerNameFromPayment(p) === (c.name || '').trim()
     );
+
+    const paidPayments = allPayments.filter((p) => !p.isNoPayment);
 
     const monthlyFee = Number(c.monthlyFee || 0);
 
     const allocs = allocatePayments(
       monthlyFee,
-      payments.map((p) => ({ month: p.month, amount: p.amount }))
+      paidPayments.map((p) => ({ month: p.month, amount: p.amount }))
     );
 
     const totalShortfall = allocs.reduce((sum, a) => sum + a.remaining, 0);
@@ -349,7 +381,7 @@ const buildPartnerNotifications = (
       category = 'Expired';
     } else if (isUpcoming) {
       category = 'Upcoming Expiry';
-    } else if (payments.length === 0) {
+    } else if (paidPayments.length === 0) {
       category = 'Pending';
     } else if (totalShortfall > 0 && totalShortfall < monthlyFee * 2) {
       category = 'Partial';
@@ -371,6 +403,8 @@ const buildPartnerNotifications = (
         ? thisMonthRemaining
         : monthlyFee;
 
+    const lastPaid = getLastPaidInfo(allPayments);
+
     result.push({
       id: `p-${c._id}`,
       customerName: c.name || 'Unknown',
@@ -387,6 +421,8 @@ const buildPartnerNotifications = (
       lastContact: c.updatedAt || new Date().toISOString(),
       nextFollowUp: new Date(Date.now() + 3 * 86400000).toISOString(),
       message: '',
+      lastPaidAmount: lastPaid.amount,
+      lastPaidDate: lastPaid.date,
       raw: c,
     });
   });
@@ -454,6 +490,7 @@ export default function RecoveryNotificationsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [messageDraft, setMessageDraft] = useState('');
+  const [accordionDrafts, setAccordionDrafts] = useState<Record<string, string>>({});
 
   const [filterCategory, setFilterCategory] = useState('All Categories');
   const [filterSource, setFilterSource] = useState('All Sources');
@@ -567,6 +604,23 @@ export default function RecoveryNotificationsPage() {
     return { pending, partial, expired, upcoming };
   }, [notifications]);
 
+  // ✅ NEW: Areas filtered by source (so Customer source shows only customer areas)
+  const uniqueAreas = useMemo(() => {
+    const relevant =
+      filterSource === 'All Sources'
+        ? notifications
+        : notifications.filter((n) => n.source === filterSource);
+
+    return Array.from(new Set(relevant.map((n) => n.area)))
+      .filter(Boolean)
+      .sort();
+  }, [notifications, filterSource]);
+
+  // ✅ Reset area filter when source changes (so we don't keep a stale selection)
+  useEffect(() => {
+    setFilterArea('All Areas');
+  }, [filterSource]);
+
   const filtered = useMemo(() => {
     return notifications.filter((n) => {
       const q = searchQuery.toLowerCase();
@@ -616,11 +670,6 @@ export default function RecoveryNotificationsPage() {
     if (currentPage > totalPages) setCurrentPage(totalPages);
   }, [currentPage, totalPages]);
 
-  const uniqueAreas = useMemo(
-    () => Array.from(new Set(notifications.map((n) => n.area))).sort(),
-    [notifications]
-  );
-
   const handleReset = () => {
     setSearchQuery('');
     setFilterCategory('All Categories');
@@ -630,37 +679,53 @@ export default function RecoveryNotificationsPage() {
     setCurrentPage(1);
   };
 
+  const persistMessage = (id: string, message: string) => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, message } : n))
+    );
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, message } : prev));
+  };
+
   const handleSaveMessage = () => {
     if (!selected) return;
     if (!messageDraft.trim()) {
       toast.error('Message cannot be empty');
       return;
     }
-    setNotifications((prev) =>
-      prev.map((n) =>
-        n.id === selected.id ? { ...n, message: messageDraft } : n
-      )
-    );
-    setSelected((prev) => (prev ? { ...prev, message: messageDraft } : prev));
+    persistMessage(selected.id, messageDraft);
     toast.success('Message saved');
   };
 
-  // ✅ NEW: Send WhatsApp instead of SMS
+  const handleAccordionSave = (n: RecoveryNotification) => {
+    const draft = accordionDrafts[n.id] ?? n.message ?? '';
+    if (!draft.trim()) {
+      toast.error('Message cannot be empty');
+      return;
+    }
+    persistMessage(n.id, draft);
+    toast.success('Message saved');
+  };
+
+  const handleAccordionWhatsApp = (n: RecoveryNotification) => {
+    const draft = accordionDrafts[n.id] ?? n.message ?? '';
+    if (!draft.trim()) {
+      toast.error('Please type a message before sending');
+      return;
+    }
+    persistMessage(n.id, draft);
+    const ok = openWhatsApp(n.contactNumber, draft);
+    if (ok) {
+      toast.success(`Opening WhatsApp for ${n.customerName}`);
+    }
+  };
+
   const handleSendWhatsApp = () => {
     if (!selected) return;
     if (!messageDraft.trim()) {
       toast.error('Please type a message before sending');
       return;
     }
-
-    // Save the message first
-    setNotifications((prev) =>
-      prev.map((n) =>
-        n.id === selected.id ? { ...n, message: messageDraft } : n
-      )
-    );
-    setSelected((prev) => (prev ? { ...prev, message: messageDraft } : prev));
-
+    persistMessage(selected.id, messageDraft);
     const ok = openWhatsApp(selected.contactNumber, messageDraft);
     if (ok) {
       toast.success(`Opening WhatsApp for ${selected.customerName}`);
@@ -856,7 +921,7 @@ export default function RecoveryNotificationsPage() {
                   {paginated.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400"
                       >
                         No notifications found matching your search.
@@ -945,7 +1010,7 @@ export default function RecoveryNotificationsPage() {
               </table>
             </div>
 
-            {/* ACCORDION (mobile/tablet) */}
+            {/* ACCORDION (mobile/tablet) — now with last paid info */}
             <div className="lg:hidden divide-y divide-gray-100 dark:divide-gray-700">
               {paginated.length === 0 ? (
                 <div className="px-4 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
@@ -954,11 +1019,21 @@ export default function RecoveryNotificationsPage() {
               ) : (
                 paginated.map((n) => {
                   const isOpen = selected?.id === n.id;
+                  const draft = accordionDrafts[n.id] ?? n.message ?? '';
+
                   return (
                     <div key={n.id}>
                       <button
                         type="button"
-                        onClick={() => setSelected(isOpen ? null : n)}
+                        onClick={() => {
+                          setSelected(isOpen ? null : n);
+                          if (!isOpen) {
+                            setAccordionDrafts((prev) => ({
+                              ...prev,
+                              [n.id]: n.message || '',
+                            }));
+                          }
+                        }}
                         className={cn(
                           'w-full text-left px-4 py-3 flex items-center justify-between gap-3 transition-colors',
                           isOpen
@@ -1012,6 +1087,7 @@ export default function RecoveryNotificationsPage() {
 
                       {isOpen && (
                         <div className="px-4 pb-4 pt-1 bg-purple-50/50 dark:bg-purple-900/10 space-y-3">
+                          {/* Detail grid — includes last paid */}
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             <MiniField label="Contact" value={n.contactNumber} />
                             <MiniField label="Due Date" value={formatDate(n.dueDate)} />
@@ -1023,43 +1099,62 @@ export default function RecoveryNotificationsPage() {
                               label="Remaining"
                               value={formatAmount(n.dueAmount)}
                             />
+                            {/* ✅ NEW */}
+                            <MiniField
+                              label="Last Paid"
+                              value={
+                                n.lastPaidAmount > 0
+                                  ? formatAmount(n.lastPaidAmount)
+                                  : 'N/A'
+                              }
+                            />
+                            <MiniField
+                              label="Last Paid On"
+                              value={
+                                n.lastPaidDate
+                                  ? formatDate(n.lastPaidDate)
+                                  : 'N/A'
+                              }
+                            />
                           </div>
 
                           <div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
-                              Message
-                            </p>
-                            <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed bg-white dark:bg-gray-900/50 rounded-lg p-3">
-                              {n.message || 'No message set. Open details to write one.'}
-                            </p>
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <div className="flex items-center gap-2">
+                                <MessageSquare className="h-3.5 w-3.5 text-gray-500" />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold">
+                                  Message
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleAccordionSave(n)}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-md transition-colors"
+                              >
+                                <Save className="h-3 w-3" />
+                                Save
+                              </button>
+                            </div>
+                            <textarea
+                              value={draft}
+                              onChange={(e) =>
+                                setAccordionDrafts((prev) => ({
+                                  ...prev,
+                                  [n.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Type your message here..."
+                              rows={4}
+                              className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none leading-relaxed"
+                            />
                           </div>
 
                           <div className="flex flex-wrap gap-2 pt-1">
                             <button
-                              onClick={() => {
-                                setSelected(n);
-                                handleSendWhatsApp();
-                              }}
+                              onClick={() => handleAccordionWhatsApp(n)}
                               className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
                             >
                               <MessageCircle className="h-4 w-4" />
                               WhatsApp
-                            </button>
-                            <button
-                              onClick={() =>
-                                toast.success(`Calling ${n.contactNumber}...`)
-                              }
-                              className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-                            >
-                              <Phone className="h-4 w-4" />
-                              Call
-                            </button>
-                            <button
-                              onClick={() => setSelected(n)}
-                              className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
-                            >
-                              <Edit className="h-4 w-4" />
-                              Update
                             </button>
                           </div>
                         </div>
@@ -1071,7 +1166,7 @@ export default function RecoveryNotificationsPage() {
             </div>
           </div>
 
-          {/* DETAILS PANEL */}
+          {/* DETAILS PANEL (xl+) */}
           {selected && (
             <div className="hidden xl:flex xl:col-span-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex-col">
               <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -1108,20 +1203,28 @@ export default function RecoveryNotificationsPage() {
                   value={formatAmount(selected.dueAmount)}
                   highlight
                 />
+                {/* ✅ NEW */}
+                <DetailRow
+                  label="Last Paid Amount"
+                  value={
+                    selected.lastPaidAmount > 0
+                      ? formatAmount(selected.lastPaidAmount)
+                      : 'N/A'
+                  }
+                />
+                <DetailRow
+                  label="Last Paid On"
+                  value={
+                    selected.lastPaidDate
+                      ? formatDate(selected.lastPaidDate)
+                      : 'N/A'
+                  }
+                />
                 <DetailRow label="Due Date" value={formatDate(selected.dueDate)} />
                 <DetailRow
                   label="Days Overdue"
                   value={`${selected.daysOverdue} days`}
                 />
-                <DetailRow
-                  label="Last Contact"
-                  value={formatDate(selected.lastContact)}
-                />
-                <DetailRow
-                  label="Next Follow-up"
-                  value={formatDate(selected.nextFollowUp)}
-                />
-
                 <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase">
@@ -1341,35 +1444,6 @@ function Th({
     >
       {children}
     </th>
-  );
-}
-
-function RowAction({
-  title,
-  color,
-  onClick,
-  children,
-}: {
-  title: string;
-  color: 'blue' | 'green' | 'purple';
-  onClick: (e: React.MouseEvent) => void;
-  children: React.ReactNode;
-}) {
-  const colorMap = {
-    blue: 'text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20',
-    green:
-      'text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20',
-    purple:
-      'text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20',
-  };
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={cn('p-1.5 rounded-lg transition-colors', colorMap[color])}
-    >
-      {children}
-    </button>
   );
 }
 

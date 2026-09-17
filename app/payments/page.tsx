@@ -54,8 +54,39 @@ const compareMonths = (a: string, b: string) => {
 };
 
 // ============================================================
+// ✅ Resolve a partner's area to its display name
+// Handles:
+//   - partner.area is a populated object { _id, name }
+//   - partner.area is a string name "Mateen Heaven 5H"
+//   - partner.area is an ObjectId string "6aa54e..."
+// ============================================================
+function resolveAreaName(
+  partnerArea: any,
+  areaLookup: Record<string, string>
+): string {
+  if (!partnerArea) return 'No Area';
+
+  // If it's an object with name
+  if (typeof partnerArea === 'object' && partnerArea.name) {
+    return partnerArea.name;
+  }
+
+  const asString = String(partnerArea).trim();
+
+  // If the string is in our lookup map, use the resolved name
+  if (areaLookup[asString]) return areaLookup[asString];
+
+  // If the string is an area name (not an ObjectId), return as-is
+  // ObjectId = 24 hex chars
+  const isObjectId = /^[a-fA-F0-9]{24}$/.test(asString);
+  if (!isObjectId) return asString;
+
+  // It's an ObjectId with no lookup match
+  return 'Unknown Area';
+}
+
+// ============================================================
 // ✅ CORE: allocate the ENTIRE payment pool oldest-first
-// Surplus from later months auto-covers earlier shortfalls.
 // ============================================================
 interface MonthAllocation {
   month: string;
@@ -68,24 +99,22 @@ interface MonthAllocation {
 
 function allocatePayments(
   monthlyFee: number,
-  paymentsForCustomer: { month: string; amount: number }[]
+  paymentsForPartner: { month: string; amount: number }[]
 ): MonthAllocation[] {
   if (!monthlyFee || monthlyFee <= 0) return [];
 
-  // Group payments by month
   const byMonth: Record<string, number> = {};
-  paymentsForCustomer.forEach((p) => {
+  paymentsForPartner.forEach((p) => {
     if (!p.month) return;
-    byMonth[p.month] = (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
+    byMonth[p.month] =
+      (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
   });
 
   const months = Object.keys(byMonth).sort(compareMonths);
   if (months.length === 0) return [];
 
-  // ✅ Total pool — treat all money as one bucket
   const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
 
-  // ✅ Allocate the pool strictly by chronological month order
   let pool = totalPool;
   const result: MonthAllocation[] = [];
 
@@ -232,6 +261,8 @@ function ReceivePartnerPaymentModal({
   customers,
   payments,
   packages,
+  areas,
+  areaLookup,
   fetchData,
 }: {
   isOpen: boolean;
@@ -240,6 +271,8 @@ function ReceivePartnerPaymentModal({
   customers: any[];
   payments: any[];
   packages: any[];
+  areas: any[];
+  areaLookup: Record<string, string>;
   fetchData: () => void;
 }) {
   const [selectedArea, setSelectedArea] = useState('');
@@ -254,30 +287,24 @@ function ReceivePartnerPaymentModal({
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
 
-  const getUniqueAreas = () => {
-    const areaSet = new Set<string>();
-    customers.forEach((c: any) => {
-      const areaName = c.area?.name || c.area || 'No Area';
-      areaSet.add(areaName);
-    });
-    return Array.from(areaSet).sort();
-  };
+  // ✅ Build area options from the `/partner-areas` endpoint, NOT from partners
+  const areaOptions = areas
+    .map((a: any) => ({
+      label: a.name || a.areaName || String(a._id),
+      value: a.name || a.areaName || String(a._id),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
+  // ✅ Filter partners by resolved area name
   const getFilteredCustomers = () => {
     if (!selectedArea) return [];
     return customers.filter((c: any) => {
-      const customerArea = c.area?.name || c.area || 'No Area';
-      return customerArea === selectedArea;
+      const resolved = resolveAreaName(c.area, areaLookup);
+      return resolved === selectedArea;
     });
   };
 
-  const uniqueAreas = getUniqueAreas();
   const filteredCustomers = getFilteredCustomers();
-
-  const areaOptions = uniqueAreas.map((a) => ({
-    label: a,
-    value: a,
-  }));
 
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.partnerId || c.code || 'N/A';
@@ -337,12 +364,9 @@ function ReceivePartnerPaymentModal({
 
   const getPackageName = () => {
     if (!customerDetails?.package) return 'No package assigned';
-    if (typeof customerDetails.package === 'string') {
-      return customerDetails.package;
-    }
-    if (typeof customerDetails.package === 'object') {
+    if (typeof customerDetails.package === 'string') return customerDetails.package;
+    if (typeof customerDetails.package === 'object')
       return customerDetails.package.name || 'Unknown Package';
-    }
     return 'No package assigned';
   };
 
@@ -354,12 +378,10 @@ function ReceivePartnerPaymentModal({
     const monthlyFee = customerDetails.monthlyFee || 0;
     const allocs = monthlySummary || [];
 
-    // Previous balance = unpaid months STRICTLY BEFORE the selected month
     const previousBalance = allocs
       .filter((a) => compareMonths(a.month, selectedMonth) < 0 && !a.isPaid)
       .reduce((sum, a) => sum + a.remaining, 0);
 
-    // Current balance = remaining for selected month (or full fee if unpaid)
     const selectedAlloc = allocs.find((a) => a.month === selectedMonth);
     const currentBalance = selectedAlloc ? selectedAlloc.remaining : monthlyFee;
 
@@ -375,7 +397,6 @@ function ReceivePartnerPaymentModal({
   const receivedAmount = parseFloat(receiveAmount) || 0;
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
 
-  // ✅ Only block if the selected month is FULLY paid
   const selectedAllocation = (monthlySummary || []).find(
     (a) => a.month === selectedMonth
   );
@@ -383,22 +404,11 @@ function ReceivePartnerPaymentModal({
   const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
 
   const handleSubmit = async () => {
-    if (!selectedArea) {
-      toast.error('Please select an area first');
-      return;
-    }
-    if (!selectedCustomerId) {
-      toast.error('Please select a User');
-      return;
-    }
-    if (!selectedMonth) {
-      toast.error('Please select a billing month');
-      return;
-    }
-    if (!receiveAmount || parseFloat(receiveAmount) <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
+    if (!selectedArea) return toast.error('Please select an area first');
+    if (!selectedCustomerId) return toast.error('Please select a User');
+    if (!selectedMonth) return toast.error('Please select a billing month');
+    if (!receiveAmount || parseFloat(receiveAmount) <= 0)
+      return toast.error('Please enter a valid amount');
 
     if (isDuplicateMonth) {
       toast.error(
@@ -425,8 +435,6 @@ function ReceivePartnerPaymentModal({
         remarks: notes,
       };
 
-      console.log('📤 Sending User payment payload:', payload);
-
       const response = await api.post('/partner-payments', payload);
 
       if (response.data.success) {
@@ -440,7 +448,7 @@ function ReceivePartnerPaymentModal({
         toast.error(response.data.message || 'Failed to record payment');
       }
     } catch (error: any) {
-      console.error('❌ Error recording User payment:', error);
+      console.error('❌ Error recording payment:', error);
       toast.error(error.response?.data?.message || 'Failed to record payment');
     } finally {
       setIsSubmitting(false);
@@ -448,18 +456,9 @@ function ReceivePartnerPaymentModal({
   };
 
   const handleNoPayment = async () => {
-    if (!selectedArea) {
-      toast.error('Please select an area first');
-      return;
-    }
-    if (!selectedCustomerId) {
-      toast.error('Please select a User');
-      return;
-    }
-    if (!selectedMonth) {
-      toast.error('Please select a billing month');
-      return;
-    }
+    if (!selectedArea) return toast.error('Please select an area first');
+    if (!selectedCustomerId) return toast.error('Please select a User');
+    if (!selectedMonth) return toast.error('Please select a billing month');
 
     setIsSubmittingNoPayment(true);
     try {
@@ -480,8 +479,6 @@ function ReceivePartnerPaymentModal({
         isNoPayment: true,
       };
 
-      console.log('📤 Sending partner no-payment payload:', payload);
-
       const response = await api.post('/partner-payments', payload);
 
       if (response.data.success) {
@@ -493,7 +490,7 @@ function ReceivePartnerPaymentModal({
         toast.error(response.data.message || 'Failed to record');
       }
     } catch (error: any) {
-      console.error('❌ Error recording User no-payment:', error);
+      console.error('❌ Error recording no-payment:', error);
       toast.error(error.response?.data?.message || 'Failed to record');
     } finally {
       setIsSubmittingNoPayment(false);
@@ -511,7 +508,7 @@ function ReceivePartnerPaymentModal({
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-green-600" />
-              Receive Payment
+              Receive Partner Payment
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Select area, then User ID to record payment
@@ -840,6 +837,8 @@ export default function ReceivePartnerPaymentPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
+  const [areaLookup, setAreaLookup] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchAllData();
@@ -854,11 +853,26 @@ export default function ReceivePartnerPaymentPage() {
         return;
       }
 
-      const [paymentsRes, customersRes, packagesRes] = await Promise.all([
+      const [paymentsRes, customersRes, packagesRes, areasRes] = await Promise.all([
         api.get('/partner-payments'),
         api.get('/partners?limit=1000'),
         api.get('/packages'),
+        api.get('/partner-areas'),
       ]);
+
+      // ✅ Build area lookup map: { "6aa54e..." -> "Mateen Heaven 5H", "Mateen Heaven 5H" -> "Mateen Heaven 5H" }
+      const lookup: Record<string, string> = {};
+      if (areasRes.data.success) {
+        const areaList = areasRes.data.areas || [];
+        areaList.forEach((a: any) => {
+          const id = String(a._id);
+          const name = a.name || a.areaName || id;
+          lookup[id] = name;
+          lookup[name] = name;
+        });
+        setAreas(areaList);
+      }
+      setAreaLookup(lookup);
 
       if (paymentsRes.data.success) {
         const partnerIdMap: Record<string, string> = {};
@@ -1137,7 +1151,7 @@ export default function ReceivePartnerPaymentPage() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <CreditCard className="h-6 w-6 text-green-600" />
-              Receive User Payments
+              Receive Partner Payments
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Select area, then User ID to record payment
@@ -1286,6 +1300,8 @@ export default function ReceivePartnerPaymentPage() {
           customers={customers}
           payments={payments}
           packages={packages}
+          areas={areas}
+          areaLookup={areaLookup}
           fetchData={fetchAllData}
         />
       </div>
