@@ -850,7 +850,6 @@ export default function RecoveryNotificationsPage() {
                     <Th>Due Amount</Th>
                     <Th>Due Date</Th>
                     <Th>Category</Th>
-                    <Th align="right">Action</Th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -938,42 +937,6 @@ export default function RecoveryNotificationsPage() {
                           >
                             {n.category}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <RowAction
-                              title="Call"
-                              color="blue"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelected(n);
-                                toast.success(`Calling ${n.customerName}...`);
-                              }}
-                            >
-                              <Phone className="h-4 w-4" />
-                            </RowAction>
-                            <RowAction
-                              title="Send WhatsApp"
-                              color="green"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelected(n);
-                              }}
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                            </RowAction>
-                            <RowAction
-                              title="Edit"
-                              color="purple"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelected(n);
-                                toast.success(`Editing ${n.customerName}`);
-                              }}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </RowAction>
-                          </div>
                         </td>
                       </tr>
                     ))
@@ -1208,20 +1171,6 @@ export default function RecoveryNotificationsPage() {
                 >
                   <MessageCircle className="h-4 w-4" />
                   Send WhatsApp
-                </button>
-                <button
-                  onClick={handleCall}
-                  className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Phone className="h-4 w-4" />
-                  Call
-                </button>
-                <button
-                  onClick={handleUpdate}
-                  className="flex-1 min-w-[100px] flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <Check className="h-4 w-4" />
-                  Update
                 </button>
               </div>
             </div>

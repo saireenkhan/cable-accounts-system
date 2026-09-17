@@ -54,8 +54,42 @@ const compareMonths = (a: string, b: string) => {
 };
 
 // ============================================================
+// ✅ Resolve a customer's area to its display name
+// Handles:
+//   - customer.area is a populated object { _id, name }
+//   - customer.area is a string name "Mateen Heaven 5H"
+//   - customer.area is an ObjectId string "6aa54e..."
+// ============================================================
+function resolveAreaName(
+  customerArea: any,
+  areaLookup: Record<string, string>
+): string {
+  if (!customerArea) return 'No Area';
+
+  // If it's an object with name
+  if (typeof customerArea === 'object' && customerArea.name) {
+    return customerArea.name;
+  }
+
+  const asString = String(customerArea).trim();
+
+  // If the string looks like a valid area name in our lookup, use it
+  if (areaLookup[asString]) return areaLookup[asString];
+
+  // If the string is an ObjectId and we have a lookup entry for it
+  if (areaLookup[asString]) return areaLookup[asString];
+
+  // If the string is an area name (not an ObjectId), return as-is
+  // ObjectId = 24 hex chars
+  const isObjectId = /^[a-fA-F0-9]{24}$/.test(asString);
+  if (!isObjectId) return asString;
+
+  // It's an ObjectId with no lookup match
+  return 'Unknown Area';
+}
+
+// ============================================================
 // ✅ CORE: allocate the ENTIRE payment pool oldest-first
-// Surplus from later months auto-covers earlier shortfalls.
 // ============================================================
 interface MonthAllocation {
   month: string;
@@ -81,10 +115,8 @@ function allocatePayments(
   const months = Object.keys(byMonth).sort(compareMonths);
   if (months.length === 0) return [];
 
-  // Total pool — treat all money as one bucket
   const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
 
-  // Allocate strictly by chronological month order
   let pool = totalPool;
   const result: MonthAllocation[] = [];
 
@@ -231,6 +263,8 @@ function ReceivePaymentModal({
   customers,
   payments,
   packages,
+  areas,
+  areaLookup,
   fetchData,
 }: {
   isOpen: boolean;
@@ -239,6 +273,8 @@ function ReceivePaymentModal({
   customers: any[];
   payments: any[];
   packages: any[];
+  areas: any[];
+  areaLookup: Record<string, string>;
   fetchData: () => void;
 }) {
   const [selectedArea, setSelectedArea] = useState('');
@@ -253,30 +289,24 @@ function ReceivePaymentModal({
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
 
-  const getUniqueAreas = () => {
-    const areaSet = new Set<string>();
-    customers.forEach((c: any) => {
-      const areaName = c.area?.name || c.area || 'No Area';
-      areaSet.add(areaName);
-    });
-    return Array.from(areaSet).sort();
-  };
+  // ✅ Build area options from the `/areas` endpoint, NOT from customers
+  const areaOptions = areas
+    .map((a: any) => ({
+      label: a.name || a.areaName || String(a._id),
+      value: a.name || a.areaName || String(a._id),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
+  // ✅ Filter customers by resolved area name
   const getFilteredCustomers = () => {
     if (!selectedArea) return [];
     return customers.filter((c: any) => {
-      const customerArea = c.area?.name || c.area || 'No Area';
-      return customerArea === selectedArea;
+      const resolved = resolveAreaName(c.area, areaLookup);
+      return resolved === selectedArea;
     });
   };
 
-  const uniqueAreas = getUniqueAreas();
   const filteredCustomers = getFilteredCustomers();
-
-  const areaOptions = uniqueAreas.map((a) => ({
-    label: a,
-    value: a,
-  }));
 
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.customerId || c.code || 'N/A';
@@ -369,7 +399,6 @@ function ReceivePaymentModal({
   const receivedAmount = parseFloat(receiveAmount) || 0;
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
 
-  // ✅ Only block if the selected month is FULLY paid
   const selectedAllocation = (monthlySummary || []).find(
     (a) => a.month === selectedMonth
   );
@@ -810,6 +839,8 @@ export default function ReceivePaymentPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
+  const [areaLookup, setAreaLookup] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchAllData();
@@ -824,11 +855,26 @@ export default function ReceivePaymentPage() {
         return;
       }
 
-      const [paymentsRes, customersRes, packagesRes] = await Promise.all([
+      const [paymentsRes, customersRes, packagesRes, areasRes] = await Promise.all([
         api.get('/payments'),
         api.get('/customers?limit=1000'),
         api.get('/packages'),
+        api.get('/areas'),
       ]);
+
+      // ✅ Build area lookup map: { "6aa54e..." -> "Mateen Heaven 5H", "Mateen Heaven 5H" -> "Mateen Heaven 5H" }
+      const lookup: Record<string, string> = {};
+      if (areasRes.data.success) {
+        const areaList = areasRes.data.areas || [];
+        areaList.forEach((a: any) => {
+          const id = String(a._id);
+          const name = a.name || a.areaName || id;
+          lookup[id] = name;
+          lookup[name] = name;
+        });
+        setAreas(areaList);
+      }
+      setAreaLookup(lookup);
 
       if (paymentsRes.data.success) {
         const customerIdMap: Record<string, string> = {};
@@ -1256,6 +1302,8 @@ export default function ReceivePaymentPage() {
           customers={customers}
           payments={payments}
           packages={packages}
+          areas={areas}
+          areaLookup={areaLookup}
           fetchData={fetchAllData}
         />
       </div>
