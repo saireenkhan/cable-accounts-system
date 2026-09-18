@@ -778,3 +778,84 @@
 {"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-17T07:09:19.502Z"}
 {"level":"info","message":"📡 Environment: development","timestamp":"2026-09-17T07:09:19.506Z"}
 {"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-17T07:09:20.063Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-17T10:45:56.388Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-17T10:45:56.414Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-17T10:45:57.158Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T05:33:51.895Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T05:33:51.898Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T05:33:52.624Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T05:47:41.756Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T05:47:41.760Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T05:47:42.438Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:02:58.386Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:02:58.391Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:02:59.210Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:03:09.483Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:03:09.488Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:03:10.115Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:03:45.362Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:03:45.367Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:03:45.982Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:03:51.816Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:03:51.820Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:03:52.423Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:04:25.566Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:04:25.571Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:04:26.212Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:04:33.852Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:04:33.856Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:04:34.460Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:06:06.224Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:06:06.229Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:06:06.878Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:06:23.146Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:06:23.149Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:06:23.755Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:07:16.152Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:07:16.156Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:07:16.859Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:07:24.388Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:07:24.391Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:07:24.996Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:07:59.362Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:07:59.367Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:08:00.035Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:08:04.542Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:08:04.545Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:08:05.175Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:09:21.487Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:09:21.491Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:09:22.292Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:09:28.100Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:09:28.103Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:09:28.736Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:10:25.722Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:10:25.726Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:10:26.340Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:14:36.646Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:14:36.650Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:14:37.339Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:15:18.220Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:15:18.226Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:15:18.824Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:15:41.872Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:15:41.878Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:15:42.581Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:16:09.210Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:16:09.216Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:16:09.823Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:16:14.906Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:16:14.910Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:16:15.543Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:16:31.092Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:16:31.096Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:16:31.754Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:17:15.716Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:17:15.720Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:17:16.295Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:17:21.458Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:17:21.462Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:17:22.088Z"}
+{"level":"info","message":"🚀 Server running on port 5000","timestamp":"2026-09-18T07:18:10.911Z"}
+{"level":"info","message":"📡 Environment: development","timestamp":"2026-09-18T07:18:10.916Z"}
+{"level":"info","message":"✅ MongoDB Connected: ac-wofqtyj-shard-00-00.9f1a3ua.mongodb.net","timestamp":"2026-09-18T07:18:11.490Z"}

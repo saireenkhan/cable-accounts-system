@@ -304,7 +304,6 @@ exports.bulkUpload = async (req, res) => {
     cleanupFile(filePath);
   }
 };
-
 // ============================================================
 // PARTNER BULK UPLOAD
 // POST /api/partners/bulk-upload
@@ -328,6 +327,15 @@ exports.bulkUploadPartners = async (req, res) => {
       });
     }
 
+    // ✅ NEW — REQUIRED partner
+    const selectedPartner = String(req.body.partner || '').trim();
+    if (!selectedPartner) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select a partner before uploading',
+      });
+    }
+
     // Verify partner area exists
     const areaDoc = await PartnerArea.findOne({ name: selectedArea });
     if (!areaDoc) {
@@ -342,6 +350,7 @@ exports.bulkUploadPartners = async (req, res) => {
     console.log('📋 Partner CSV headers:', headers);
     console.log('📊 Partner CSV rows:', rows.length);
     console.log('📍 Target partner area:', selectedArea);
+    console.log('📍 Target partner:', selectedPartner);   // ✅ debug
 
     const headerCheck = validateHeaders(headers);
     if (!headerCheck.ok) {
@@ -363,31 +372,30 @@ exports.bulkUploadPartners = async (req, res) => {
     const errors = [];
     const duplicateIds = [];
 
-// ✅ Check BOTH collections for global uniqueness
-const existingIds = new Set();
+    // ✅ Check BOTH collections for global uniqueness
+    const existingIds = new Set();
 
-const [existingPartnerDocs, existingCustomerDocs] = await Promise.all([
-  Partner.find({}, { partnerId: 1 }).lean(),
-  Customer.find({}, { customerId: 1 }).lean(),
-]);
+    const [existingPartnerDocs, existingCustomerDocs] = await Promise.all([
+      Partner.find({}, { partnerId: 1 }).lean(),
+      Customer.find({}, { customerId: 1 }).lean(),
+    ]);
 
-existingPartnerDocs.forEach((d) =>
-  existingIds.add(String(d.partnerId).trim().toUpperCase())
-);
+    existingPartnerDocs.forEach((d) =>
+      existingIds.add(String(d.partnerId).trim().toUpperCase())
+    );
 
-existingCustomerDocs.forEach((d) => {
-  const cid = String(d.customerId).trim().toUpperCase();
-  if (cid) existingIds.add(cid);
-});
+    existingCustomerDocs.forEach((d) => {
+      const cid = String(d.customerId).trim().toUpperCase();
+      if (cid) existingIds.add(cid);
+    });
 
-// Keep a set of customer IDs to distinguish the conflict type later
-const customerIdSet = new Set(
-  existingCustomerDocs
-    .map((d) => String(d.customerId).trim().toUpperCase())
-    .filter(Boolean)
-);
+    const customerIdSet = new Set(
+      existingCustomerDocs
+        .map((d) => String(d.customerId).trim().toUpperCase())
+        .filter(Boolean)
+    );
 
-const seenInFile = new Set();
+    const seenInFile = new Set();
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -406,19 +414,19 @@ const seenInFile = new Set();
         const partnerId = String(row.customerId).trim();
         const partnerIdUpper = partnerId.toUpperCase();
 
-// Duplicate check — already in DB (either collection)
-if (existingIds.has(partnerIdUpper)) {
-  const conflictType = customerIdSet.has(partnerIdUpper)
-    ? 'Customer'
-    : 'Partner';
+        // Duplicate check — already in DB (either collection)
+        if (existingIds.has(partnerIdUpper)) {
+          const conflictType = customerIdSet.has(partnerIdUpper)
+            ? 'Customer'
+            : 'Partner';
 
-  duplicateIds.push(partnerId);
-  errors.push(
-    `Row ${rowNum}: ID "${partnerId}" already exists as a ${conflictType}`
-  );
-  skipped.push(rowNum);
-  continue;
-}
+          duplicateIds.push(partnerId);
+          errors.push(
+            `Row ${rowNum}: ID "${partnerId}" already exists as a ${conflictType}`
+          );
+          skipped.push(rowNum);
+          continue;
+        }
 
         if (seenInFile.has(partnerIdUpper)) {
           duplicateIds.push(partnerId);
@@ -461,12 +469,14 @@ if (existingIds.has(partnerIdUpper)) {
 
         const expiryDate = addOneMonth(activationDate);
 
+        // ✅ doc now includes `partner`
         const doc = {
           partnerId,
           name: String(row.name).trim(),
           phone: normalizePhone(row.phone),
           address: String(row.address).trim(),
           area: selectedArea,
+          partner: selectedPartner,   // ✅ NEW
           package: pkg,
           discount: Math.max(0, discount),
           monthlyFee: Math.max(0, monthlyFee),
@@ -495,6 +505,7 @@ if (existingIds.has(partnerIdUpper)) {
 
     console.log(`\n📊 Partner bulk upload summary:`);
     console.log(`   Area:       "${selectedArea}"`);
+    console.log(`   Partner:    "${selectedPartner}"`);   // ✅ debug
     console.log(`   Total rows: ${rows.length}`);
     console.log(`   Inserted:   ${inserted.length}`);
     console.log(`   Skipped:    ${skipped.length}`);
@@ -503,6 +514,7 @@ if (existingIds.has(partnerIdUpper)) {
     res.json({
       success: true,
       area: selectedArea,
+      partner: selectedPartner,   // ✅ NEW
       total: rows.length,
       inserted: inserted.length,
       skipped: skipped.length,

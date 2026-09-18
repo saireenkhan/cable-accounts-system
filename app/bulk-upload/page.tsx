@@ -120,6 +120,12 @@ export default function BulkUploadPage() {
   const [selectedArea, setSelectedArea] = useState('');
   const [areas, setAreas] = useState<any[]>([]);
   const [areasLoading, setAreasLoading] = useState(true);
+
+  // ✅ NEW — partner list (only used when target === 'partners')
+  const [partnerList, setPartnerList] = useState<any[]>([]);
+  const [partnerListLoading, setPartnerListLoading] = useState(true);
+  const [selectedPartner, setSelectedPartner] = useState('');
+
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
@@ -129,10 +135,11 @@ export default function BulkUploadPage() {
   // ✅ Compute sample on every render
   const SAMPLE_CSV = getSampleCSV(target);
 
-  // ✅ Reset file + result when target changes
+  // ✅ Reset file + result + partner when target changes
   useEffect(() => {
     setFile(null);
     setResult(null);
+    setSelectedPartner('');
   }, [target]);
 
   // ✅ Fetch areas based on target
@@ -155,6 +162,25 @@ export default function BulkUploadPage() {
     };
     fetchAreas();
   }, [target]);
+
+  // ✅ NEW — fetch master partner list (only for partners target)
+  useEffect(() => {
+    const fetchPartnerList = async () => {
+      setPartnerListLoading(true);
+      try {
+        const res = await api.get('/partners-list');
+        if (res.data.success) {
+          setPartnerList(res.data.partners || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch partner list:', err);
+        // Non-fatal — leave partner list empty
+      } finally {
+        setPartnerListLoading(false);
+      }
+    };
+    fetchPartnerList();
+  }, []);
 
   // ✅ Download sample via API
   const handleDownloadSample = () => {
@@ -209,6 +235,10 @@ export default function BulkUploadPage() {
       toast.error('Please select an area first');
       return;
     }
+    if (target === 'partners' && !selectedPartner) {
+      toast.error('Please select a partner first');
+      return;
+    }
     if (!file) {
       toast.error('Please select a file first');
       return;
@@ -221,6 +251,11 @@ export default function BulkUploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('area', selectedArea);
+
+      // ✅ NEW — send partner only when target is partners
+      if (target === 'partners') {
+        formData.append('partner', selectedPartner);
+      }
 
       const endpoint =
         target === 'customers'
@@ -245,7 +280,7 @@ export default function BulkUploadPage() {
         ? data.errors.map((e: any) => normalizeError(e))
         : [];
 
-      // ✅ Extract duplicates from errors if backend didn't send separately
+      // ✅ Extract duplicates from errors
       const dupFromErrors = normalizedErrors
         .filter((e) => e.type === 'duplicate' && e.id)
         .map((e) => e.id as string);
@@ -315,7 +350,7 @@ export default function BulkUploadPage() {
   const areaLabel = target === 'customers' ? 'Area' : 'Partner Area';
   const areaRoute = target === 'customers' ? '/areas' : '/partner-areas';
 
-  // ✅ Separate errors by type (simplified — no union checks needed)
+  // ✅ Separate errors by type
   const duplicateErrors =
     result?.errors.filter((e) => e.type === 'duplicate') || [];
   const validationErrors =
@@ -498,17 +533,100 @@ export default function BulkUploadPage() {
           )}
         </div>
 
+        {/* ✅ NEW — STEP 1B: PARTNER SELECTOR (only for partners) */}
+        {target === 'partners' && (
+          <div
+            className={cn(
+              'rounded-xl shadow-sm border p-5 transition-all',
+              selectedPartner
+                ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800'
+                : 'bg-white dark:bg-gray-800 border-cyan-300 dark:border-cyan-800 ring-2 ring-cyan-500/20'
+            )}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <div
+                className={cn(
+                  'h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0',
+                  selectedPartner
+                    ? 'bg-green-600 text-white'
+                    : 'bg-cyan-600 text-white'
+                )}
+              >
+                {selectedPartner ? <Check className="h-4 w-4" /> : '1B'}
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
+                  <Handshake className="h-4 w-4 text-cyan-600" />
+                  Select Partner
+                  <span className="text-red-500">*</span>
+                </h2>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Required — every imported partner will be linked to this partner
+                </p>
+              </div>
+            </div>
+
+            {partnerListLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading partners...
+              </div>
+            ) : partnerList.length === 0 ? (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">No partners found</p>
+                  <p className="text-xs mt-1">
+                    Please add partners on the{' '}
+                    <a href="/partners-list" className="underline font-medium">
+                      Partners page
+                    </a>{' '}
+                    first, then come back here.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <select
+                value={selectedPartner}
+                onChange={(e) => setSelectedPartner(e.target.value)}
+                className={cn(
+                  'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-colors',
+                  selectedPartner
+                    ? 'border-green-500 dark:border-green-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500/50'
+                    : 'border-cyan-500 dark:border-cyan-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50'
+                )}
+              >
+                <option value="">-- Select Partner --</option>
+                {partnerList.map((p: any) => (
+                  <option key={p._id} value={p.name}>
+                    {p.partnerId ? `${p.partnerId} - ${p.name}` : p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {selectedPartner && (
+              <div className="mt-3 p-3 bg-green-100 dark:bg-green-950/40 border border-green-300 dark:border-green-800 rounded-lg flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                <p className="text-sm text-green-800 dark:text-green-300">
+                  All imported partners will be linked to:{' '}
+                  <strong>{selectedPartner}</strong>
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* REST OF PAGE */}
-        {!selectedArea ? (
+        {(!selectedArea || (target === 'partners' && !selectedPartner)) ? (
           <div className="bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
             <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 dark:text-gray-400 font-medium">
-              Select a{areaLabel === 'Area' ? 'n' : ''} {areaLabel.toLowerCase()} above to continue
+              Select {target === 'partners' ? 'a Partner Area and Partner' : `an ${areaLabel.toLowerCase()}`} above to continue
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
               The CSV format instructions, sample, and upload will appear here
-              once {areaLabel.toLowerCase() === 'area' ? 'an' : 'a'}{' '}
-              {areaLabel.toLowerCase()} is chosen.
+              once the required fields are filled.
             </p>
           </div>
         ) : (
@@ -570,6 +688,11 @@ export default function BulkUploadPage() {
                     <li>
                       <strong>{areaLabel} is chosen above</strong> — not in the CSV
                     </li>
+                    {target === 'partners' && (
+                      <li>
+                        <strong>Partner is chosen above</strong> — not in the CSV
+                      </li>
+                    )}
                     <li>
                       <strong>Optional:</strong> package, discount, monthlyFee,
                       status, activationDate
@@ -808,7 +931,12 @@ export default function BulkUploadPage() {
               <div className="flex justify-end gap-3 mt-4">
                 <button
                   onClick={handleUpload}
-                  disabled={!file || !selectedArea || isUploading}
+                  disabled={
+                    !file ||
+                    !selectedArea ||
+                    (target === 'partners' && !selectedPartner) ||
+                    isUploading
+                  }
                   className={cn(
                     'flex items-center gap-2 px-6 py-2 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
                     target === 'customers'

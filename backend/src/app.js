@@ -72,9 +72,14 @@ app.use(
 );
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use('/api', limiter);
+// Apply rate limit everywhere except the WhatsApp webhook.
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/whatsapp/webhook')) return next();
+  return limiter(req, res, next);
+});
 
 // Routes
+app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
 app.use('/api/partners-list', require('./routes/partnerListRoutes'));
 app.use('/api/partner-payments', require('./routes/partnerPaymentRoutes'));
 app.use('/api/auth', authRoutes);

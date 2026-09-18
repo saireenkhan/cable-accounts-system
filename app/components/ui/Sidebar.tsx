@@ -8,7 +8,7 @@ import {
   Users,
   UserRoundPlus,
   Bell,
-  DollarSign,
+   MessageCircle, 
    Handshake,
   HomeIcon,
   MapPin,
@@ -125,6 +125,7 @@ const menuItems: MenuItem[] = [
       { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
       { label: 'Bulk Upload', href: '/bulk-upload', icon: <Upload className="h-4 w-4" /> },
        { label: 'Add Partner', href: '/create-partner', icon: < UserRoundPlus className="h-4 w-4" /> },
+        { label: 'WhatsApp Bot', href: '/whatsapp', icon: <MessageCircle className="h-4 w-4" /> }, 
     ],
   },
   {label:'Notification',section:'notify', href :'/notification', icon:< Bell className="h-4 w-4" />, }
