@@ -33,11 +33,12 @@ async function verifyWebhook(req, res) {
 /**
  * POST /api/whatsapp/webhook
  * Receives incoming message events from Meta.
+ *
+ * IMPORTANT: We await all DB + WhatsApp work BEFORE responding.
+ * On Vercel serverless, sending the response first can terminate the
+ * function before the async work finishes.
  */
 async function receiveWebhook(req, res) {
-  // Always respond 200 immediately so Meta doesn't retry.
-  res.status(200).send('EVENT_RECEIVED');
-
   try {
     const body = req.body;
 
@@ -47,8 +48,8 @@ async function receiveWebhook(req, res) {
     const message = value?.messages?.[0];
 
     if (!message) {
-      // Could be a status update (delivered/read) — ignore.
-      return;
+      // Status update (delivered/read) — ignore, respond OK.
+      return res.status(200).send('EVENT_RECEIVED');
     }
 
     const from = message.from;
@@ -66,7 +67,7 @@ async function receiveWebhook(req, res) {
       const existing = await WhatsAppMessage.findOne({ waMessageId });
       if (existing) {
         console.log(`♻️ [WhatsApp] Duplicate ${waMessageId} skipped`);
-        return;
+        return res.status(200).send('EVENT_RECEIVED');
       }
     }
 
@@ -138,8 +139,15 @@ async function receiveWebhook(req, res) {
       customerId: result.customerId || null,
       status: 'sent',
     });
+
+    console.log(`📤 [WhatsApp] Replied to ${from} (intent: ${result.intent})`);
+
+    // ✅ Respond AFTER all work is done.
+    return res.status(200).send('EVENT_RECEIVED');
   } catch (err) {
     console.error('❌ [WhatsApp] Handler error:', err);
+    // Always respond 200 so Meta doesn't retry forever.
+    return res.status(200).send('EVENT_RECEIVED');
   }
 }
 
