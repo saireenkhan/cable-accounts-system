@@ -225,7 +225,7 @@ export default function PurchasingPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-orange-500/25"
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors "
             >
               <PlusCircle className="h-4 w-4" />
               Add Purchase

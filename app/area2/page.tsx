@@ -1,28 +1,44 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
-import { 
-  MapPin, 
-  PlusCircle, 
-  Truck, 
-  Edit2, 
+import {
+  MapPin,
+  PlusCircle,
+  Truck,
+  Edit2,
   Trash2,
   Building2,
   Home,
   Store,
+  ChevronDown,
+  ChevronUp,
+  Check,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+type AreaColor = 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo';
+type AreaFilter = 'all' | 'active' | 'inactive';
+
 export default function DealerAreasPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<AreaFilter>('all');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [areas, setAreas] = useState<any[]>([]);
+  const [editingArea, setEditingArea] = useState<any>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAreas();
@@ -35,34 +51,40 @@ export default function DealerAreasPage() {
         setLoading(false);
         return;
       }
-      
-      // ✅ Fetch dealer areas and all dealers to count by area
+
       const [areasRes, dealersRes] = await Promise.all([
         api.get('/dealer-areas'),
-        api.get('/dealers?limit=10000') // Get all dealers
+        api.get('/dealers?limit=10000'),
       ]);
-      
-      // ✅ Count dealers by area name
+
       const dealerCounts: Record<string, number> = {};
       if (dealersRes.data.success) {
         dealersRes.data.dealers.forEach((dealer: any) => {
-          const areaName = dealer.area?.name;
+          const areaName =
+            typeof dealer.area === 'object' ? dealer.area?.name : dealer.area;
           if (areaName) {
             dealerCounts[areaName] = (dealerCounts[areaName] || 0) + 1;
           }
         });
       }
-      
-      if (areasRes.data.success) {
-        const formattedAreas = areasRes.data.areas.map((area: any, index: number) => ({
-          id: area._id,
-          name: area.name,
-          dealers: dealerCounts[area.name] || 0,
-          color: ['purple', 'indigo', 'orange', 'red', 'blue', 'green'][index % 6],
-          code: area.code,
-          description: area.description,
-        }));
+
+      if (areasRes.data.success && Array.isArray(areasRes.data.areas)) {
+        const formattedAreas = areasRes.data.areas.map(
+          (area: any, index: number) => ({
+            id: String(area._id),
+            name: area.name || 'Unnamed Area',
+            code: area.code || '',
+            description: area.description || '',
+            dealers: dealerCounts[area.name] || 0,
+            color: (['blue', 'green', 'purple', 'orange', 'red', 'indigo'][
+              index % 6
+            ] || 'blue') as AreaColor,
+            createdAt: area.createdAt,
+            updatedAt: area.updatedAt,
+          })
+        );
         setAreas(formattedAreas);
+        setExpandedId((previous) => previous ?? formattedAreas[0]?.id ?? null);
       }
     } catch (error) {
       console.error('Error fetching dealer areas:', error);
@@ -72,93 +94,144 @@ export default function DealerAreasPage() {
     }
   };
 
-  // Calculate stats
   const totalAreas = areas.length;
   const totalDealers = areas.reduce((sum, area) => sum + (area.dealers || 0), 0);
 
-  // Area fields for modal
   const areaFields: Field[] = [
     { name: 'name', label: 'Dealer Area Name', type: 'text', required: true, placeholder: 'Enter dealer area name' },
     { name: 'code', label: 'Area Code', type: 'text', placeholder: 'e.g., DLR-001' },
     { name: 'description', label: 'Description', type: 'textarea', placeholder: 'Optional description' },
   ];
 
-  // Transform dealer area data before sending
-  const transformAreaData = (data: any) => {
-    console.log('📝 Transforming dealer area data:', data);
-    return {
-      name: data.name?.trim() || '',
-      code: data.code?.trim() || '',
-      description: data.description?.trim() || '',
-    };
-  };
+  const transformAreaData = (data: any) => ({
+    name: data.name?.trim() || '',
+    code: data.code?.trim() || '',
+    description: data.description?.trim() || '',
+  });
 
   const handleAreaAdded = (data: any) => {
-    toast.success(`Dealer area "${data.name}" added successfully!`);
+    toast.success(
+      editingArea
+        ? `Dealer area "${data.name}" updated successfully!`
+        : `Dealer area "${data.name}" added successfully!`
+    );
+    setEditingArea(null);
+    setIsModalOpen(false);
     fetchAreas();
   };
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete dealer area "${name}"?`)) {
-      try {
-        await api.delete(`/dealer-areas/${id}`);
-        setAreas(areas.filter(area => area.id !== id));
-        toast.success(`Dealer area "${name}" deleted`);
-      } catch (error) {
-        toast.error('Failed to delete dealer area');
+    if (!confirm(`Are you sure you want to delete dealer area "${name}"?`)) return;
+    try {
+      await api.delete(`/dealer-areas/${id}`);
+      setAreas((previous) => previous.filter((area) => area.id !== id));
+      setExpandedId((previous) => (previous === id ? null : previous));
+      if (editingArea?.id === id) {
+        setEditingArea(null);
+        setIsModalOpen(false);
       }
+      toast.success(`Dealer area "${name}" deleted`);
+    } catch {
+      toast.error('Failed to delete dealer area');
     }
   };
 
-  const handleEdit = (name: string) => {
-    toast.success(`Editing dealer area "${name}"`);
+  const handleEdit = (area: any, event?: React.MouseEvent) => {
+    event?.stopPropagation();
+    setEditingArea(area);
+    setIsModalOpen(true);
   };
 
-  const filteredAreas = areas.filter(area =>
-    area.name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Color mapping for cards (dealer themed)
-  const colorClasses = {
-    purple: 'from-purple-500 to-purple-600 border-purple-200 dark:border-purple-800',
-    indigo: 'from-indigo-500 to-indigo-600 border-indigo-200 dark:border-indigo-800',
-    orange: 'from-orange-500 to-orange-600 border-orange-200 dark:border-orange-800',
-    red: 'from-red-500 to-red-600 border-red-200 dark:border-red-800',
-    blue: 'from-blue-500 to-blue-600 border-blue-200 dark:border-blue-800',
-    green: 'from-green-500 to-green-600 border-green-200 dark:border-green-800',
+  const toggleExpand = (id: string) => {
+    setExpandedId((previous) => (previous === id ? null : id));
   };
 
-  const bgColorClasses = {
-    purple: 'bg-purple-50 dark:bg-purple-950/30',
-    indigo: 'bg-indigo-50 dark:bg-indigo-950/30',
-    orange: 'bg-orange-50 dark:bg-orange-950/30',
-    red: 'bg-red-50 dark:bg-red-950/30',
-    blue: 'bg-blue-50 dark:bg-blue-950/30',
-    green: 'bg-green-50 dark:bg-green-950/30',
-  };
+  const filteredAreas = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return areas.filter((area) => {
+      const matchesSearch =
+        !query ||
+        area.name.toLowerCase().includes(query) ||
+        area.code?.toLowerCase().includes(query);
 
-  const iconColorClasses = {
-    purple: 'text-purple-600 dark:text-purple-400',
-    indigo: 'text-indigo-600 dark:text-indigo-400',
-    orange: 'text-orange-600 dark:text-orange-400',
-    red: 'text-red-600 dark:text-red-400',
-    blue: 'text-blue-600 dark:text-blue-400',
-    green: 'text-green-600 dark:text-green-400',
+      const isActive = area.dealers > 0;
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'active' && isActive) ||
+        (statusFilter === 'inactive' && !isActive);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [areas, searchQuery, statusFilter]);
+
+  const colorMap: Record<
+    AreaColor,
+    { border: string; bg: string; icon: string; text: string; button: string }
+  > = {
+    blue: {
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-blue-50 dark:bg-blue-950/30',
+      icon: 'text-blue-600 dark:text-blue-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
+    },
+    green: {
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-green-50 dark:bg-green-950/30',
+      icon: 'text-green-600 dark:text-green-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
+    },
+    purple: {
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-purple-50 dark:bg-purple-950/30',
+      icon: 'text-purple-600 dark:text-purple-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
+    },
+    orange: {
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-orange-50 dark:bg-orange-950/30',
+      icon: 'text-orange-600 dark:text-orange-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
+    },
+    red: {
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-red-50 dark:bg-red-950/30',
+      icon: 'text-red-600 dark:text-red-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
+    },
+    indigo: {
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-indigo-50 dark:bg-indigo-950/30',
+      icon: 'text-indigo-600 dark:text-indigo-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
+    },
   };
 
   const getAreaIcon = (name: string) => {
     const lower = name?.toLowerCase() || '';
-    if (lower.includes('gulshan') || lower.includes('garden')) return <Home className="h-6 w-6" />;
-    if (lower.includes('market') || lower.includes('mall')) return <Store className="h-6 w-6" />;
-    if (lower.includes('colony') || lower.includes('town')) return <Building2 className="h-6 w-6" />;
-    return <Truck className="h-6 w-6" />;
+    if (lower.includes('gulshan') || lower.includes('garden')) return <Home className="h-5 w-5" />;
+    if (lower.includes('market') || lower.includes('mall')) return <Store className="h-5 w-5" />;
+    if (lower.includes('colony') || lower.includes('town')) return <Building2 className="h-5 w-5" />;
+    return <Truck className="h-5 w-5" />;
+  };
+
+  const formatDate = (value?: string | Date) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
   };
 
   if (loading) {
     return (
       <Layout>
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        <div className="flex min-h-64 items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
         </div>
       </Layout>
     );
@@ -166,157 +239,302 @@ export default function DealerAreasPage() {
 
   return (
     <Layout>
-      <div className="space-y-5">
+      <div className="space-y-4">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <MapPin className="h-6 w-6 text-blue-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <MapPin className="h-6 w-6 text-purple-600" />
-              Dealer Areas
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              Dealer Areas / Streets
             </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Manage dealer service areas.
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Organize dealers by service area.
             </p>
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-purple-500/25"
-          >
-            <PlusCircle className="h-4 w-4" />
-            Add Dealer Area
-          </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL DEALER AREAS</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {totalAreas}
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                <MapPin className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-              </div>
-            </div>
+        {/* Search + filter */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="min-w-0 flex-1">
+            <SearchBar
+              placeholder="Search dealer areas..."
+              value={searchQuery}
+              onChange={setSearchQuery}
+            />
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">TOTAL DEALERS</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
-                  {totalDealers.toLocaleString()}
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-                <Truck className="h-6 w-6 text-green-600 dark:text-green-400" />
-              </div>
-            </div>
+
+          <div className="relative w-full md:w-64">
+            <button
+              type="button"
+              onClick={() => setIsFilterOpen((p) => !p)}
+              className="flex h-11 w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4 text-gray-400" />
+                {statusFilter === 'all' ? 'All Areas' : statusFilter === 'active' ? 'Active Areas' : 'Inactive Areas'}
+              </span>
+              <ChevronDown
+                className={cn('h-4 w-4 text-gray-400 transition-transform', isFilterOpen && 'rotate-180')}
+              />
+            </button>
+
+            {isFilterOpen && (
+              <>
+                <button
+                  type="button"
+                  className="fixed inset-0 z-10 h-full w-full cursor-default"
+                  onClick={() => setIsFilterOpen(false)}
+                />
+                <div className="absolute right-0 z-20 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                  {[
+                    { value: 'all' as AreaFilter, label: 'All Areas' },
+                    { value: 'active' as AreaFilter, label: 'Active Areas' },
+                    { value: 'inactive' as AreaFilter, label: 'Inactive Areas' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter(option.value);
+                        setIsFilterOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {option.label}
+                      {statusFilter === option.value && <Check className="h-4 w-4 text-blue-600" />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Search */}
-        <SearchBar
-          placeholder="Search dealer areas..."
-          value={searchQuery}
-          onChange={setSearchQuery}
-        />
-
-        {/* Area Cards Grid */}
+        {/* Cards */}
         {filteredAreas.length === 0 ? (
-          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-            No dealer areas found. Click "Add Dealer Area" to create one.
+          <div className="rounded-xl border border-dashed border-gray-300 bg-white py-16 text-center dark:border-gray-700 dark:bg-gray-800">
+            <MapPin className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-200">No dealer areas found</p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Try changing your search or filter.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredAreas.map((area) => (
-              <div
-                key={area.id}
-                className={cn(
-                  'group relative bg-white dark:bg-gray-800 rounded-xl shadow-sm border transition-all hover:shadow-lg hover:scale-[1.02]',
-                  colorClasses[area.color as keyof typeof colorClasses],
-                  'overflow-hidden'
-                )}
-              >
-                <div className={cn(
-                  'h-1.5 w-full',
-                  area.color === 'purple' && 'bg-purple-500',
-                  area.color === 'indigo' && 'bg-indigo-500',
-                  area.color === 'orange' && 'bg-orange-500',
-                  area.color === 'red' && 'bg-red-500',
-                  area.color === 'blue' && 'bg-blue-500',
-                  area.color === 'green' && 'bg-green-500',
-                )} />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredAreas.map((area) => {
+              const colors = colorMap[area.color as AreaColor];
+              const isExpanded = expandedId === area.id;
+              const isActive = area.dealers > 0;
 
-                <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        'p-2.5 rounded-xl',
-                        bgColorClasses[area.color as keyof typeof bgColorClasses]
-                      )}>
-                        <span className={iconColorClasses[area.color as keyof typeof iconColorClasses]}>
-                          {getAreaIcon(area.name)}
+              return (
+                <article
+                  key={area.id}
+                  className={cn(
+                    'relative w-full overflow-hidden rounded-xl border bg-white shadow-sm transition-all dark:bg-gray-800',
+                    colors.border,
+                    isExpanded && 'shadow-lg'
+                  )}
+                >
+                  <div className="p-4">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <div className={cn('flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl', colors.bg)}>
+                          <span className={colors.icon}>{getAreaIcon(area.name)}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="truncate text-base font-bold uppercase leading-tight text-gray-900 dark:text-white">
+                            {area.name}
+                          </h3>
+                          {area.code && (
+                            <p className="mt-1 truncate text-sm font-medium text-gray-600 dark:text-gray-300">
+                              {area.code}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-shrink-0 items-center gap-1.5">
+                        <span
+                          className={cn(
+                            'rounded-full px-2.5 py-1 text-xs font-semibold',
+                            isActive
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                          )}
+                        >
+                          {isActive ? 'Active' : 'Inactive'}
                         </span>
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white text-lg uppercase">
-                          {area.name}
-                        </h3>
-                        {area.code && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{area.code}</p>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(area.id)}
+                          className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                        >
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
                       </div>
                     </div>
-                    
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => handleEdit(area.name)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        <Edit2 className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(area.id, area.name)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                      >
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </button>
-                    </div>
-                  </div>
 
-                  {/* ✅ Show actual dealer count */}
-                  <div className="flex items-center gap-2 mt-2 pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <Truck className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-                    <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                      {area.dealers || 0}
-                    </span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                      Dealers
-                    </span>
+                    {/* Dealers count */}
+                    <div className="mt-4 flex items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
+                      <Truck className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                      <span className="text-xl font-bold text-gray-900 dark:text-white">
+                        {(area.dealers || 0).toLocaleString()}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Dealers</span>
+                    </div>
+
+                    {/* Expanded content */}
+                    {isExpanded && (
+                      <>
+                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          <InfoBlock
+                            icon={<Truck className="h-4 w-4 text-blue-500" />}
+                            label="Total Dealers"
+                            value={area.dealers || 0}
+                          />
+                          <InfoBlock
+                            icon={<MapPin className="h-4 w-4 text-gray-500" />}
+                            label="Area Code"
+                            value={area.code || '—'}
+                          />
+                          <InfoBlock
+                            icon={<Home className="h-4 w-4 text-gray-400" />}
+                            label="Created On"
+                            value={formatDate(area.createdAt)}
+                          />
+                          <InfoBlock
+                            icon={<Home className="h-4 w-4 text-gray-400" />}
+                            label="Last Updated"
+                            value={formatDate(area.updatedAt)}
+                          />
+                        </div>
+
+                        {/* Actions */}
+                        <div className="mt-4 flex gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          <button
+                            type="button"
+                            onClick={() => toggleExpand(area.id)}
+                            className={cn(
+                              'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition',
+                              colors.button
+                            )}
+                          >
+                            View Details
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleEdit(area, e)}
+                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-600 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-900/40"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            Edit Area
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(area.id, area.name)}
+                            className="flex items-center justify-center rounded-lg bg-red-50 px-3 py-2.5 text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/40"
+                            aria-label={`Delete ${area.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Collapsed footer */}
+                    {!isExpanded && (
+                      <button
+                        type="button"
+                        onClick={() => toggleExpand(area.id)}
+                        className={cn(
+                          'mt-4 flex w-full items-center gap-1 border-t border-gray-100 pt-3 text-sm font-semibold transition-all hover:gap-2 dark:border-gray-700',
+                          colors.text
+                        )}
+                      >
+                        View Details <span aria-hidden="true">→</span>
+                      </button>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
 
-        {/* Add Dealer Area Modal */}
+        {/* Add / Edit Modal */}
         <AddUserModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingArea(null);
+          }}
           onSuccess={handleAreaAdded}
-          title="Add Dealer Area"
-          subtitle="Create a new dealer service area"
+          title={editingArea ? 'Edit Dealer Area' : 'Add New Dealer Area'}
+          subtitle={editingArea ? 'Update the dealer area details below' : 'Create a new dealer service area'}
           fields={areaFields}
-          submitLabel="Add Dealer Area"
-          color="purple"
-          endpoint="/dealer-areas"
+          submitLabel={editingArea ? 'Update Dealer Area' : 'Add Dealer Area'}
+          color="blue"
+          endpoint={editingArea ? `/dealer-areas/${editingArea.id}` : '/dealer-areas'}
+          method={editingArea ? 'PUT' : 'POST'}
+          initialData={
+            editingArea
+              ? {
+                  name: editingArea.name,
+                  code: editingArea.code || '',
+                  description: editingArea.description || '',
+                }
+              : undefined
+          }
           transformData={transformAreaData}
         />
+
+        {/* Floating Add button */}
+        <button
+          type="button"
+          onClick={() => {
+            setEditingArea(null);
+            setIsModalOpen(true);
+          }}
+          className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 hover:bg-blue-700"
+        >
+          <PlusCircle className="h-5 w-5" />
+          Add Dealer Area
+        </button>
       </div>
     </Layout>
+  );
+}
+
+function InfoBlock({
+  icon,
+  label,
+  value,
+  valueColor,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  valueColor?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <span className="mt-0.5 flex-shrink-0">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[9px] font-medium uppercase leading-tight text-gray-500 dark:text-gray-400">
+          {label}
+        </p>
+        <p
+          className={cn(
+            'truncate text-xs font-semibold leading-tight sm:text-sm',
+            valueColor || 'text-gray-900 dark:text-white'
+          )}
+          title={String(value)}
+        >
+          {value}
+        </p>
+      </div>
+    </div>
   );
 }

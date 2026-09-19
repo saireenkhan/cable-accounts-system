@@ -867,7 +867,7 @@ export default function RecoveryNotificationsPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => toast.success('Search applied')}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 <Search className="h-4 w-4" />
                 Search
@@ -1332,7 +1332,7 @@ export default function RecoveryNotificationsPage() {
                     className={cn(
                       'w-8 h-8 rounded-lg text-sm font-medium transition-colors',
                       p === currentPage
-                        ? 'bg-purple-600 text-white'
+                        ? 'bg-blue-500 text-white'
                         : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                     )}
                   >

@@ -290,7 +290,7 @@ const suspendedCustomers = partners.filter(
           </div>
           <button
             onClick={() => router.push('/partners')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/25"
+            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
             Add User
@@ -415,13 +415,13 @@ const suspendedCustomers = partners.filter(
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => router.push('/partners')}
-                className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                className="px-4 py-2.5 bg-blue-500 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 Add User
               </button>
               <button
                 onClick={() => router.push('/partners/receive-payments')}
-                className="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                className="px-4 py-2.5 bg-blue-500 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
               >
                 Receive Payment
               </button>

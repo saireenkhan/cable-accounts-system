@@ -122,7 +122,7 @@ const menuItems: MenuItem[] = [
     section: 'general',
     children: [
       { label: 'All Report', href: '/reports', icon: <PieChart className="h-4 w-4" /> },
-      { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+      { label: 'Dashboard', href: '/dashboard2', icon: <LayoutDashboard className="h-4 w-4" /> },
       { label: 'Bulk Upload', href: '/bulk-upload', icon: <Upload className="h-4 w-4" /> },
        { label: 'Add Partner', href: '/create-partner', icon: < UserRoundPlus className="h-4 w-4" /> },
         { label: 'WhatsApp Bot', href: '/whatsapp', icon: <MessageCircle className="h-4 w-4" /> }, 

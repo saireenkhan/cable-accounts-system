@@ -193,7 +193,7 @@ const generateMonthPDF = () => {
       ['Total Half-Day Marks', totals.halfDay.toString()],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], textColor: 255, fontSize: 10 },
+    headStyles: { fillColor: [30, 64, 92], textColor: 255, fontSize: 10 },
     bodyStyles: { fontSize: 9 },
     margin: { left: 40, right: pageWidth - 220 },
     tableWidth: 180,
@@ -264,7 +264,7 @@ const generateMonthPDF = () => {
       overflow: 'linebreak',
     },
     headStyles: {
-      fillColor: [30, 64, 175],
+      fillColor: [30, 64, 92],
       textColor: 255,
       fontSize: 7,
       halign: 'center',
@@ -502,14 +502,14 @@ const generateMonthPDF = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">PRESENT</p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {present}
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                <p className="text-xs text-gray-900 dark:text-white mt-1">
                   On duty today
                 </p>
               </div>
-              <div className="h-12 w-12 bg-green-50 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+              <div className="h-12 w-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
                 <UserCheck className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
@@ -519,14 +519,14 @@ const generateMonthPDF = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">ABSENT</p>
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {absent}
                 </p>
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                <p className="text-xs text-gray-900 dark:text-white mt-1">
                   Not present
                 </p>
               </div>
-              <div className="h-12 w-12 bg-red-50 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+              <div className="h-12 w-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
                 <UserX className="h-6 w-6 text-red-600 dark:text-red-400" />
               </div>
             </div>
@@ -536,14 +536,14 @@ const generateMonthPDF = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">LEAVE</p>
-                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 mt-1">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {leave}
                 </p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                <p className="text-xs text-gray-900 dark:text-white mt-1">
                   Approved leave
                 </p>
               </div>
-              <div className="h-12 w-12 bg-yellow-50 dark:bg-yellow-900/30 rounded-full flex items-center justify-center">
+              <div className="h-12 w-12 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center">
                 <UserMinus className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />
               </div>
             </div>
@@ -556,7 +556,7 @@ const generateMonthPDF = () => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-              <FileText className="h-4 w-4 text-purple-600" />
+              <FileText className="h-4 w-4 text-blue-600" />
               Monthly Attendance Report
             </h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -564,12 +564,12 @@ const generateMonthPDF = () => {
                 type="month"
                 value={reportMonth}
                 onChange={(e) => setReportMonth(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
               />
               <button
                 onClick={fetchMonthlyReport}
                 disabled={reportLoading}
-                className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {reportLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -581,7 +581,7 @@ const generateMonthPDF = () => {
               <button
                 onClick={generateMonthPDF}
                 disabled={!reportData}
-                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-blue-600 to-green-600 hover:from-blue-700 hover:to-green-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
                 Generate PDF
@@ -602,35 +602,35 @@ const generateMonthPDF = () => {
               <>
                 {/* Report Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                    <p className="text-xs text-blue-600 dark:text-blue-400 uppercase">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 uppercase">
                       Total Staff
                     </p>
-                    <p className="text-xl font-bold text-blue-700 dark:text-blue-300">
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">
                       {reportData.staffReports.length}
                     </p>
                   </div>
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-200 dark:border-green-800">
-                    <p className="text-xs text-green-600 dark:text-green-400 uppercase">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 uppercase">
                       Total Present
                     </p>
-                    <p className="text-xl font-bold text-green-700 dark:text-green-300">
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">
                       {reportData.totals.present}
                     </p>
                   </div>
-                  <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 border border-red-200 dark:border-red-800">
-                    <p className="text-xs text-red-600 dark:text-red-400 uppercase">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 uppercase">
                       Total Absent
                     </p>
-                    <p className="text-xl font-bold text-red-700 dark:text-red-300">
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">
                       {reportData.totals.absent}
                     </p>
                   </div>
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-200 dark:border-yellow-800">
-                    <p className="text-xs text-yellow-600 dark:text-yellow-400 uppercase">
+                  <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 uppercase">
                       Total Leave
                     </p>
-                    <p className="text-xl font-bold text-yellow-700 dark:text-yellow-300">
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">
                       {reportData.totals.leave}
                     </p>
                   </div>
@@ -662,7 +662,7 @@ const generateMonthPDF = () => {
                         <th className="py-2 px-3 text-center text-yellow-600 dark:text-yellow-400 font-medium">
                           Leave
                         </th>
-                        <th className="py-2 px-3 text-center text-orange-600 dark:text-orange-400 font-medium">
+                        <th className="py-2 px-3 text-center text-gray-600 dark:text-gray-400 font-medium">
                           Half Day
                         </th>
                         <th className="py-2 px-3 text-center text-gray-600 dark:text-gray-400 font-medium">
@@ -697,23 +697,17 @@ const generateMonthPDF = () => {
                           <td className="py-2 px-3 text-center text-yellow-600 dark:text-yellow-400 font-semibold">
                             {s.leave}
                           </td>
-                          <td className="py-2 px-3 text-center text-orange-600 dark:text-orange-400 font-semibold">
+                          <td className="py-2 px-3 text-center text-gray-600 dark:text-gray-400 font-semibold">
                             {s.halfDay}
                           </td>
                           <td className="py-2 px-3 text-center">
                             <span
                               className={cn(
                                 'px-2 py-0.5 rounded-full text-xs font-semibold',
-                                s.percentage >= 90 &&
-                                  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
                                 s.percentage >= 75 &&
-                                  s.percentage < 90 &&
                                   'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-                                s.percentage >= 50 &&
-                                  s.percentage < 75 &&
-                                  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-                                s.percentage < 50 &&
-                                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                s.percentage < 75 &&
+                                  'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
                               )}
                             >
                               {s.percentage}%

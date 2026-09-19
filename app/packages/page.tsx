@@ -289,18 +289,7 @@ export default function PackagesPage() {
                   'overflow-hidden'
                 )}
               >
-                {/* Color bar */}
-                <div
-                  className={cn(
-                    'h-2 w-full',
-                    pkg.color === 'blue' && 'bg-blue-500',
-                    pkg.color === 'green' && 'bg-green-500',
-                    pkg.color === 'purple' && 'bg-purple-500',
-                    pkg.color === 'orange' && 'bg-orange-500',
-                    pkg.color === 'red' && 'bg-red-500',
-                    pkg.color === 'indigo' && 'bg-indigo-500'
-                  )}
-                />
+  
 
                 <div className="p-6">
                   {/* Name + Actions */}
