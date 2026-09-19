@@ -236,7 +236,7 @@ export default function AreasPage() {
         setAreas(formattedAreas);
 
         // Match the reference UI: the first card starts expanded.
-        setExpandedId((previous) => previous ?? formattedAreas[0]?.id ?? null);
+        // setExpandedId((previous) => previous ?? formattedAreas[0]?.id ?? null);
       }
     } catch (error) {
       console.error('Error fetching areas:', error);

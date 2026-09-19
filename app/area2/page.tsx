@@ -84,7 +84,7 @@ export default function DealerAreasPage() {
           })
         );
         setAreas(formattedAreas);
-        setExpandedId((previous) => previous ?? formattedAreas[0]?.id ?? null);
+        // setExpandedId((previous) => previous ?? formattedAreas[0]?.id ?? null);
       }
     } catch (error) {
       console.error('Error fetching dealer areas:', error);
