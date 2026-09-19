@@ -316,7 +316,6 @@ export default function AreasPage() {
     AreaColor,
     {
       border: string;
-      top: string;
       bg: string;
       icon: string;
       text: string;
@@ -324,52 +323,46 @@ export default function AreasPage() {
     }
   > = {
     blue: {
-      border: 'border-blue-300 dark:border-blue-800',
-      top: 'bg-blue-500',
+      border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-blue-50 dark:bg-blue-950/30',
       icon: 'text-blue-600 dark:text-blue-400',
-      text: 'text-blue-600 dark:text-blue-400',
-      button: 'bg-blue-600 hover:bg-blue-700',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
     },
     green: {
-      border: 'border-green-300 dark:border-green-800',
-      top: 'bg-green-500',
+      border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-green-50 dark:bg-green-950/30',
       icon: 'text-green-600 dark:text-green-400',
-      text: 'text-green-600 dark:text-green-400',
-      button: 'bg-green-600 hover:bg-green-700',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
     },
     purple: {
-      border: 'border-purple-300 dark:border-purple-800',
-      top: 'bg-purple-500',
+      border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-purple-50 dark:bg-purple-950/30',
       icon: 'text-purple-600 dark:text-purple-400',
-      text: 'text-purple-600 dark:text-purple-400',
-      button: 'bg-purple-600 hover:bg-purple-700',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
     },
     orange: {
-      border: 'border-orange-300 dark:border-orange-800',
-      top: 'bg-orange-500',
+      border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-orange-50 dark:bg-orange-950/30',
       icon: 'text-orange-600 dark:text-orange-400',
-      text: 'text-orange-600 dark:text-orange-400',
-      button: 'bg-orange-600 hover:bg-orange-700',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
     },
     red: {
-      border: 'border-red-300 dark:border-red-800',
-      top: 'bg-red-500',
+      border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-red-50 dark:bg-red-950/30',
       icon: 'text-red-600 dark:text-red-400',
-      text: 'text-red-600 dark:text-red-400',
-      button: 'bg-red-600 hover:bg-red-700',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
     },
     indigo: {
-      border: 'border-indigo-300 dark:border-indigo-800',
-      top: 'bg-indigo-500',
+      border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-indigo-50 dark:bg-indigo-950/30',
       icon: 'text-indigo-600 dark:text-indigo-400',
-      text: 'text-indigo-600 dark:text-indigo-400',
-      button: 'bg-indigo-600 hover:bg-indigo-700',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-sky-500 hover:bg-blue-700',
     },
   };
 
@@ -535,7 +528,7 @@ export default function AreasPage() {
                   )}
                 >
                   {/* Colored top border */}
-                  <div className={cn('h-1.5 w-full', colors.top)} />
+                  <div className={cn('h-1.5 w-full',)} />
 
                   <div className="p-4">
                     {/* Card header */}
@@ -854,7 +847,7 @@ export default function AreasPage() {
             setEditingArea(null);
             setIsModalOpen(true);
           }}
-          className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-700"
+          className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-700"
         >
           <PlusCircle className="h-5 w-5" />
           Add Area
