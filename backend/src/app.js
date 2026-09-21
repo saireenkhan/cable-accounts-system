@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
 const connectDB = require('./config/database');
 const errorHandler = require('./middleware/error');
 const logger = require('./utils/logger');
@@ -46,12 +45,7 @@ connectDB().catch((err) => {
   console.error('❌ Initial MongoDB connection failed:', err.message);
 });
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: 'Too many requests from this IP, please try again later.',
-});
+
 
 // Middleware
 // ✅ Ensure MongoDB is connected before handling API requests
@@ -72,11 +66,6 @@ app.use(
 );
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-// Apply rate limit everywhere except the WhatsApp webhook.
-app.use('/api', (req, res, next) => {
-  if (req.path.startsWith('/whatsapp/webhook')) return next();
-  return limiter(req, res, next);
-});
 
 // Routes
 app.use('/api/whatsapp', require('./routes/whatsappRoutes'));

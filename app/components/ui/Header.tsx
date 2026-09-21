@@ -1,44 +1,174 @@
 'use client';
 
-import React from 'react';
-import { Menu, Bell, User, Search, ChevronDown } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Menu, Bell, ChevronDown, LogOut, UserCircle } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
+import toast from 'react-hot-toast';
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
-export default function Header({ onMenuClick }: HeaderProps) {  // ✅ Use default export
+function formatName(fullName?: string) {
+  if (!fullName) return '';
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 2) return fullName.trim();
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
+export default function Header({ onMenuClick }: HeaderProps) {
+  const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [user, setUser] = useState<{
+    name?: string;
+    email?: string;
+    avatar?: string;
+  } | null>(null);
+  const [companyName, setCompanyName] = useState('Cable Management System');
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Load user from sessionStorage + listen for updates
+  useEffect(() => {
+    const loadUser = () => {
+      try {
+        const raw = sessionStorage.getItem('user');
+        if (raw) setUser(JSON.parse(raw));
+      } catch {}
+    };
+
+    loadUser();
+
+    window.addEventListener('user-updated', loadUser);
+    return () => window.removeEventListener('user-updated', loadUser);
+  }, [menuOpen]);
+
+  // Load company name from localStorage + listen for updates
+  useEffect(() => {
+    const loadCompany = () => {
+      const stored = localStorage.getItem('companyName');
+      setCompanyName(stored || 'Cable Management System');
+    };
+
+    loadCompany();
+
+    window.addEventListener('company-updated', loadCompany);
+    window.addEventListener('storage', loadCompany); // cross-tab sync
+    return () => {
+      window.removeEventListener('company-updated', loadCompany);
+      window.removeEventListener('storage', loadCompany);
+    };
+  }, []);
+
+  // Close dropdown on outside click / Escape
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    toast.success('Logged out');
+    router.replace('/');
+  };
+
+  const initial = (user?.name || 'A').trim().charAt(0).toUpperCase();
+
   return (
     <header className="sticky top-0 z-30 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
       <div className="flex items-center justify-between h-16 px-4 md:px-6">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <button
             onClick={onMenuClick}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors lg:hidden"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors lg:hidden flex-shrink-0"
           >
             <Menu className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </button>
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white hidden sm:block">
-            Cable Management System
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white hidden sm:block truncate">
+            {companyName}
           </h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative">
             <Bell className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"></span>
           </button>
 
-          <button className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
-              <User className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:block">
-              Admin
-            </span>
-            <ChevronDown className="h-4 w-4 text-gray-500 hidden sm:block" />
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+            >
+              {user?.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt="avatar"
+                  className="h-8 w-8 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-semibold">
+                  {initial}
+                </div>
+              )}
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:block">
+                {formatName(user?.name) || 'Admin'}
+              </span>
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-gray-500 hidden sm:block transition-transform',
+                  menuOpen && 'rotate-180'
+                )}
+              />
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden z-40">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                    {formatName(user?.name) || 'Admin'}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {user?.email || ''}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setMenuOpen(false);
+                    router.push('/profile');
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <UserCircle className="h-4 w-4" />
+                  My Profile
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>
