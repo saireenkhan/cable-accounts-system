@@ -10,22 +10,37 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const checkedRef = useRef(false);
 
   useEffect(() => {
-    // Once verified on this mount, never re-check.
     if (checkedRef.current) return;
 
-    const id = setTimeout(() => {
+    // Retry up to 10 times, every 100ms
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    const check = () => {
+      attempts++;
+
       const token = sessionStorage.getItem('token');
 
-      if (!token) {
+      if (token) {
+        checkedRef.current = true;
+        setChecked(true);
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        // Genuinely no token after 1 second → redirect
         router.replace(`/?next=${encodeURIComponent(pathname)}`);
         return;
       }
 
-      checkedRef.current = true;
-      setChecked(true);
-    }, 100);
+      // Try again in 100ms
+      setTimeout(check, 100);
+    };
 
-    return () => clearTimeout(id);
+    // First check after a small delay (let login finish writing)
+    const initial = setTimeout(check, 100);
+
+    return () => clearTimeout(initial);
   }, [router, pathname]);
 
   if (!checked) {

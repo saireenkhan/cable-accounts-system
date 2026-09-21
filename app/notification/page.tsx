@@ -603,6 +603,14 @@ export default function RecoveryNotificationsPage() {
     ).length;
     return { pending, partial, expired, upcoming };
   }, [notifications]);
+  
+  useEffect(() => {
+  window.dispatchEvent(
+    new CustomEvent('notifications-count-updated', {
+      detail: notifications.length,
+    })
+  );
+}, [notifications]);
 
   // ✅ NEW: Areas filtered by source (so Customer source shows only customer areas)
   const uniqueAreas = useMemo(() => {

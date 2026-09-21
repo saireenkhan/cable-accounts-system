@@ -20,11 +20,16 @@ function formatName(fullName?: string) {
 export default function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Notification count
+  const [notificationCount, setNotificationCount] = useState(0);
+
   const [user, setUser] = useState<{
     name?: string;
     email?: string;
     avatar?: string;
   } | null>(null);
+
   const [companyName, setCompanyName] = useState('Cable Management System');
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -53,10 +58,31 @@ export default function Header({ onMenuClick }: HeaderProps) {
     loadCompany();
 
     window.addEventListener('company-updated', loadCompany);
-    window.addEventListener('storage', loadCompany); // cross-tab sync
+    window.addEventListener('storage', loadCompany);
+
     return () => {
       window.removeEventListener('company-updated', loadCompany);
       window.removeEventListener('storage', loadCompany);
+    };
+  }, []);
+
+  // Notification count
+  useEffect(() => {
+    const handleNotificationCount = (event: Event) => {
+      const customEvent = event as CustomEvent<number>;
+      setNotificationCount(customEvent.detail || 0);
+    };
+
+    window.addEventListener(
+      'notifications-count-updated',
+      handleNotificationCount
+    );
+
+    return () => {
+      window.removeEventListener(
+        'notifications-count-updated',
+        handleNotificationCount
+      );
     };
   }, []);
 
@@ -67,11 +93,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
         setMenuOpen(false);
       }
     };
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenuOpen(false);
     };
+
     document.addEventListener('mousedown', onClick);
     document.addEventListener('keydown', onKey);
+
     return () => {
       document.removeEventListener('mousedown', onClick);
       document.removeEventListener('keydown', onKey);
@@ -97,15 +126,30 @@ export default function Header({ onMenuClick }: HeaderProps) {
           >
             <Menu className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </button>
+
           <h1 className="text-lg font-semibold text-gray-900 dark:text-white hidden sm:block truncate">
             {companyName}
           </h1>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative">
+          {/* Notifications */}
+          <button
+            onClick={() => router.push('/notification')}
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors relative"
+            aria-label={
+              notificationCount > 0
+                ? `${notificationCount} notifications`
+                : 'Notifications'
+            }
+          >
             <Bell className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 bg-red-500 rounded-full"></span>
+
+            {notificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {notificationCount > 99 ? '99+' : notificationCount}
+              </span>
+            )}
           </button>
 
           <div className="relative" ref={menuRef}>
@@ -126,9 +170,11 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   {initial}
                 </div>
               )}
+
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:block">
                 {formatName(user?.name) || 'Admin'}
               </span>
+
               <ChevronDown
                 className={cn(
                   'h-4 w-4 text-gray-500 hidden sm:block transition-transform',
@@ -143,6 +189,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                     {formatName(user?.name) || 'Admin'}
                   </p>
+
                   <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {user?.email || ''}
                   </p>
