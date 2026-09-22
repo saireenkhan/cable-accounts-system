@@ -1,4 +1,3 @@
-// app/lib/api.js
 import axios from 'axios';
 
 const isLocalhost =
@@ -17,42 +16,71 @@ const api = axios.create({
   },
 });
 
-// Attach token to every request
+// ============================================================
+// REQUEST INTERCEPTOR
+// Attach JWT token to every API request
+// ============================================================
+
 api.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       const token = sessionStorage.getItem('token');
+
       if (token) {
+        config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-// Handle response errors
+// ============================================================
+// RESPONSE INTERCEPTOR
+// DEBUG VERSION
+// ============================================================
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
     const status = error.response?.status;
     const url = error.config?.url || '';
+    const method = error.config?.method || '';
 
-    // Auth endpoints return 401 for "wrong credentials" — not "session expired".
-    // Don't log the user out for these.
-    const isAuthEndpoint =
-      url.includes('/auth/login') ||
-      url.includes('/auth/verify-password');
+    console.error('🔴 API ERROR:', {
+      status,
+      url,
+      method,
+      response: error.response?.data,
+    });
 
-    if (status === 401 && !isAuthEndpoint) {
-      if (typeof window !== 'undefined') {
-        const current = window.location.pathname;
-        if (current !== '/') {
-          sessionStorage.removeItem('token');
-          sessionStorage.removeItem('user');
-          window.location.href = '/';
-        }
-      }
+    if (status === 401) {
+      console.error('🔴 401 REQUEST:', {
+        url,
+        method,
+      });
+
+      console.error(
+        '🔴 RESPONSE:',
+        error.response?.data
+      );
+
+      console.error(
+        '🔴 TOKEN EXISTS:',
+        typeof window !== 'undefined'
+          ? !!sessionStorage.getItem('token')
+          : false
+      );
+
+      // IMPORTANT:
+      // Do NOT remove the token or redirect here
+      // while debugging authentication.
     }
 
     return Promise.reject(error);

@@ -333,10 +333,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               </p>
             </div>
             <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                window.location.href = '/';
-              }}
+             onClick={() => {
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('user');
+  window.location.href = '/';
+}}
               className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               title="Logout"
             >
