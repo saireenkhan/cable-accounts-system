@@ -44,7 +44,7 @@ interface SidebarRailProps {
 
 export function SidebarRail({ activeSection, onSectionClick }: SidebarRailProps) {
   return (
-    <aside className="hidden md:flex flex-col w-[60px] h-screen bg-[#714B67] dark:bg-[#5A3B52] flex-shrink-0 z-50">
+   <aside className="hidden md:flex flex-col w-[60px] h-screen bg-blue-700 dark:bg-blue-900 flex-shrink-0 z-50">
       {/* Brand block — matches height of the main sidebar brand row */}
       <div className="h-14 flex items-center justify-center border-b border-white/10 flex-shrink-0">
         <div className="h-8 w-8 bg-white/15 rounded-lg flex items-center justify-center">

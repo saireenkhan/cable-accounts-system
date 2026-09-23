@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
+import { SidebarRail, SidebarSection } from './SidebarRail';
 import Header from './Header';
 import { cn } from '@/app/lib/utils';
 import { useMediaQuery } from '../hooks/useMediaQuery';
@@ -14,6 +15,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeSection, setActiveSection] = useState<SidebarSection>('user');
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
@@ -34,12 +36,30 @@ export default function Layout({ children }: LayoutProps) {
     }
   };
 
+  const handleRailClick = (section: SidebarSection) => {
+    setActiveSection(section);
+    if (isMobile) setSidebarOpen(true);
+  };
+
   return (
     <AuthGuard>
       <IdleLogout />
       <div className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 flex">
-        <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+        {/* Left icon rail (desktop only) */}
+        <SidebarRail
+          activeSection={activeSection}
+          onSectionClick={handleRailClick}
+        />
 
+        {/* Main sidebar */}
+        <Sidebar
+          isOpen={sidebarOpen}
+          onClose={closeSidebar}
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+        />
+
+        {/* Content */}
         <div
           className={cn(
             'flex-1 flex flex-col h-full transition-all duration-300 min-w-0',
