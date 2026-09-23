@@ -155,8 +155,6 @@ export default function LoginPage() {
             </button>
 
             <div className="text-center text-xs text-gray-400 dark:text-gray-500 border-t border-gray-200 dark:border-gray-700 pt-4">
-              Demo: <span className="font-mono">admin@cable.com</span> /{' '}
-              <span className="font-mono">Admin@123</span>
             </div>
           </form>
         </div>
