@@ -334,29 +334,32 @@ function ReceivePaymentModal({
       setMonthlySummary([]);
     }
   }, [isOpen]);
+useEffect(() => {
+  if (selectedCustomerId) {
+    const customer = customers.find((c) => c._id === selectedCustomerId);
+    setCustomerDetails(customer || null);
 
-  useEffect(() => {
-    if (selectedCustomerId) {
-      const customer = customers.find((c) => c._id === selectedCustomerId);
-      setCustomerDetails(customer || null);
+    if (customer) {
+      const customerPayments = payments.filter(
+        (p) =>
+          (p.customer?._id === customer._id ||
+            p.customer === customer._id ||
+            p.customerId === customer._id) &&
+          !p.isNoPayment
+      );
 
-      if (customer) {
-        const customerPayments = payments.filter(
-          (p) => p.customer === customer.name && !p.isNoPayment
-        );
+      const allocs = allocatePayments(
+        customer.monthlyFee || 0,
+        customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+      );
 
-        const allocs = allocatePayments(
-          customer.monthlyFee || 0,
-          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
-        );
-
-        setMonthlySummary(allocs);
-      }
-    } else {
-      setCustomerDetails(null);
-      setMonthlySummary([]);
+      setMonthlySummary(allocs);
     }
-  }, [selectedCustomerId, customers, payments]);
+  } else {
+    setCustomerDetails(null);
+    setMonthlySummary([]);
+  }
+}, [selectedCustomerId, customers, payments]);
 
   useEffect(() => {
     setSelectedCustomerId('');
@@ -429,13 +432,13 @@ function ReceivePaymentModal({
       }
 
       const payload = {
-        customer: customerObj.name,
-        month: selectedMonth,
-        amount: receivedAmount,
-        paymentMethod: paymentMethod,
-        paymentDate: paymentDate,
-        remarks: notes,
-      };
+  customer: customerObj._id,   
+  month: selectedMonth,
+  amount: receivedAmount,
+  paymentMethod: paymentMethod,
+  paymentDate: paymentDate,
+  remarks: notes,
+};
 
       const response = await api.post('/payments', payload);
 
@@ -940,7 +943,7 @@ export default function ReceivePaymentPage() {
     if (monthlyFee === 0) return sum;
 
     const customerPayments = payments.filter(
-      (p) => p.customer === customer.name && !p.isNoPayment
+      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
     const activeMonths = new Set<string>();
     customerPayments.forEach((p) => {
@@ -956,10 +959,12 @@ export default function ReceivePaymentPage() {
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
 
-  const totalProfit = payments
+    const totalProfit = payments
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => {
-      const customer = customers.find((c) => c.name === p.customer);
+      const customer = customers.find(
+        (c) => String(c._id) === String(p.customerId)
+      );
       if (!customer) return sum;
 
       const pkgName =
@@ -1004,12 +1009,13 @@ export default function ReceivePaymentPage() {
   const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
   const currentMonth = `${MONTHS[currentMonthIndex]} ${currentYear}`;
 
+
   customers.forEach((customer: any) => {
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
     if (monthlyFee === 0) return;
 
     const customerPayments = payments.filter(
-      (p) => p.customer === customer.name && !p.isNoPayment
+      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
 
     if (customerPayments.length === 0) {
@@ -1038,7 +1044,9 @@ export default function ReceivePaymentPage() {
   const notPaidCustomers = monthStatusCounts.notpaid;
 
   const getPaymentStatus = (payment: any) => {
-    const customer = customers.find((c) => c.name === payment.customer);
+    const customer = customers.find(
+      (c) => String(c._id) === String(payment.customerId)
+    );
     if (!customer) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
@@ -1048,10 +1056,9 @@ export default function ReceivePaymentPage() {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
 
-    const allCustomerPayments = payments.filter(
-      (p) => p.customer === payment.customer && !p.isNoPayment
+       const allCustomerPayments = payments.filter(
+      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
-
     if (allCustomerPayments.length === 0) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }

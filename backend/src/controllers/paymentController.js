@@ -124,12 +124,17 @@ exports.createPayment = async (req, res) => {
 
     console.log('📝 Creating payment with data:', req.body);
 
-    let customerDoc;
-    if (typeof customer === 'object' && customer._id) {
-      customerDoc = await Customer.findById(customer._id);
-    } else if (typeof customer === 'string') {
-      customerDoc = await Customer.findOne({ name: customer });
-    }
+let customerDoc;
+if (typeof customer === 'object' && customer._id) {
+  customerDoc = await Customer.findById(customer._id);
+} else if (typeof customer === 'string') {
+  const looksLikeObjectId = /^[a-fA-F0-9]{24}$/.test(customer);
+  if (looksLikeObjectId) {
+    customerDoc = await Customer.findById(customer);
+  } else {
+    customerDoc = await Customer.findOne({ name: customer });
+  }
+}
 
     if (!customerDoc) {
       return res.status(404).json({
