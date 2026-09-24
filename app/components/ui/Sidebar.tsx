@@ -194,7 +194,7 @@ export function Sidebar({
                   type="button"
                   onClick={() => toggleSection(section)}
                   className={cn(
-                    'w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all text-[11px] font-semibold uppercase tracking-wider',
+                    'w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all text-[13px] font-sans font-semibold ',
                     isCurrentSection
                       ? 'text-blue-600 dark:text-blue-400'
                       : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
