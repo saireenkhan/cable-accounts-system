@@ -100,157 +100,163 @@ const goToAreaCustomers = (areaName: string) => {
     fetchAreas();
   }, []);
 
-  const fetchAreas = async () => {
-    try {
-      const [areasRes, customersRes, paymentsRes] = await Promise.all([
-        api.get('/areas'),
-        api.get('/customers?limit=10000'),
-        api.get('/payments'),
-      ]);
+const fetchAreas = async () => {
+  try {
+    const [areasRes, customersRes, paymentsRes] = await Promise.all([
+      api.get('/areas'),
+      api.get('/customers?limit=10000'),
+      api.get('/payments'),
+    ]);
 
-      const customers = customersRes.data.success ? customersRes.data.customers : [];
-      const payments = paymentsRes.data.success ? paymentsRes.data.payments : [];
-      const thisMonth = currentMonthKey();
+    const customers = customersRes.data.success ? customersRes.data.customers : [];
+    const payments = paymentsRes.data.success ? paymentsRes.data.payments : [];
+    const thisMonth = currentMonthKey();
 
-      const customerById: Record<string, { area: string; monthlyFee: number }> = {};
-      const areaStats: Record<
-        string,
-        {
-          customers: number;
-          expected: number;
-          active: number;
-          inactive: number;
-          pending: number;
-        }
-      > = {};
+    // ✅ Build lookup: ObjectId → area name AND name → name
+    const areaLookup: Record<string, string> = {};
+    const areaList: any[] = areasRes.data.success && Array.isArray(areasRes.data.areas)
+      ? areasRes.data.areas
+      : [];
 
-      customers.forEach((customer: any) => {
-        const areaName =
-          typeof customer.area === 'object'
-            ? customer.area?.name
-            : customer.area;
+    areaList.forEach((a: any) => {
+      const id = String(a._id);
+      const name = String(a.name || a.areaName || id);
+      areaLookup[id] = name;          // "6aa54ddd..." -> "Sector 5c4"
+      areaLookup[name] = name;        // "Sector 5c4" -> "Sector 5c4" (identity)
+    });
 
-        if (!areaName) return;
+    // Helper: resolve any customer.area value → canonical area name
+    const resolveArea = (raw: any): string => {
+      if (!raw) return '';
+      if (typeof raw === 'object' && raw.name) return String(raw.name);
+      const s = String(raw).trim();
+      return areaLookup[s] || s;   // try ObjectId lookup, fallback to raw string
+    };
 
-        const fee = Number(customer.monthlyFee || 0);
-
-        if (customer._id) {
-          customerById[String(customer._id)] = {
-            area: String(areaName),
-            monthlyFee: fee,
-          };
-        }
-
-        if (!areaStats[areaName]) {
-          areaStats[areaName] = {
-            customers: 0,
-            expected: 0,
-            active: 0,
-            inactive: 0,
-            pending: 0,
-          };
-        }
-
-        areaStats[areaName].customers += 1;
-        areaStats[areaName].expected += fee;
-
-        const status = String(customer.status || '').toLowerCase();
-
-        if (status === 'active') areaStats[areaName].active += 1;
-        else if (status === 'inactive') areaStats[areaName].inactive += 1;
-        else if (status === 'pending') areaStats[areaName].pending += 1;
-      });
-
-      const areaCollected: Record<string, number> = {};
-
-      payments.forEach((payment: any) => {
-        if (payment.isNoPayment) return;
-        if (payment.month !== thisMonth) return;
-
-        const customerId =
-          typeof payment.customer === 'object'
-            ? payment.customer?._id
-            : payment.customer;
-
-        if (!customerId) return;
-
-        const customer = customerById[String(customerId)];
-        if (!customer) return;
-
-        areaCollected[customer.area] =
-          (areaCollected[customer.area] || 0) + Number(payment.amount || 0);
-      });
-
-      if (areasRes.data.success && Array.isArray(areasRes.data.areas)) {
-        const formattedAreas: Area[] = areasRes.data.areas.map(
-          (area: any, index: number) => {
-            const stats = areaStats[area.name] || {
-              customers: 0,
-              expected: 0,
-              active: 0,
-              inactive: 0,
-              pending: 0,
-            };
-
-            const collected = areaCollected[area.name] || 0;
-
-            const recoveryRate =
-              stats.expected > 0
-                ? Math.min(
-                    100,
-                    Math.round((collected / stats.expected) * 100)
-                  )
-                : 0;
-
-            return {
-              id: String(area._id),
-              name: area.name || 'Unnamed Area',
-              code: area.code || '',
-              description: area.description || '',
-              region: area.region || area.regionName || '',
-              totalStreets: Number(
-                area.totalStreets ?? area.streetCount ?? area.streetsCount ?? 0
-              ),
-              assignedDealer:
-                area.assignedDealer?.name ||
-                area.assignedDealerName ||
-                area.dealer?.name ||
-                area.dealerName ||
-                '',
-              assignedTechnician:
-                area.assignedTechnician?.name ||
-                area.assignedTechnicianName ||
-                area.technician?.name ||
-                area.technicianName ||
-                '',
-              customers: stats.customers,
-              active: stats.active,
-              inactive: stats.inactive,
-              pending: stats.pending,
-              collected,
-              expected: stats.expected,
-              recoveryRate,
-              color: (['blue', 'green', 'purple', 'orange', 'red', 'indigo'][
-                index % 6
-              ] || 'blue') as AreaColor,
-              createdAt: area.createdAt,
-              updatedAt: area.updatedAt,
-            };
-          }
-        );
-
-        setAreas(formattedAreas);
-
-        // Match the reference UI: the first card starts expanded.
-        // setExpandedId((previous) => previous ?? formattedAreas[0]?.id ?? null);
+    const customerById: Record<string, { area: string; monthlyFee: number }> = {};
+    const areaStats: Record<
+      string,
+      {
+        customers: number;
+        expected: number;
+        active: number;
+        inactive: number;
+        pending: number;
       }
-    } catch (error) {
-      console.error('Error fetching areas:', error);
-      toast.error('Failed to load areas');
-    } finally {
-      setLoading(false);
+    > = {};
+
+    customers.forEach((customer: any) => {
+      const areaName = resolveArea(customer.area);
+      if (!areaName) return;
+
+      const fee = Number(customer.monthlyFee || 0);
+
+      if (customer._id) {
+        customerById[String(customer._id)] = {
+          area: areaName,
+          monthlyFee: fee,
+        };
+      }
+
+      if (!areaStats[areaName]) {
+        areaStats[areaName] = {
+          customers: 0,
+          expected: 0,
+          active: 0,
+          inactive: 0,
+          pending: 0,
+        };
+      }
+
+      areaStats[areaName].customers += 1;
+      areaStats[areaName].expected += fee;
+
+      const status = String(customer.status || '').toLowerCase();
+      if (status === 'active') areaStats[areaName].active += 1;
+      else if (status === 'inactive') areaStats[areaName].inactive += 1;
+      else if (status === 'pending') areaStats[areaName].pending += 1;
+    });
+
+    const areaCollected: Record<string, number> = {};
+    payments.forEach((payment: any) => {
+      if (payment.isNoPayment) return;
+      if (payment.month !== thisMonth) return;
+
+      const customerId =
+        typeof payment.customer === 'object'
+          ? payment.customer?._id
+          : payment.customer;
+      if (!customerId) return;
+
+      const customer = customerById[String(customerId)];
+      if (!customer) return;
+
+      areaCollected[customer.area] =
+        (areaCollected[customer.area] || 0) + Number(payment.amount || 0);
+    });
+
+    if (areaList.length > 0) {
+      const formattedAreas: Area[] = areaList.map((area: any, index: number) => {
+        const stats = areaStats[area.name] || {
+          customers: 0,
+          expected: 0,
+          active: 0,
+          inactive: 0,
+          pending: 0,
+        };
+
+        const collected = areaCollected[area.name] || 0;
+
+        const recoveryRate =
+          stats.expected > 0
+            ? Math.min(100, Math.round((collected / stats.expected) * 100))
+            : 0;
+
+        return {
+          id: String(area._id),
+          name: area.name || 'Unnamed Area',
+          code: area.code || '',
+          description: area.description || '',
+          region: area.region || area.regionName || '',
+          totalStreets: Number(
+            area.totalStreets ?? area.streetCount ?? area.streetsCount ?? 0
+          ),
+          assignedDealer:
+            area.assignedDealer?.name ||
+            area.assignedDealerName ||
+            area.dealer?.name ||
+            area.dealerName ||
+            '',
+          assignedTechnician:
+            area.assignedTechnician?.name ||
+            area.assignedTechnicianName ||
+            area.technician?.name ||
+            area.technicianName ||
+            '',
+          customers: stats.customers,
+          active: stats.active,
+          inactive: stats.inactive,
+          pending: stats.pending,
+          collected,
+          expected: stats.expected,
+          recoveryRate,
+          color: (['blue', 'green', 'purple', 'orange', 'red', 'indigo'][
+            index % 6
+          ] || 'blue') as AreaColor,
+          createdAt: area.createdAt,
+          updatedAt: area.updatedAt,
+        };
+      });
+
+      setAreas(formattedAreas);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching areas:', error);
+    toast.error('Failed to load areas');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleAreaAdded = (data: any) => {
     toast.success(

@@ -1095,7 +1095,7 @@ export default function ReceivePaymentPage() {
     { key: 'userId', header: 'User ID' },
     { key: 'customer', header: 'User' },
     { key: 'month', header: 'Month' },
-    { key: 'date', header: 'Date' },
+    { key: 'date', header: 'Recieve Date' },
     { key: 'method', header: 'Method' },
     {
       key: 'packagePrice',

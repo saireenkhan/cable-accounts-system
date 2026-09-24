@@ -140,22 +140,6 @@ exports.createPayment = async (req, res) => {
 
     console.log('👤 Customer:', customerDoc.name, 'Monthly Fee:', customerDoc.monthlyFee);
 
-    // ✅ Prevent duplicate payment for same customer + same month
-    if (!isNoPayment) {
-      const existingPayment = await Payment.findOne({
-        customer: customerDoc._id,
-        month: month,
-        isNoPayment: false,
-      });
-
-      if (existingPayment) {
-        return res.status(400).json({
-          success: false,
-          message: `${customerDoc.name} has already paid for ${month}. Duplicate entries are not allowed.`,
-        });
-      }
-    }
-
     let paymentMethodValue = paymentMethod || method || 'Cash';
     if (typeof paymentMethodValue === 'string') {
       paymentMethodValue = paymentMethodValue.toLowerCase().replace(/ /g, '_');
@@ -163,28 +147,105 @@ exports.createPayment = async (req, res) => {
       paymentMethodValue = 'cash';
     }
 
-    const receiptNo = await generateReceiptNo();
     const paymentAmount = parseFloat(amount) || 0;
     const monthlyFee = parseFloat(customerDoc.monthlyFee) || 0;
+    const paymentDateObj =
+      paymentDate || date ? new Date(date || paymentDate) : new Date();
+
+    // ✅ If this is a "no payment" marker, create it as-is (don't merge)
+    if (isNoPayment) {
+      const receiptNo = await generateReceiptNo();
+      const payment = await Payment.create({
+        receiptNo,
+        customer: customerDoc._id,
+        month,
+        amount: 0,
+        packagePrice: monthlyFee,
+        paymentDate: paymentDateObj,
+        paymentMethod: paymentMethodValue,
+        receivedBy: req.user ? req.user.id : null,
+        remarks: remarks || 'No payment received',
+        isNoPayment: true,
+      });
+
+      const populated = await Payment.findById(payment._id)
+        .populate('customer', 'name code customerId phone monthlyFee area package status')
+        .populate('receivedBy', 'name');
+
+      return res.status(201).json({
+        success: true,
+        payment: populated,
+        customer: customerDoc,
+        message: 'No payment recorded',
+      });
+    }
+
+    // ✅ For regular payments: check if a payment already exists for this month
+    const existingPayment = await Payment.findOne({
+      customer: customerDoc._id,
+      month,
+      isNoPayment: false,
+    });
+
+    if (existingPayment) {
+      // Calculate what would be the new total for this month
+      const currentAmount = parseFloat(existingPayment.amount) || 0;
+      const newTotal = currentAmount + paymentAmount;
+
+      // Prevent overpaying beyond monthly fee
+      if (monthlyFee > 0 && newTotal > monthlyFee) {
+        return res.status(400).json({
+          success: false,
+          message: `Overpayment not allowed. ${customerDoc.name} has already paid Rs. ${currentAmount.toLocaleString()} for ${month}. Remaining balance is only Rs. ${(monthlyFee - currentAmount).toLocaleString()}.`,
+        });
+      }
+
+      // ✅ Merge: add to existing amount
+      existingPayment.amount = newTotal;
+      existingPayment.paymentDate = paymentDateObj;
+      if (remarks) {
+        existingPayment.remarks =
+          existingPayment.remarks
+            ? `${existingPayment.remarks}\n${remarks}`
+            : remarks;
+      }
+      await existingPayment.save();
+
+      console.log('✅ Payment merged. New total:', newTotal);
+
+      await recalculateCustomerStatus(customerDoc);
+
+      const populated = await Payment.findById(existingPayment._id)
+        .populate('customer', 'name code customerId phone monthlyFee area package status')
+        .populate('receivedBy', 'name');
+
+      return res.status(200).json({
+        success: true,
+        payment: populated,
+        customer: customerDoc,
+        message: `Additional payment of Rs. ${paymentAmount.toLocaleString()} recorded. Total for ${month}: Rs. ${newTotal.toLocaleString()}`,
+      });
+    }
+
+    // ✅ No existing payment → create new
+    const receiptNo = await generateReceiptNo();
 
     const payment = await Payment.create({
       receiptNo,
       customer: customerDoc._id,
-      month: month,
+      month,
       amount: paymentAmount,
       packagePrice: monthlyFee,
-      paymentDate: paymentDate || date ? new Date(date || paymentDate) : new Date(),
+      paymentDate: paymentDateObj,
       paymentMethod: paymentMethodValue,
       receivedBy: req.user ? req.user.id : null,
       remarks: remarks || '',
-      isNoPayment: isNoPayment || false,
+      isNoPayment: false,
     });
 
     console.log('✅ Payment created:', payment.receiptNo);
 
-    if (!isNoPayment && paymentAmount > 0) {
-      await recalculateCustomerStatus(customerDoc);
-    }
+    await recalculateCustomerStatus(customerDoc);
 
     const populatedPayment = await Payment.findById(payment._id)
       .populate('customer', 'name code customerId phone monthlyFee area package status')
@@ -194,14 +255,13 @@ exports.createPayment = async (req, res) => {
       success: true,
       payment: populatedPayment,
       customer: customerDoc,
-      message: isNoPayment ? 'No payment recorded' : 'Payment recorded successfully',
+      message: 'Payment recorded successfully',
     });
   } catch (error) {
     console.error('❌ Create payment error:', error);
     console.error('❌ Stack:', error.stack);
 
     if (error.code === 11000) {
-      // Distinguish between receiptNo duplicate and customer+month duplicate
       const keyPattern = error.keyPattern || {};
       if (keyPattern.customer && keyPattern.month) {
         return res.status(400).json({
