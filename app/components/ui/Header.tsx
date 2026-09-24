@@ -48,10 +48,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
     return () => window.removeEventListener('user-updated', loadUser);
   }, [menuOpen]);
 
-  // Load company name from localStorage + listen for updates
+
   useEffect(() => {
     const loadCompany = () => {
-      const stored = localStorage.getItem('companyName');
+      const stored = sessionStorage.getItem('companyName');
       setCompanyName(stored || 'Cable Management System');
     };
 

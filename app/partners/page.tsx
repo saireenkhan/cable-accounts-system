@@ -213,7 +213,7 @@ function PartnersPageContent() {
   // ✅ Fetch partner areas
   const fetchAreas = async () => {
     try {
-      if (!localStorage.getItem('token')) return [];
+      if (!sessionStorage.getItem('token')) return [];
       const { data } = await api.get('/partner-areas');
       const list = data.success ? data.areas || [] : [];
       setAreas(list);
@@ -226,7 +226,7 @@ function PartnersPageContent() {
 
   const fetchPackages = async () => {
     try {
-      if (!localStorage.getItem('token')) return;
+      if (!sessionStorage.getItem('token')) return;
       const { data } = await api.get('/packages');
       if (data.success) setPackages(data.packages || []);
     } catch (e) {
@@ -237,7 +237,7 @@ function PartnersPageContent() {
   // ✅ Fetch master partner list
   const fetchPartnerList = async () => {
     try {
-      if (!localStorage.getItem('token')) return [];
+      if (!sessionStorage.getItem('token')) return [];
       const { data } = await api.get('/partners-list');
       const list = data.success ? data.partners || [] : [];
       setPartnerList(list);
@@ -251,7 +251,7 @@ function PartnersPageContent() {
   // ✅ Fetch partners + partner payments
   const fetchUsers = async (areaList = areas) => {
     try {
-      if (!localStorage.getItem('token')) return setLoading(false);
+      if (!sessionStorage.getItem('token')) return setLoading(false);
 
       // ✅ Fetch partners AND partner-payments together
       const [partnersRes, paymentsRes] = await Promise.all([

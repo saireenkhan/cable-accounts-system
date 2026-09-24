@@ -36,7 +36,7 @@ export default function InstallationPage() {
 
   const fetchCharges = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;

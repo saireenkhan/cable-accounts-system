@@ -52,7 +52,7 @@ export default function AttendancePage() {
 
   const fetchAllStaff = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) return;
       const response = await api.get('/staff');
       if (response.data.success) {
@@ -66,7 +66,7 @@ export default function AttendancePage() {
 
   const fetchAttendance = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;

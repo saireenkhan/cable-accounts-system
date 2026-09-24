@@ -46,7 +46,7 @@ export default function DealerAreasPage() {
 
   const fetchAreas = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;

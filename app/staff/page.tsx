@@ -31,7 +31,7 @@ export default function StaffPage() {
 
   const fetchStaff = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;

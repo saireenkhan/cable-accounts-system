@@ -33,7 +33,7 @@ export default function PackagesPage() {
   const fetchPackages = async () => {
     try {
       console.log('🔄 [Packages] Starting fetch...');
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
 
       if (!token) {
         console.warn('⚠️ [Packages] No token — aborting fetch');

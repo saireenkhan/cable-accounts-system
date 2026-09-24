@@ -64,7 +64,7 @@ export default function ProfilePage() {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem('companyName');
+    const stored = sessionStorage.getItem('companyName');
     if (stored) setCompanyName(stored);
   }, []);
 
@@ -180,7 +180,7 @@ export default function ProfilePage() {
 
     try {
       setSavingCompany(true);
-      localStorage.setItem('companyName', trimmed);
+      sessionStorage.setItem('companyName', trimmed);
       window.dispatchEvent(new Event('company-updated'));
       setCompanySaved(true);
       toast.success('Company name updated');

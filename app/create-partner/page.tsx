@@ -92,7 +92,7 @@ export default function PartnersListPage() {
 
   const fetchPartners = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;
@@ -123,7 +123,7 @@ export default function PartnersListPage() {
   // ✅ Fetch partner areas
   const fetchAreas = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) return;
 
       let areasList: any[] = [];

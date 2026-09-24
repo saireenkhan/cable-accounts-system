@@ -196,21 +196,25 @@ function UsersPageContent() {
   const [view, setView] = useState(false);
   const [viewingUser, setViewingUser] = useState<any>(null);
   const [editingUser, setEditingUser] = useState<any>(null);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+const [search, setSearch] = useState('');
+const [filter, setFilter] = useState('all');
+const [areaFilter, setAreaFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
 
-  useEffect(() => {
-    const status = searchParams.get('status');
-    if (status) setFilter(status.toLowerCase());
-  }, [searchParams]);
+useEffect(() => {
+  const status = searchParams.get('status');
+  if (status) setFilter(status.toLowerCase());
+
+  const area = searchParams.get('area');
+  if (area) setAreaFilter(area);
+}, [searchParams]);
 
   const fetchAreas = async () => {
     try {
-      if (!localStorage.getItem('token')) return [];
+    if (!sessionStorage.getItem('token')) return [];
       const { data } = await api.get('/areas');
       const list = data.success ? data.areas || [] : [];
       setAreas(list);
@@ -223,7 +227,7 @@ function UsersPageContent() {
 
   const fetchPackages = async () => {
     try {
-      if (!localStorage.getItem('token')) return;
+     if (!sessionStorage.getItem('token')) return;
       const { data } = await api.get('/packages');
       if (data.success) setPackages(data.packages || []);
     } catch (e) {
@@ -233,7 +237,7 @@ function UsersPageContent() {
 
   const fetchUsers = async (areaList = areas) => {
     try {
-      if (!localStorage.getItem('token')) return setLoading(false);
+    if (!sessionStorage.getItem('token')) return setLoading(false);
 
       // ✅ Fetch customers AND payments together
       const [customersRes, paymentsRes] = await Promise.all([
@@ -430,26 +434,28 @@ function UsersPageContent() {
       toast.error('Failed to delete user');
     }
   };
+const filteredUsers = users.filter(u => {
+  const status = u.status;
+  const q = search.toLowerCase();
 
-  const filteredUsers = users.filter(u => {
-    const status = u.status;
-    const q = search.toLowerCase();
+  const matchesStatus =
+    filter === 'all' ||
+    (filter === 'active' && status === 'Active') ||
+    (filter === 'inactive' && status === 'Inactive') ||
+    (filter === 'expired' && status === 'Expired') ||
+    (filter === 'suspended' && status === 'Suspended') ||
+    (filter === 'upcoming-expiry' && upcomingExpiry(u));
 
-    const matchesStatus =
-      filter === 'all' ||
-      (filter === 'active' && status === 'Active') ||
-      (filter === 'inactive' && status === 'Inactive') ||
-      (filter === 'expired' && status === 'Expired') ||
-      (filter === 'suspended' && status === 'Suspended') ||
-      (filter === 'upcoming-expiry' && upcomingExpiry(u));
+  const matchesSearch =
+    u.name?.toLowerCase().includes(q) ||
+    u.customerId?.toLowerCase().includes(q) ||
+    u.phone?.includes(q);
 
-    const matchesSearch =
-      u.name?.toLowerCase().includes(q) ||
-      u.customerId?.toLowerCase().includes(q) ||
-      u.phone?.includes(q);
+  // ✅ Area filter
+  const matchesArea = !areaFilter || u.area === areaFilter;
 
-    return matchesStatus && matchesSearch;
-  });
+  return matchesStatus && matchesSearch && matchesArea;
+});
 
   const columns = [
     { key: 'customerId', header: 'User ID' },
@@ -571,21 +577,39 @@ function UsersPageContent() {
 
         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
-              <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
-                User List
-              </h2>
+<div className="flex items-center gap-2 flex-wrap">
+  <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
+    User List
+  </h2>
 
-              {filter !== 'all' && (
-                <button
-                  onClick={() => setFilter('all')}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                >
-                  {statusLabels[filter] || 'All'}
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+  {filter !== 'all' && (
+    <button
+      onClick={() => setFilter('all')}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+    >
+      {statusLabels[filter] || 'All'}
+      <X className="h-3 w-3" />
+    </button>
+  )}
+
+  {areaFilter && (
+    <button
+      onClick={() => {
+        setAreaFilter('');
+        // Clean the URL so refreshing doesn't re-apply the filter
+        if (typeof window !== 'undefined') {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('area');
+          window.history.replaceState({}, '', url.toString());
+        }
+      }}
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+    >
+      Area: {areaFilter}
+      <X className="h-3 w-3" />
+    </button>
+  )}
+</div>
 
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {filteredUsers.length} users found

@@ -5,6 +5,7 @@ import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
+import { useRouter } from 'next/navigation';
 import {
   MapPin,
   PlusCircle,
@@ -89,7 +90,12 @@ export default function AreasPage() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  
+const router = useRouter();
 
+const goToAreaCustomers = (areaName: string) => {
+  router.push(`/users?area=${encodeURIComponent(areaName)}`);
+};
   useEffect(() => {
     fetchAreas();
   }, []);
@@ -751,38 +757,28 @@ export default function AreasPage() {
                           </div>
                         </div>
 
-                        {/* Actions */}
-                        <div className="mt-4 flex gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(area.id)}
-                            className={cn(
-                              'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition',
-                              colors.button
-                            )}
-                          >
-                            <Eye className="h-4 w-4" />
-                            View Details
-                          </button>
+{/* Actions */}
+<div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+  <button
+    type="button"
+    onClick={() => goToAreaCustomers(area.name)}
+    className={cn(
+      'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition',
+      colors.button
+    )}
+  >
+    <Users className="h-4 w-4" />
+    View Customers
+  </button>
 
-                          <button
-                            type="button"
-                            onClick={(event) => handleEdit(area, event)}
-                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-blue-50 px-3 py-2.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-900/40"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                            Edit Area
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(area.id, area.name)}
-                            className="flex items-center justify-center rounded-lg bg-red-50 px-3 py-2.5 text-red-600 transition hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/40"
-                            title={`Delete ${area.name}`}
-                            aria-label={`Delete ${area.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+  <button
+    type="button"
+    onClick={() => toggleExpand(area.id)}
+    className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 transition hover:bg-gray-200 dark:hover:bg-gray-600"
+  >
+    <Eye className="h-4 w-4" />
+    View Details
+  </button>
                         </div>
                       </>
                     )}

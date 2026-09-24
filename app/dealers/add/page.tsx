@@ -39,7 +39,7 @@ export default function DealersPage() {
 
   const fetchDealers = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;
@@ -70,7 +70,7 @@ export default function DealersPage() {
   // ✅ Fetch dealer areas from dealer-areas page
   const fetchAreas = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) return;
       
       let areasList: any[] = [];
