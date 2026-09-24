@@ -113,22 +113,23 @@ export function Sidebar({
   const pathname = usePathname();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
-  const [expanded, setExpanded] = useState<Set<SidebarSection>>(
-    new Set([activeSection])
-  );
+  // ✅ Only ONE section can be open at a time
+  const [expanded, setExpanded] = useState<SidebarSection | null>(activeSection);
 
+  // Auto-open the section that contains the current URL
   useEffect(() => {
     const match = menuItems.find(
       (item) => pathname === item.href || pathname?.startsWith(item.href + '/')
     );
     if (match) {
-      setExpanded((prev) => new Set([...prev, match.section]));
+      setExpanded(match.section);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Keep the section open when the parent's activeSection changes
   useEffect(() => {
-    setExpanded((prev) => new Set([...prev, activeSection]));
+    setExpanded(activeSection);
   }, [activeSection]);
 
   const isActive = (href: string) => {
@@ -137,12 +138,9 @@ export function Sidebar({
   };
 
   const toggleSection = (section: SidebarSection) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(section)) next.delete(section);
-      else next.add(section);
-      return next;
-    });
+    // Accordion: opening one closes the previous
+    setExpanded((prev) => (prev === section ? null : section));
+    onSectionChange(section);
   };
 
   if (isMobile && !isOpen) return null;
@@ -186,7 +184,7 @@ export function Sidebar({
             const items = menuItems.filter((item) => item.section === section);
             if (items.length === 0) return null;
 
-            const isExpanded = expanded.has(section);
+            const isExpanded = expanded === section;
             const isCurrentSection = activeSection === section;
 
             return (
