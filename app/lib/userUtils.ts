@@ -66,6 +66,10 @@ export const expiryDate = (value: any) => {
   );
 };
 
+// ✅ Base effective status based on date only.
+// Same-day expiry is treated as STILL VALID (not expired).
+// Payment-based re-classification is done in `computeEffectiveStatus`
+// inside app/users/page.tsx.
 export const effectiveStatus = (user: any) => {
   const status = String(
     user.statusRaw || user.status || 'active'
@@ -75,7 +79,11 @@ export const effectiveStatus = (user: any) => {
 
   if (status === 'active' && user.expiryDate) {
     const expiry = dateInput(user.expiryDate);
-    if (expiry && expiry < dateInput(new Date())) return 'Expired';
+    const today = dateInput(new Date());
+
+    // ✅ Only expired if expiry is STRICTLY before today.
+    // Same-day expiry → still Active.
+    if (expiry && expiry < today) return 'Expired';
   }
 
   return ({
@@ -85,6 +93,9 @@ export const effectiveStatus = (user: any) => {
   } as Record<string, string>)[status] || 'Active';
 };
 
+// ✅ Upcoming expiry check (date-only, before considering payments).
+// Same-day expiry is included. The payment-based filter happens in
+// `computeUpcomingExpiry` inside app/users/page.tsx.
 export const upcomingExpiry = (user: any) => {
   if (!user.expiryDate || effectiveStatus(user) !== 'Active') return false;
 
@@ -95,7 +106,8 @@ export const upcomingExpiry = (user: any) => {
     new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7)
   );
 
-  return expiry > today && expiry <= end;
+  // ✅ Include same-day expiry so it appears in "Upcoming Expiries".
+  return expiry >= today && expiry <= end;
 };
 
 export const statusStyles: Record<string, string> = {
