@@ -438,7 +438,7 @@ const getCategoryTextColor = (category: NotificationCategory) => {
     Pending: 'text-amber-600 dark:text-amber-400',
     Partial: 'text-blue-600 dark:text-blue-400',
     Expired: 'text-red-600 dark:text-red-400',
-    'Upcoming Expiry': 'text-purple-600 dark:text-purple-400',
+    'Upcoming Expiry': 'text-[#d6b138] dark:text-[#f7ce48]',
   };
   return map[category] || 'text-gray-700 dark:text-gray-300';
 };
@@ -448,7 +448,7 @@ const getCategoryDot = (category: NotificationCategory) => {
     Pending: 'bg-amber-500',
     Partial: 'bg-blue-500',
     Expired: 'bg-red-500',
-    'Upcoming Expiry': 'bg-purple-500',
+    'Upcoming Expiry': 'bg-[#d6b138]',
   };
   return map[category] || 'bg-gray-400';
 };
@@ -766,7 +766,7 @@ export default function RecoveryNotificationsPage() {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
         </div>
       </Layout>
     );
@@ -778,7 +778,7 @@ export default function RecoveryNotificationsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Bell className="h-7 w-7 text-purple-600" />
+              <Bell className="h-7 w-7 text-[#d6b138]" />
               Recovery Notifications
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -813,8 +813,8 @@ export default function RecoveryNotificationsPage() {
             label="Upcoming Expiries"
             value={String(stats.upcoming)}
             hint="Within 7 days"
-            icon={<AlertTriangle className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
-            iconBg="bg-purple-50 dark:bg-purple-900/20"
+            icon={<AlertTriangle className="h-5 w-5 text-[#d6b138] dark:text-[#f7ce48]" />}
+            iconBg="bg-amber-50 dark:bg-amber-900/20"
           />
         </div>
 
@@ -859,7 +859,7 @@ export default function RecoveryNotificationsPage() {
                 type="date"
                 value={filterDueDate}
                 onChange={(e) => setFilterDueDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none"
               />
             </div>
           </div>
@@ -875,7 +875,7 @@ export default function RecoveryNotificationsPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => toast.success('Search applied')}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
               >
                 <Search className="h-4 w-4" />
                 Search
@@ -943,7 +943,7 @@ export default function RecoveryNotificationsPage() {
                         className={cn(
                           'cursor-pointer transition-colors',
                           selected?.id === n.id
-                            ? 'bg-purple-50 dark:bg-purple-900/20'
+                            ? 'bg-amber-50 dark:bg-amber-900/20'
                             : 'hover:bg-gray-50 dark:hover:bg-gray-900/50'
                         )}
                       >
@@ -1045,7 +1045,7 @@ export default function RecoveryNotificationsPage() {
                         className={cn(
                           'w-full text-left px-4 py-3 flex items-center justify-between gap-3 transition-colors',
                           isOpen
-                            ? 'bg-purple-50 dark:bg-purple-900/20'
+                            ? 'bg-amber-50 dark:bg-amber-900/20'
                             : 'hover:bg-gray-50 dark:hover:bg-gray-900/50'
                         )}
                       >
@@ -1094,7 +1094,7 @@ export default function RecoveryNotificationsPage() {
                       </button>
 
                       {isOpen && (
-                        <div className="px-4 pb-4 pt-1 bg-purple-50/50 dark:bg-purple-900/10 space-y-3">
+                        <div className="px-4 pb-4 pt-1 bg-amber-50/50 dark:bg-amber-900/10 space-y-3">
                           {/* Detail grid — includes last paid */}
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             <MiniField label="Contact" value={n.contactNumber} />
@@ -1136,7 +1136,7 @@ export default function RecoveryNotificationsPage() {
                               </div>
                               <button
                                 onClick={() => handleAccordionSave(n)}
-                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-md transition-colors"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#d6b138] dark:text-[#f7ce48] hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-md transition-colors"
                               >
                                 <Save className="h-3 w-3" />
                                 Save
@@ -1152,7 +1152,7 @@ export default function RecoveryNotificationsPage() {
                               }
                               placeholder="Type your message here..."
                               rows={4}
-                              className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none leading-relaxed"
+                              className="w-full text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#d6b138] focus:border-transparent resize-none leading-relaxed"
                             />
                           </div>
 
@@ -1179,7 +1179,7 @@ export default function RecoveryNotificationsPage() {
             <div className="hidden xl:flex xl:col-span-1 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex-col">
               <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                 <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-purple-600" />
+                  <Bell className="h-4 w-4 text-[#d6b138]" />
                   Notification Details
                 </h2>
                 <button
@@ -1259,7 +1259,7 @@ export default function RecoveryNotificationsPage() {
                     </div>
                     <button
                       onClick={handleSaveMessage}
-                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-md transition-colors"
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-[#d6b138] dark:text-[#f7ce48] hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-md transition-colors"
                     >
                       <Save className="h-3 w-3" />
                       Save
@@ -1270,7 +1270,7 @@ export default function RecoveryNotificationsPage() {
                     onChange={(e) => setMessageDraft(e.target.value)}
                     placeholder="Type your message here..."
                     rows={6}
-                    className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none leading-relaxed"
+                    className="w-full text-sm text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-[#d6b138] focus:border-transparent resize-none leading-relaxed"
                   />
                 </div>
               </div>
@@ -1340,7 +1340,7 @@ export default function RecoveryNotificationsPage() {
                     className={cn(
                       'w-8 h-8 rounded-lg text-sm font-medium transition-colors',
                       p === currentPage
-                        ? 'bg-blue-500 text-white'
+                        ? 'bg-[#d6b138] text-gray-900'
                         : 'border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
                     )}
                   >
@@ -1424,7 +1424,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none"
       >
         {options.map((o) => (
           <option key={o} value={o}>

@@ -18,6 +18,9 @@ import {
   Wallet,
   Package,
   MapPin,
+  Zap,
+  MoreHorizontal,
+  BarChart2,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -33,13 +36,12 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
-    const token = sessionStorage.getItem('token');
+      const token = sessionStorage.getItem('token');
       if (!token) {
         router.push('/');
         return;
       }
 
-      // ✅ Fetch customers, payments, packages and areas
       const [customersRes, paymentsRes, packagesRes, areasRes] =
         await Promise.all([
           api.get('/customers?limit=10000'),
@@ -53,37 +55,30 @@ export default function DashboardPage() {
       const packages = packagesRes.data.packages || [];
       const areas = areasRes.data.areas || [];
 
-      console.log('📊 Customers:', customers.length);
-      console.log('💰 Payments:', payments.length);
-      console.log('📦 Packages:', packages.length);
-      console.log('📍 Areas:', areas.length);
-
-      // ✅ ========== CUSTOMER STATS ==========
       const totalCustomers = customers.length;
-const _now = new Date();
+      const _now = new Date();
 
-const expiredCustomers = customers.filter((c: any) => {
-  const rawStatus = (c.status || '').toLowerCase();
-  if (rawStatus === 'expired') return true;
+      const expiredCustomers = customers.filter((c: any) => {
+        const rawStatus = (c.status || '').toLowerCase();
+        if (rawStatus === 'expired') return true;
 
-  if (!c.expiryDate) return false;
-  const expiry = new Date(c.expiryDate);
-  if (isNaN(expiry.getTime())) return false;
+        if (!c.expiryDate) return false;
+        const expiry = new Date(c.expiryDate);
+        if (isNaN(expiry.getTime())) return false;
 
-  return expiry < _now && rawStatus !== 'inactive' && rawStatus !== 'suspended';
-}).length;
+        return expiry < _now && rawStatus !== 'inactive' && rawStatus !== 'suspended';
+      }).length;
 
-const activeCustomers = customers.filter(
-  (c: any) => c.status?.toLowerCase() === 'active'
-).length;
-const inactiveCustomers = customers.filter(
-  (c: any) => c.status?.toLowerCase() === 'inactive'
-).length;
-const suspendedCustomers = customers.filter(
-  (c: any) => c.status?.toLowerCase() === 'suspended'
-).length;
+      const activeCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'active'
+      ).length;
+      const inactiveCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'inactive'
+      ).length;
+      const suspendedCustomers = customers.filter(
+        (c: any) => c.status?.toLowerCase() === 'suspended'
+      ).length;
 
-      // ✅ ========== BILLING & COLLECTION STATS ==========
       const totalBilling = customers.reduce((sum: number, customer: any) => {
         const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
         if (monthlyFee === 0) return sum;
@@ -115,7 +110,6 @@ const suspendedCustomers = customers.filter(
           ? Math.min(100, (totalRecovered / totalBilling) * 100)
           : 0;
 
-      // ✅ ========== UPCOMING EXPIRY (next 7 days) ==========
       const today = new Date();
       const sevenDaysLater = new Date(today);
       sevenDaysLater.setDate(today.getDate() + 7);
@@ -126,23 +120,10 @@ const suspendedCustomers = customers.filter(
         return expiryDate >= today && expiryDate <= sevenDaysLater;
       }).length;
 
-      // ============================================================
-      // ✅ ========== PER-MONTH STATUS COUNTS ==========
-      // ============================================================
       const now = new Date();
       const monthsList = [
-        'January',
-        'February',
-        'March',
-        'April',
-        'May',
-        'June',
-        'July',
-        'August',
-        'September',
-        'October',
-        'November',
-        'December',
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December',
       ];
 
       const currentMonthIndex = now.getMonth();
@@ -155,19 +136,13 @@ const suspendedCustomers = customers.filter(
         const monthIndex = monthsList.indexOf(monthName);
 
         if (isNaN(year) || monthIndex === -1) return false;
-
         if (year < currentYear) return true;
-        if (year === currentYear && monthIndex <= currentMonthIndex)
-          return true;
+        if (year === currentYear && monthIndex <= currentMonthIndex) return true;
 
         return false;
       };
 
-      const monthStatusCounts = {
-        paid: 0,
-        partial: 0,
-        notpaid: 0,
-      };
+      const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
 
       customers.forEach((customer: any) => {
         const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
@@ -191,10 +166,7 @@ const suspendedCustomers = customers.filter(
         });
 
         const activeMonths = Object.keys(monthPaidMap);
-        const totalPaid = activeMonths.reduce(
-          (sum, m) => sum + monthPaidMap[m],
-          0
-        );
+        const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
         const totalExpected = monthlyFee * activeMonths.length;
 
         if (totalPaid >= totalExpected) {
@@ -216,17 +188,6 @@ const suspendedCustomers = customers.filter(
         });
       });
 
-      const paidCustomers = monthStatusCounts.paid;
-      const partialCustomers = monthStatusCounts.partial;
-      const notPaidCustomers = monthStatusCounts.notpaid;
-
-      console.log('✅ Paid:', paidCustomers);
-      console.log('🟡 Partial:', partialCustomers);
-      console.log('❌ Not Paid:', notPaidCustomers);
-      console.log('⚪ Inactive:', inactiveCustomers);
-      console.log('🔴 Expired:', expiredCustomers);
-
-      // ✅ Save stats
       setStats({
         totalCustomers,
         activeCustomers,
@@ -238,22 +199,17 @@ const suspendedCustomers = customers.filter(
         totalOutstanding,
         recoveryRate: Math.round(recoveryRate),
         upcomingExpiry,
-        paidCustomers,
-        partialCustomers,
-        notPaidCustomers,
+        paidCustomers: monthStatusCounts.paid,
+        partialCustomers: monthStatusCounts.partial,
+        notPaidCustomers: monthStatusCounts.notpaid,
         totalPackages: packages.length,
         totalAreas: areas.length,
-        defaultUsers: notPaidCustomers,
+        defaultUsers: monthStatusCounts.notpaid,
       });
     } catch (error: any) {
       console.error('Error fetching dashboard:', error);
-      if (
-        error.code === 'ERR_NETWORK' ||
-        error.message === 'Network Error'
-      ) {
-        toast.error(
-          'Cannot connect to server. Please check if backend is running.'
-        );
+      if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+        toast.error('Cannot connect to server. Please check if backend is running.');
       } else {
         toast.error('Failed to load dashboard data');
       }
@@ -262,12 +218,11 @@ const suspendedCustomers = customers.filter(
     }
   };
 
-  // Handle loading state
   if (loading) {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
         </div>
       </Layout>
     );
@@ -275,18 +230,12 @@ const suspendedCustomers = customers.filter(
 
   const recoveryPercentage =
     stats?.totalBilling > 0
-      ? Math.min(
-          100,
-          Math.round((stats.totalRecovered / stats.totalBilling) * 100)
-        )
+      ? Math.min(100, Math.round((stats.totalRecovered / stats.totalBilling) * 100))
       : 0;
 
   const outstandingPercentage =
     stats?.totalBilling > 0
-      ? Math.min(
-          100,
-          Math.round((stats.totalOutstanding / stats.totalBilling) * 100)
-        )
+      ? Math.min(100, Math.round((stats.totalOutstanding / stats.totalBilling) * 100))
       : 0;
 
   return (
@@ -304,7 +253,7 @@ const suspendedCustomers = customers.filter(
           </div>
           <button
             onClick={() => router.push('/users')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48]-400 text-gray-900 rounded-lg text-sm font-semibold transition-colors shadow-sm"
           >
             <UserPlus className="h-4 w-4" />
             Add User
@@ -313,10 +262,14 @@ const suspendedCustomers = customers.filter(
 
         {/* ========== STATS CARDS - TOP ROW (4 cards) ========== */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-slate-700 to-slate-900 rounded-xl shadow-lg p-5">
-            <p className="text-xs font-medium text-slate-300 uppercase tracking-wider">
-              TOTAL USERS
-            </p>
+          {/* Total Users Card - Dark Navy Theme */}
+          <div className="bg-[#0f172a] rounded-xl shadow-lg p-5 text-white flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <p className="text-xs font-medium text-slate-300 uppercase tracking-wider">
+                TOTAL USERS
+              </p>
+              <BarChart2 className="h-4 w-4 text-slate-400" />
+            </div>
             <p className="text-3xl font-bold text-white mt-2">
               {(stats?.totalCustomers || 0).toLocaleString()}
             </p>
@@ -325,10 +278,13 @@ const suspendedCustomers = customers.filter(
             </p>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              PAID USERS
-            </p>
+          {/* Paid Users Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                PAID USERS
+              </p>
+            </div>
             <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-2">
               {(stats?.paidCustomers || 0).toLocaleString()}
             </p>
@@ -337,10 +293,13 @@ const suspendedCustomers = customers.filter(
             </p>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              PARTIAL USERS
-            </p>
+          {/* Partial Users Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                PARTIAL USERS
+              </p>
+            </div>
             <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-2">
               {(stats?.partialCustomers || 0).toLocaleString()}
             </p>
@@ -349,10 +308,13 @@ const suspendedCustomers = customers.filter(
             </p>
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
-            <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-              NOT PAID USERS
-            </p>
+          {/* Not Paid Users Card */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 flex flex-col justify-between">
+            <div className="flex justify-between items-start">
+              <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                NOT PAID USERS
+              </p>
+            </div>
             <p className="text-3xl font-bold text-rose-600 dark:text-rose-400 mt-2">
               {(stats?.notPaidCustomers || 0).toLocaleString()}
             </p>
@@ -366,9 +328,14 @@ const suspendedCustomers = customers.filter(
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* USER COLLECTION SUMMARY (2/3 width) */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-              User Collection Summary
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                <span className="text-amber-500">📊</span> User Collection Summary
+              </h2>
+              <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+            </div>
 
             <div className="space-y-6">
               <div className="flex items-center justify-between">
@@ -391,7 +358,7 @@ const suspendedCustomers = customers.filter(
                 </div>
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500 rounded-full transition-all duration-700"
+                    className="h-full bg-gray-400 dark:bg-gray-500 rounded-full transition-all duration-700"
                     style={{ width: `${recoveryPercentage}%` }}
                   />
                 </div>
@@ -411,7 +378,7 @@ const suspendedCustomers = customers.filter(
                 </div>
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-indigo-400 to-indigo-500 rounded-full transition-all duration-700"
+                    className="h-full bg-gray-400 dark:bg-gray-500 rounded-full transition-all duration-700"
                     style={{ width: `${outstandingPercentage}%` }}
                   />
                 </div>
@@ -423,24 +390,33 @@ const suspendedCustomers = customers.filter(
           </div>
 
           {/* QUICK ACTIONS (1/3 width) */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6">
-              Quick Actions
-            </h2>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-amber-500 fill-amber-500" /> Quick Actions
+                </h2>
+                <button className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+              </div>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => router.push('/users')}
-                className="px-4 py-2.5 bg-blue-500 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-              >
-                Add User
-              </button>
-              <button
-                onClick={() => router.push('/billing')}
-                className="px-4 py-2.5 bg-blue-500 hover:from-cyan-600 hover:to-cyan-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-              >
-                Receive Payment
-              </button>
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => router.push('/users')}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-xl text-sm font-bold transition-colors shadow-sm"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add User
+                </button>
+                <button
+                  onClick={() => router.push('/billing')}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#0f172a] hover:bg-slate-800 text-white rounded-xl text-sm font-bold transition-colors shadow-sm"
+                >
+                  <Receipt className="h-4 w-4" />
+                  Receive Payment
+                </button>
+              </div>
             </div>
           </div>
         </div>

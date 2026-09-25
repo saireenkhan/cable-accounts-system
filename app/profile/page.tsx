@@ -231,7 +231,7 @@ export default function ProfilePage() {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]" />
         </div>
       </Layout>
     );
@@ -248,7 +248,7 @@ export default function ProfilePage() {
       <div className="max-w-3xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <UserIcon className="h-6 w-6 text-blue-600" />
+            <UserIcon className="h-6 w-6 text-[#d6b138]" />
             My Profile
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -267,14 +267,14 @@ export default function ProfilePage() {
                   className="h-20 w-20 rounded-full object-cover border-2 border-gray-200 dark:border-gray-700"
                 />
               ) : (
-                <div className="h-20 w-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
+                <div className="h-20 w-20 rounded-full bg-[#d6b138] flex items-center justify-center text-gray-900 text-2xl font-bold">
                   {initial}
                 </div>
               )}
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploadingAvatar}
-                className="absolute -bottom-1 -right-1 p-2 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 disabled:opacity-60"
+                className="absolute -bottom-1 -right-1 p-2 rounded-full bg-[#d6b138] text-gray-900 shadow-lg hover:bg-[#f7ce48] disabled:opacity-60"
                 title="Change picture"
               >
                 {uploadingAvatar ? (
@@ -338,7 +338,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={savingCompany}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium disabled:opacity-60"
             >
               {savingCompany ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -398,7 +398,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={savingProfile}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium disabled:opacity-60"
             >
               {savingProfile ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -488,7 +488,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={savingPassword}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium disabled:opacity-60"
             >
               {savingPassword ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -532,7 +532,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-[#d6b138] outline-none"
       />
     </div>
   );
@@ -560,7 +560,7 @@ function PasswordField({
       ? 'border-green-500 focus:ring-green-500'
       : status === 'invalid'
       ? 'border-red-500 focus:ring-red-500'
-      : 'border-gray-300 dark:border-gray-600 focus:ring-blue-500';
+      : 'border-gray-300 dark:border-gray-600 focus:ring-[#d6b138]';
 
   return (
     <div>

@@ -73,7 +73,7 @@ function resolveAreaName(
 
   const asString = String(partnerArea).trim();
 
-  // If the string is in our lookup map, use the resolved name
+  // If the string looks like a valid area name in our lookup, use it
   if (areaLookup[asString]) return areaLookup[asString];
 
   // If the string is an area name (not an ObjectId), return as-is
@@ -340,7 +340,11 @@ function ReceivePartnerPaymentModal({
 
       if (customer) {
         const customerPayments = payments.filter(
-          (p) => p.customer === customer.name && !p.isNoPayment
+          (p) =>
+            (p.partner?._id === customer._id ||
+              p.partner === customer._id ||
+              p.partnerId === customer._id) &&
+            !p.isNoPayment
         );
 
         const allocs = allocatePayments(
@@ -405,7 +409,7 @@ function ReceivePartnerPaymentModal({
 
   const handleSubmit = async () => {
     if (!selectedArea) return toast.error('Please select an area first');
-    if (!selectedCustomerId) return toast.error('Please select a User');
+    if (!selectedCustomerId) return toast.error('Please select a partner');
     if (!selectedMonth) return toast.error('Please select a billing month');
     if (!receiveAmount || parseFloat(receiveAmount) <= 0)
       return toast.error('Please enter a valid amount');
@@ -421,7 +425,7 @@ function ReceivePartnerPaymentModal({
     try {
       const customerObj = customers.find((c) => c._id === selectedCustomerId);
       if (!customerObj) {
-        toast.error('User not found');
+        toast.error('Partner not found');
         setIsSubmitting(false);
         return;
       }
@@ -457,14 +461,14 @@ function ReceivePartnerPaymentModal({
 
   const handleNoPayment = async () => {
     if (!selectedArea) return toast.error('Please select an area first');
-    if (!selectedCustomerId) return toast.error('Please select a User');
+    if (!selectedCustomerId) return toast.error('Please select a partner');
     if (!selectedMonth) return toast.error('Please select a billing month');
 
     setIsSubmittingNoPayment(true);
     try {
       const customerObj = customers.find((c) => c._id === selectedCustomerId);
       if (!customerObj) {
-        toast.error('User not found');
+        toast.error('Partner not found');
         setIsSubmittingNoPayment(false);
         return;
       }
@@ -511,7 +515,7 @@ function ReceivePartnerPaymentModal({
               Receive Partner Payment
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Select area, then User ID to record payment
+              Select area, then partner ID to record payment
             </p>
           </div>
           <button
@@ -571,27 +575,27 @@ function ReceivePartnerPaymentModal({
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <User className="h-4 w-4 inline mr-1" />
-                  User ID *
+                  Partner ID *
                 </label>
                 <SearchableSelect
                   options={userOptions}
                   value={selectedCustomerId}
                   onChange={setSelectedCustomerId}
-                  placeholder={selectedArea ? 'Select User ID' : 'Select area first'}
-                  label="User ID"
+                  placeholder={selectedArea ? 'Select Partner ID' : 'Select area first'}
+                  label="Partner ID"
                   disabled={!selectedArea}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  User Name
+                  Partner Name
                 </label>
                 <input
                   type="text"
                   value={customerDetails?.name || ''}
                   readOnly
-                  placeholder="Auto-filled from User ID"
+                  placeholder="Auto-filled from Partner ID"
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white cursor-not-allowed font-semibold"
                 />
               </div>
@@ -938,7 +942,7 @@ export default function ReceivePartnerPaymentPage() {
     if (monthlyFee === 0) return sum;
 
     const customerPayments = payments.filter(
-      (p) => p.customer === customer.name && !p.isNoPayment
+      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
     const activeMonths = new Set<string>();
     customerPayments.forEach((p) => {
@@ -957,7 +961,9 @@ export default function ReceivePartnerPaymentPage() {
   const totalProfit = payments
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => {
-      const customer = customers.find((c) => c.name === p.customer);
+      const customer = customers.find(
+        (c) => String(c._id) === String(p.customerId)
+      );
       if (!customer) return sum;
 
       const pkgName =
@@ -1007,7 +1013,7 @@ export default function ReceivePartnerPaymentPage() {
     if (monthlyFee === 0) return;
 
     const customerPayments = payments.filter(
-      (p) => p.customer === customer.name && !p.isNoPayment
+      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
 
     if (customerPayments.length === 0) {
@@ -1036,7 +1042,9 @@ export default function ReceivePartnerPaymentPage() {
   const notPaidCustomers = monthStatusCounts.notpaid;
 
   const getPaymentStatus = (payment: any) => {
-    const customer = customers.find((c) => c.name === payment.customer);
+    const customer = customers.find(
+      (c) => String(c._id) === String(payment.customerId)
+    );
     if (!customer) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
@@ -1047,7 +1055,7 @@ export default function ReceivePartnerPaymentPage() {
     }
 
     const allCustomerPayments = payments.filter(
-      (p) => p.customer === payment.customer && !p.isNoPayment
+      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
 
     if (allCustomerPayments.length === 0) {
@@ -1093,7 +1101,7 @@ export default function ReceivePartnerPaymentPage() {
     { key: 'userId', header: 'User ID' },
     { key: 'customer', header: 'User' },
     { key: 'month', header: 'Month' },
-    { key: 'date', header: 'Date' },
+    { key: 'date', header: 'Recieve Date' },
     { key: 'method', header: 'Method' },
     {
       key: 'packagePrice',
@@ -1154,12 +1162,12 @@ export default function ReceivePartnerPaymentPage() {
               Receive Partner Payments
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Select area, then User ID to record payment
+              Select area, then partner ID to record payment
             </p>
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:from-blue-700 hover:to-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138]  hover:bg-[#f7ce48]  text-gray-900 rounded-lg text-sm font-medium transition-colors"
           >
             <PlusCircle className="h-4 w-4" />
             Receive Payment
@@ -1171,7 +1179,7 @@ export default function ReceivePartnerPaymentPage() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  TOTAL USER
+                  TOTAL USERS
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                   {totalCustomers}
@@ -1254,7 +1262,7 @@ export default function ReceivePartnerPaymentPage() {
         </div>
 
         <SearchBar
-          placeholder="Search by User ID, User or month..."
+          placeholder="Search by partner ID, partner or month..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
@@ -1262,7 +1270,7 @@ export default function ReceivePartnerPaymentPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
-              Partner Payment History
+              Payment History
             </h2>
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {filteredPayments.length} receipts found
@@ -1286,7 +1294,7 @@ export default function ReceivePartnerPaymentPage() {
               }}
               accordionTitle="customer"
               accordionSubtitle="userId"
-              emptyMessage="No User payments found"
+              emptyMessage="No partner payments found"
             />
           </div>
         </div>

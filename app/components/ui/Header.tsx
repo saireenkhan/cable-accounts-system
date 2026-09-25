@@ -127,7 +127,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </button>
 
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white hidden sm:block truncate">
+          <h1 className="text-lg text-gray-900 dark:text-white hidden sm:block truncate">
             {companyName}
           </h1>
         </div>

@@ -99,7 +99,7 @@ export default function DashboardPage() {
     slate: 'bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400',
     rose: 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400',
     emerald: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400',
-    amber: 'bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400',
+    amber: 'bg-amber-100 dark:bg-amber-900/30 text-[#d6b138] dark:text-[#f7ce48]',
     teal: 'bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400',
     orange: 'bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400',
     purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
@@ -119,14 +119,14 @@ export default function DashboardPage() {
 
   // Progress bar colors (dull)
   const progressColors = [
-    'bg-slate-500',
+    'bg-[#d6b138]',
     'bg-teal-500',
     'bg-purple-500',
     'bg-amber-500',
   ];
 
   const progressTextColors = [
-    'text-slate-600 dark:text-slate-400',
+    'text-[#d6b138] dark:text-[#f7ce48]',
     'text-teal-600 dark:text-teal-400',
     'text-purple-600 dark:text-purple-400',
     'text-amber-600 dark:text-amber-400',
@@ -191,7 +191,7 @@ export default function DashboardPage() {
           {/* Left: Area-wise Collection */}
           <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
-              <MapPin className="h-4 w-4 text-slate-500" />
+              <MapPin className="h-4 w-4 text-[#d6b138]" />
               Area-wise Collection
             </h2>
             <div className="space-y-3">
@@ -230,7 +230,7 @@ export default function DashboardPage() {
           {/* Right: Monthly Summary */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
-              <TrendingUp className="h-4 w-4 text-slate-500" />
+              <TrendingUp className="h-4 w-4 text-[#d6b138]" />
               Monthly Summary
             </h2>
             <div className="space-y-4">
@@ -262,16 +262,16 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              <div className="flex items-center justify-between py-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg px-4 -mx-1 border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center justify-between py-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg px-4 -mx-1 border border-amber-200 dark:border-amber-800">
                 <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-slate-600 flex items-center justify-center">
+                  <div className="h-9 w-9 rounded-lg bg-[#d6b138] flex items-center justify-center">
                     <TrendingUp className="h-4 w-4 text-white" />
                   </div>
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">
                     Net Income
                   </span>
                 </div>
-                <span className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                <span className="text-lg font-bold text-[#d6b138] dark:text-[#f7ce48]">
                   Rs. {monthlySummary.netIncome.toLocaleString()}
                 </span>
               </div>

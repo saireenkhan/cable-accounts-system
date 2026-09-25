@@ -1416,7 +1416,7 @@ function UsersPageContent() {
               setEditingUser(null);
               setModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
 
@@ -1599,7 +1599,7 @@ function UsersPageContent() {
             </span>
           </div>
 
-          <div className="p-4">
+          <div className="p-2">
             <DataTable
               data={
                 filteredUsers
@@ -1611,21 +1611,21 @@ function UsersPageContent() {
                 {
                   value: 'edit',
                   icon: (
-                    <Edit className="h-4 w-4" />
+                    <Edit className="h-3 w-3" />
                   ),
                 },
 
                 {
                   value: 'view',
                   icon: (
-                    <Eye className="h-4 w-4" />
+                    <Eye className="h-3 w-3" />
                   ),
                 },
 
                 {
                   value: 'delete',
                   icon: (
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3 w-3" />
                   ),
                 },
               ]}

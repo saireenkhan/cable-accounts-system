@@ -236,7 +236,7 @@ export default function DealersPage() {
       key: 'commission', 
       header: 'Commission',
       render: (item: any) => (
-        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+        <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-[#f7ce48]">
           {item.commission}
         </span>
       )
@@ -251,7 +251,7 @@ export default function DealersPage() {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
         </div>
       </Layout>
     );
@@ -264,7 +264,7 @@ export default function DealersPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Truck className="h-6 w-6 text-purple-600" />
+              <Truck className="h-6 w-6 text-[#d6b138]" />
               Dealers
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -273,7 +273,7 @@ export default function DealersPage() {
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-purple-500/25"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
             Add Dealer
@@ -290,8 +290,8 @@ export default function DealersPage() {
                   {totalDealers}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                <Truck className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              <div className="h-12 w-12 bg-amber-50 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                <Truck className="h-6 w-6 text-[#d6b138] dark:text-[#f7ce48]" />
               </div>
             </div>
           </div>
@@ -351,7 +351,7 @@ export default function DealersPage() {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none transition-all"
           >
             {statusOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -403,7 +403,7 @@ export default function DealersPage() {
           subtitle="Add a new dealer to the system"
           fields={dealerFields}
           submitLabel="Add Dealer"
-          color="purple"
+          color="blue"
           endpoint="/dealers"
           transformData={transformDealerData}
           context={{ areas }}

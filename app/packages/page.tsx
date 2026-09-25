@@ -220,7 +220,7 @@ export default function PackagesPage() {
               setEditingPackage(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138]  hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
           >
             <PlusCircle className="h-4 w-4" />
             Add Package

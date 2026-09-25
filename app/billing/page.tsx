@@ -1168,7 +1168,7 @@ export default function ReceivePaymentPage() {
           </div>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:from-blue-700 hover:to-blue-300 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] text-white rounded-lg text-sm font-medium transition-colors"
           >
             <PlusCircle className="h-4 w-4" />
             Receive Payment

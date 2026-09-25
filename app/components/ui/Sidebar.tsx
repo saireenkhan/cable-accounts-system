@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -9,7 +10,6 @@ import {
   Bell,
   MessageCircle,
   Handshake,
-  HomeIcon,
   MapPin,
   Package,
   FileText,
@@ -27,6 +27,7 @@ import {
   UserPlus,
   ChevronDown,
 } from 'lucide-react';
+
 import { cn } from '@/app/lib/utils';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import type { SidebarSection } from './SidebarRail';
@@ -45,44 +46,167 @@ interface SidebarProps {
   onSectionChange: (section: SidebarSection) => void;
 }
 
+/* =========================================================
+   MENU ITEMS
+========================================================= */
+
 const menuItems: MenuItem[] = [
   // OWNER
-  { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, section: 'user' },
-  { label: 'Add User', href: '/users', icon: <UserPlus className="h-[18px] w-[18px]" />, section: 'user' },
-  { label: 'Receive Payment', href: '/billing', icon: <FileText className="h-[18px] w-[18px]" />, section: 'user' },
-  { label: 'Add Area', href: '/areas', icon: <MapPin className="h-[18px] w-[18px]" />, section: 'user' },
-  { label: 'Add Package', href: '/packages', icon: <Package className="h-[18px] w-[18px]" />, section: 'user' },
+  {
+    label: 'Dashboard',
+    href: '/dashboard',
+    icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
+    section: 'user',
+  },
+  {
+    label: 'Add User',
+    href: '/users',
+    icon: <UserPlus className="h-[18px] w-[18px]" />,
+    section: 'user',
+  },
+  {
+    label: 'Receive Payment',
+    href: '/billing',
+    icon: <FileText className="h-[18px] w-[18px]" />,
+    section: 'user',
+  },
+  {
+    label: 'Add Area',
+    href: '/areas',
+    icon: <MapPin className="h-[18px] w-[18px]" />,
+    section: 'user',
+  },
+  {
+    label: 'Add Package',
+    href: '/packages',
+    icon: <Package className="h-[18px] w-[18px]" />,
+    section: 'user',
+  },
 
   // PARTNER
-  { label: 'Dashboard', href: '/dashboard3', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, section: 'partner' },
-  { label: 'Add Area', href: '/partner-areas', icon: <MapPin className="h-[18px] w-[18px]" />, section: 'partner' },
-  { label: 'Add User', href: '/partners', icon: <UserPlus className="h-[18px] w-[18px]" />, section: 'partner' },
-  { label: 'Receive Payment', href: '/payments', icon: <FileText className="h-[18px] w-[18px]" />, section: 'partner' },
+  {
+    label: 'Dashboard',
+    href: '/dashboard3',
+    icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
+    section: 'partner',
+  },
+  {
+    label: 'Add Area',
+    href: '/partner-areas',
+    icon: <MapPin className="h-[18px] w-[18px]" />,
+    section: 'partner',
+  },
+  {
+    label: 'Add User',
+    href: '/partners',
+    icon: <UserPlus className="h-[18px] w-[18px]" />,
+    section: 'partner',
+  },
+  {
+    label: 'Receive Payment',
+    href: '/payments',
+    icon: <FileText className="h-[18px] w-[18px]" />,
+    section: 'partner',
+  },
 
   // DEALER
-  { label: 'Dashboard', href: '/dealers', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, section: 'dealer' },
-  { label: 'Add Dealer', href: '/dealers/add', icon: <User className="h-[18px] w-[18px]" />, section: 'dealer' },
-  { label: 'Dealer Payment', href: '/dealer-payments', icon: <CreditCard className="h-[18px] w-[18px]" />, section: 'dealer' },
-  { label: 'Add Area', href: '/area2', icon: <MapPin className="h-[18px] w-[18px]" />, section: 'dealer' },
+  {
+    label: 'Dashboard',
+    href: '/dealers',
+    icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
+    section: 'dealer',
+  },
+  {
+    label: 'Add Dealer',
+    href: '/dealers/add',
+    icon: <User className="h-[18px] w-[18px]" />,
+    section: 'dealer',
+  },
+  {
+    label: 'Dealer Payment',
+    href: '/dealer-payments',
+    icon: <CreditCard className="h-[18px] w-[18px]" />,
+    section: 'dealer',
+  },
+  {
+    label: 'Add Area',
+    href: '/area2',
+    icon: <MapPin className="h-[18px] w-[18px]" />,
+    section: 'dealer',
+  },
 
   // STAFF
-  { label: 'Staff Profile', href: '/staff', icon: <User className="h-[18px] w-[18px]" />, section: 'staff' },
-  { label: 'Daily Attendance', href: '/attendance', icon: <ClipboardCheck className="h-[18px] w-[18px]" />, section: 'staff' },
+  {
+    label: 'Staff Profile',
+    href: '/staff',
+    icon: <User className="h-[18px] w-[18px]" />,
+    section: 'staff',
+  },
+  {
+    label: 'Daily Attendance',
+    href: '/attendance',
+    icon: <ClipboardCheck className="h-[18px] w-[18px]" />,
+    section: 'staff',
+  },
 
   // EXPENSE
-  { label: 'Purchasing', href: '/purchasing', icon: <ShoppingBag className="h-[18px] w-[18px]" />, section: 'expense' },
-  { label: 'Installation Charges', href: '/installation', icon: <Wrench className="h-[18px] w-[18px]" />, section: 'expense' },
+  {
+    label: 'Purchasing',
+    href: '/purchasing',
+    icon: <ShoppingBag className="h-[18px] w-[18px]" />,
+    section: 'expense',
+  },
+  {
+    label: 'Installation Charges',
+    href: '/installation',
+    icon: <Wrench className="h-[18px] w-[18px]" />,
+    section: 'expense',
+  },
 
   // GENERAL
-  { label: 'All Report', href: '/reports', icon: <PieChart className="h-[18px] w-[18px]" />, section: 'general' },
-  { label: 'Dashboard', href: '/dashboard2', icon: <LayoutDashboard className="h-[18px] w-[18px]" />, section: 'general' },
-  { label: 'Bulk Upload', href: '/bulk-upload', icon: <Upload className="h-[18px] w-[18px]" />, section: 'general' },
-  { label: 'Add Partner', href: '/create-partner', icon: <UserRoundPlus className="h-[18px] w-[18px]" />, section: 'general' },
-  { label: 'WhatsApp Bot', href: '/whatsapp', icon: <MessageCircle className="h-[18px] w-[18px]" />, section: 'general' },
+  {
+    label: 'All Report',
+    href: '/reports',
+    icon: <PieChart className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
+  {
+    label: 'Dashboard',
+    href: '/dashboard2',
+    icon: <LayoutDashboard className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
+  {
+    label: 'Bulk Upload',
+    href: '/bulk-upload',
+    icon: <Upload className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
+  {
+    label: 'Add Partner',
+    href: '/create-partner',
+    icon: <UserRoundPlus className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
+  {
+    label: 'WhatsApp Bot',
+    href: '/whatsapp',
+    icon: <MessageCircle className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
 
-  // NOTIFY
-  { label: 'Notification', href: '/notification', icon: <Bell className="h-[18px] w-[18px]" />, section: 'notify' },
+  // NOTIFICATIONS
+  {
+    label: 'Notification',
+    href: '/notification',
+    icon: <Bell className="h-[18px] w-[18px]" />,
+    section: 'notify',
+  },
 ];
+
+/* =========================================================
+   SECTION TITLES
+========================================================= */
 
 const sectionTitles: Record<SidebarSection, string> = {
   user: 'Owner Management',
@@ -94,6 +218,10 @@ const sectionTitles: Record<SidebarSection, string> = {
   notify: 'Notifications',
 };
 
+/* =========================================================
+   SECTION ORDER
+========================================================= */
+
 const sectionOrder: SidebarSection[] = [
   'user',
   'partner',
@@ -104,6 +232,10 @@ const sectionOrder: SidebarSection[] = [
   'notify',
 ];
 
+/* =========================================================
+   SIDEBAR
+========================================================= */
+
 export function Sidebar({
   isOpen,
   onClose,
@@ -113,103 +245,247 @@ export function Sidebar({
   const pathname = usePathname();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
-  // ✅ Only ONE section can be open at a time
-  const [expanded, setExpanded] = useState<SidebarSection | null>(activeSection);
+  // Only ONE section can be open at a time
+  const [expanded, setExpanded] =
+    useState<SidebarSection | null>(activeSection);
 
-  // Auto-open the section that contains the current URL
+  /* =======================================================
+     AUTO-OPEN SECTION FOR CURRENT URL
+  ======================================================= */
+
   useEffect(() => {
     const match = menuItems.find(
-      (item) => pathname === item.href || pathname?.startsWith(item.href + '/')
+      (item) =>
+        pathname === item.href ||
+        pathname?.startsWith(item.href + '/')
     );
+
     if (match) {
       setExpanded(match.section);
     }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
-  // Keep the section open when the parent's activeSection changes
+  /* =======================================================
+     KEEP SECTION SYNCHRONIZED
+  ======================================================= */
+
   useEffect(() => {
     setExpanded(activeSection);
   }, [activeSection]);
 
+  /* =======================================================
+     ACTIVE ROUTE
+  ======================================================= */
+
   const isActive = (href: string) => {
     if (href === '#') return false;
-    return pathname === href || pathname?.startsWith(href + '/');
+
+    return (
+      pathname === href ||
+      pathname?.startsWith(href + '/')
+    );
   };
 
+  /* =======================================================
+     ACCORDION
+  ======================================================= */
+
   const toggleSection = (section: SidebarSection) => {
-    // Accordion: opening one closes the previous
-    setExpanded((prev) => (prev === section ? null : section));
+    setExpanded((prev) =>
+      prev === section ? null : section
+    );
+
     onSectionChange(section);
   };
 
-  if (isMobile && !isOpen) return null;
+  /* =======================================================
+     MOBILE CLOSED
+  ======================================================= */
+
+  if (isMobile && !isOpen) {
+    return null;
+  }
 
   return (
     <>
+      {/* ===================================================
+          MOBILE OVERLAY
+      =================================================== */}
+
       {isMobile && isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40"
+          className="
+            fixed inset-0
+            bg-[#08284D]/40
+            dark:bg-black/60
+            z-40
+          "
           onClick={onClose}
         />
       )}
 
+      {/* ===================================================
+          MAIN SIDEBAR
+      =================================================== */}
+
       <aside
         className={cn(
-          'fixed top-0 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 z-40 transition-transform duration-300 ease-in-out flex flex-col',
+          `
+          fixed top-0 h-full
+          bg-[#F4F7F9]
+          dark:bg-[#102A43]
+          border-r border-[#D9E2E8]
+          dark:border-[#24445D]
+          z-40
+          transition-transform duration-300 ease-in-out
+          flex flex-col
+          `,
           'w-64',
           isMobile ? 'left-0' : 'left-[60px]',
           isMobile ? 'transform' : 'translate-x-0',
           isMobile && !isOpen && '-translate-x-full'
         )}
       >
-        {/* Brand */}
-        <div className="flex items-center gap-2 px-5 h-14 border-b border-gray-100 dark:border-gray-800 flex-shrink-0">
-          <span className="font-semibold text-gray-900 dark:text-white text-[15px] truncate">
-            Smart Recovery
+
+        {/* =================================================
+            BRAND
+        ================================================= */}
+
+        <div
+          className="
+            flex items-center
+            gap-2
+            px-5
+            h-14
+            border-b
+            border-[#D9E2E8]
+            dark:border-[#24445D]
+            flex-shrink-0
+          "
+        >
+          <span
+            className="
+              font-semibold
+              text-[17px]
+              truncate
+              text-[#08284D]
+              dark:text-white
+            "
+          >
+            Smart{' '}
+            <span className="text-[#D9A82E] dark:text-[#F4D477]">
+              Recovery
+            </span>
           </span>
+
+          {/* Mobile Close */}
           {isMobile && (
             <button
               onClick={onClose}
-              className="ml-auto p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="
+                ml-auto
+                p-1.5
+                rounded-lg
+                text-[#64748B]
+                dark:text-[#B8C7D3]
+                hover:bg-[#E5EDF2]
+                dark:hover:bg-white/10
+                transition-colors
+              "
+              aria-label="Close sidebar"
             >
-              <X className="h-4 w-4 text-gray-500" />
+              <X className="h-4 w-4" />
             </button>
           )}
         </div>
 
-        {/* Menu */}
+        {/* =================================================
+            MENU
+        ================================================= */}
+
         <nav className="flex-1 overflow-y-auto py-4 px-3">
+
           {sectionOrder.map((section) => {
-            const items = menuItems.filter((item) => item.section === section);
-            if (items.length === 0) return null;
+            const items = menuItems.filter(
+              (item) => item.section === section
+            );
+
+            if (items.length === 0) {
+              return null;
+            }
 
             const isExpanded = expanded === section;
-            const isCurrentSection = activeSection === section;
+            const isCurrentSection =
+              activeSection === section;
 
             return (
-              <div key={section} className="mb-2">
-                {/* Section header */}
+              <div
+                key={section}
+                className="mb-2"
+              >
+
+                {/* =========================================
+                    SECTION HEADER
+                ========================================= */}
+
                 <button
                   type="button"
-                  onClick={() => toggleSection(section)}
+                  onClick={() =>
+                    toggleSection(section)
+                  }
                   className={cn(
-                    'w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all text-[13px] font-sans font-semibold ',
+                    `
+                    w-full
+                    flex
+                    items-center
+                    justify-between
+                    px-3
+                    py-2
+                    rounded-lg
+                    transition-all
+                    text-[12px]
+                    font-sans
+                    font-semibold
+                    uppercase
+                    tracking-wide
+                    `,
                     isCurrentSection
-                      ? 'text-blue-600 dark:text-blue-400'
-                      : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'
+                      ? `
+                        text-[#08284D]
+                        dark:text-[#F4D477]
+                      `
+                      : `
+                        text-[#718096]
+                        dark:text-[#A9BBC8]
+                        hover:text-[#08284D]
+                        dark:hover:text-white
+                      `
                   )}
                 >
-                  <span>{sectionTitles[section]}</span>
+                  <span>
+                    {sectionTitles[section]}
+                  </span>
+
                   <ChevronDown
                     className={cn(
-                      'h-3.5 w-3.5 transition-transform duration-200',
-                      !isExpanded && '-rotate-90'
+                      `
+                      h-3.5
+                      w-3.5
+                      transition-transform
+                      duration-200
+                      `,
+                      !isExpanded &&
+                        '-rotate-90'
                     )}
                   />
                 </button>
 
-                {/* Items */}
+                {/* =========================================
+                    SECTION ITEMS
+                ========================================= */}
+
                 <div
                   className={cn(
                     'overflow-hidden transition-all duration-200',
@@ -219,74 +495,100 @@ export function Sidebar({
                   )}
                 >
                   <div className="space-y-0.5">
+
                     {items.map((item) => {
-                      const active = isActive(item.href);
+                      const active = isActive(
+                        item.href
+                      );
+
                       return (
                         <Link
                           key={item.href}
                           href={item.href}
                           onClick={() => {
-                            onSectionChange(section);
-                            if (isMobile) onClose();
+                            onSectionChange(
+                              section
+                            );
+
+                            if (isMobile) {
+                              onClose();
+                            }
                           }}
                           className={cn(
-                            'group flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                            `
+                            group
+                            flex
+                            items-center
+                            gap-3
+                            px-3
+                            py-2
+                            rounded-lg
+                            text-sm
+                            font-medium
+                            transition-all
+                            duration-150
+                            `,
                             active
-                              ? 'bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300'
-                              : 'text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-500/10 hover:text-blue-700 dark:hover:text-blue-300'
+                              ? `
+                                bg-[#F4D477]
+                                dark:bg-[#d6b138]
+                                text-[#08284D]
+                                dark:text-[#102A43]
+                                shadow-sm
+                              `
+                              : `
+                                text-[#334155]
+                                dark:text-[#D7E1E8]
+                                hover:bg-[#E5EDF2]
+                                dark:hover:bg-white/10
+                                hover:text-[#08284D]
+                                dark:hover:text-white
+                              `
                           )}
                         >
+
+                          {/* Icon */}
                           <span
                             className={cn(
-                              'flex-shrink-0 transition-colors',
+                              `
+                              flex-shrink-0
+                              transition-colors
+                              `,
                               active
-                                ? 'text-blue-600 dark:text-blue-400'
-                                : 'text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400'
+                                ? `
+                                  text-[#08284D]
+                                  dark:text-[#102A43]
+                                `
+                                : `
+                                  text-[#64748B]
+                                  dark:text-[#AFC0CC]
+                                  group-hover:text-[#08284D]
+                                  dark:group-hover:text-white
+                                `
                             )}
                           >
                             {item.icon}
                           </span>
-                          <span className="truncate">{item.label}</span>
+
+                          {/* Label */}
+                          <span className="truncate">
+                            {item.label}
+                          </span>
+
                         </Link>
                       );
                     })}
+
                   </div>
                 </div>
+
               </div>
             );
           })}
-        </nav>
 
-        {/* Footer */}
-        <div className="border-t border-gray-100 dark:border-gray-800 p-3 flex-shrink-0">
-          <div className="flex items-center gap-3 px-1">
-            <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-              <span className="text-blue-700 dark:text-blue-300 font-semibold text-xs">
-                A
-              </span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-semibold text-gray-900 dark:text-white truncate">
-                Admin User
-              </p>
-              <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate">
-                admin@cable.com
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                sessionStorage.removeItem('token');
-                sessionStorage.removeItem('user');
-                window.location.href = '/';
-              }}
-              className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
-              title="Logout"
-            >
-              <LogOut className="h-[18px] w-[18px] text-gray-400 hover:text-blue-600 dark:hover:text-blue-400" />
-            </button>
-          </div>
-        </div>
+        </nav>
       </aside>
     </>
   );
 }
+

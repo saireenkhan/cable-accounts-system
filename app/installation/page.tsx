@@ -209,7 +209,7 @@ export default function InstallationPage() {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
         </div>
       </Layout>
     );
@@ -222,7 +222,7 @@ export default function InstallationPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Wrench className="h-6 w-6 text-indigo-600" />
+              <Wrench className="h-6 w-6 text-[#d6b138]" />
               Installation Charges
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -232,7 +232,7 @@ export default function InstallationPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
             >
               <PlusCircle className="h-4 w-4" />
               Add Installation Charge
@@ -260,8 +260,8 @@ export default function InstallationPage() {
                   Installation & service
                 </p>
               </div>
-              <div className="h-12 w-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-full flex items-center justify-center">
-                <Wrench className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+              <div className="h-12 w-12 bg-amber-50 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                <Wrench className="h-6 w-6 text-[#d6b138] dark:text-[#f7ce48]" />
               </div>
             </div>
           </div>

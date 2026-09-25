@@ -527,7 +527,7 @@ export default function DealerPaymentsPage() {
       value: totalDealers,
       subtitle: `${activeDealers} active`,
       icon: <Users className="h-6 w-6" />,
-      color: 'purple',
+      color: 'amber',
     },
     {
       title: 'TOTAL PAID',
@@ -581,7 +581,7 @@ export default function DealerPaymentsPage() {
       key: 'amount',
       header: 'Amount',
       render: (item: any) => (
-        <span className="font-semibold text-purple-600">
+        <span className="font-semibold text-[#d6b138]">
           Rs. {(item.amount || 0).toLocaleString()}
         </span>
       ),
@@ -692,14 +692,14 @@ export default function DealerPaymentsPage() {
   ];
 
   const colorMap = {
-    purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+    amber: 'bg-amber-100 dark:bg-amber-900/30 text-[#d6b138] dark:text-[#f7ce48]',
     blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
     green: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400',
     red: 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400',
   };
 
   const iconBgMap = {
-    purple: 'bg-purple-100 dark:bg-purple-900/30',
+    amber: 'bg-amber-100 dark:bg-amber-900/30',
     blue: 'bg-blue-100 dark:bg-blue-900/30',
     green: 'bg-green-100 dark:bg-green-900/30',
     red: 'bg-red-100 dark:bg-red-900/30',
@@ -709,7 +709,7 @@ export default function DealerPaymentsPage() {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
         </div>
       </Layout>
     );
@@ -722,7 +722,7 @@ export default function DealerPaymentsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Receipt className="h-6 w-6 text-purple-600" />
+              <Receipt className="h-6 w-6 text-[#d6b138]" />
               Dealer Accounts
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -739,10 +739,10 @@ export default function DealerPaymentsPage() {
             </button>
             <button
               onClick={() => setIsReceiveModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/25"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#b8942e]text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/25"
             >
               <PlusCircle className="h-4 w-4" />
-              Receive Payment from Dealer
+              Receive Payment
             </button>
           </div>
         </div>
@@ -755,7 +755,7 @@ export default function DealerPaymentsPage() {
               className={cn(
                 'rounded-xl shadow-sm border p-5',
                 i === 0
-                  ? 'bg-gradient-to-br from-purple-700 to-purple-900 border-purple-800 text-white'
+                  ? 'bg-gradient-to-br from-[#d6b138] to-[#b8942e] border-[#b8942e] text-white'
                   : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700'
               )}
             >
@@ -765,7 +765,7 @@ export default function DealerPaymentsPage() {
                     className={cn(
                       'text-sm',
                       i === 0
-                        ? 'text-purple-200'
+                        ? 'text-amber-100'
                         : 'text-gray-500 dark:text-gray-400'
                     )}
                   >
@@ -784,7 +784,7 @@ export default function DealerPaymentsPage() {
                       className={cn(
                         'text-xs mt-1',
                         i === 0
-                          ? 'text-purple-200'
+                          ? 'text-amber-100'
                           : stat.color === 'green'
                           ? 'text-green-600 dark:text-green-400'
                           : stat.color === 'red'
@@ -823,7 +823,7 @@ export default function DealerPaymentsPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-purple-600" />
+              <TrendingUp className="h-4 w-4 text-[#d6b138]" />
               Add Payment Report (Paid to Dealers)
             </h2>
             <span className="text-xs text-gray-500 dark:text-gray-400">

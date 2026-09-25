@@ -448,7 +448,7 @@ const generateMonthPDF = () => {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
         </div>
       </Layout>
     );
@@ -461,7 +461,7 @@ const generateMonthPDF = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Calendar className="h-6 w-6 text-blue-600" />
+              <Calendar className="h-6 w-6 text-[#d6b138]" />
               Daily Staff Attendance
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -471,7 +471,7 @@ const generateMonthPDF = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-blue-500/25"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
             >
               <UserCheck className="h-4 w-4" />
               Mark Attendance
@@ -492,8 +492,8 @@ const generateMonthPDF = () => {
                   Registered staff
                 </p>
               </div>
-              <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-                <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              <div className="h-12 w-12 bg-amber-50 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                <Users className="h-6 w-6 text-[#d6b138] dark:text-[#f7ce48]" />
               </div>
             </div>
           </div>
@@ -556,7 +556,7 @@ const generateMonthPDF = () => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-600" />
+              <FileText className="h-4 w-4 text-[#d6b138]" />
               Monthly Attendance Report
             </h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -564,12 +564,12 @@ const generateMonthPDF = () => {
                 type="month"
                 value={reportMonth}
                 onChange={(e) => setReportMonth(e.target.value)}
-                className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none"
               />
               <button
                 onClick={fetchMonthlyReport}
                 disabled={reportLoading}
-                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 {reportLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -581,7 +581,7 @@ const generateMonthPDF = () => {
               <button
                 onClick={generateMonthPDF}
                 disabled={!reportData}
-                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
                 Generate PDF
@@ -592,7 +592,7 @@ const generateMonthPDF = () => {
           <div className="p-4">
             {reportLoading ? (
               <div className="flex justify-center items-center h-32">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
               </div>
             ) : !reportData ? (
               <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-sm">
@@ -733,7 +733,7 @@ const generateMonthPDF = () => {
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none transition-all"
             />
           </div>
           <div className="flex-1">

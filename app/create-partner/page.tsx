@@ -48,7 +48,7 @@ function ViewField({
         'p-3 rounded-lg border',
         fullWidth && 'sm:col-span-2',
         highlight
-          ? 'border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-900/20'
+          ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20'
           : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
       )}
     >
@@ -60,7 +60,7 @@ function ViewField({
         className={cn(
           'font-semibold',
           highlight
-            ? 'text-purple-700 dark:text-purple-400 text-lg'
+            ? 'text-[#d6b138] dark:text-[#f7ce48] text-lg'
             : 'text-gray-900 dark:text-white'
         )}
       >
@@ -288,7 +288,7 @@ export default function PartnersListPage() {
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]"></div>
         </div>
       </Layout>
     );
@@ -301,7 +301,7 @@ export default function PartnersListPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Handshake className="h-6 w-6 text-purple-600" />
+              <Handshake className="h-6 w-6 text-[#d6b138]" />
               Partners
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -313,7 +313,7 @@ export default function PartnersListPage() {
               setEditingPartner(null);
               setModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
             Add Partner
@@ -330,8 +330,8 @@ export default function PartnersListPage() {
                   {totalPartners}
                 </p>
               </div>
-              <div className="h-12 w-12 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-                <Handshake className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              <div className="h-12 w-12 bg-amber-50 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                <Handshake className="h-6 w-6 text-[#d6b138] dark:text-[#f7ce48]" />
               </div>
             </div>
           </div>
@@ -391,7 +391,7 @@ export default function PartnersListPage() {
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none transition-all"
           >
             {statusOptions.map((option) => (
               <option key={option} value={option}>
@@ -453,7 +453,7 @@ export default function PartnersListPage() {
           }
           fields={partnerFields}
           submitLabel={editingPartner ? 'Update Partner' : 'Add Partner'}
-          color="purple"
+          color="blue"
           endpoint={
             editingPartner ? `/partners-list/${editingPartner.id}` : '/partners-list'
           }
@@ -485,10 +485,10 @@ export default function PartnersListPage() {
 
             <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
               {/* Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/30">
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-amber-50 to-amber-50 dark:from-amber-950/30 dark:to-amber-950/30">
                 <div className="flex items-center gap-3">
-                  <div className="h-12 w-12 bg-purple-100 dark:bg-purple-900/40 rounded-full flex items-center justify-center">
-                    <Handshake className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                  <div className="h-12 w-12 bg-amber-100 dark:bg-amber-900/40 rounded-full flex items-center justify-center">
+                    <Handshake className="h-6 w-6 text-[#d6b138] dark:text-[#f7ce48]" />
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -589,7 +589,7 @@ export default function PartnersListPage() {
                     setEditingPartner(viewingPartner);
                     setModal(true);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium"
                 >
                   <Edit className="h-4 w-4" />
                   Edit

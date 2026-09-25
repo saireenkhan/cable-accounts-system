@@ -179,7 +179,7 @@ export default function ReportsPage() {
         : 'Loss this month',
       icon: <TrendingUp className="h-6 w-6" />,
       action: summary?.monthLabel || 'This month',
-      color: summary?.isProfit === false ? 'red' : 'purple',
+      color: summary?.isProfit === false ? 'red' : 'amber',
     },
   ];
 
@@ -307,7 +307,7 @@ export default function ReportsPage() {
     if (modalLoading) {
       return (
         <div className="flex justify-center items-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-[#d6b138]" />
         </div>
       );
     }
@@ -717,7 +717,7 @@ export default function ReportsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <PieChart className="h-6 w-6 text-blue-600" />
+              <PieChart className="h-6 w-6 text-[#d6b138]" />
               Reports Center
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -813,7 +813,7 @@ export default function ReportsPage() {
           <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={handleApplyFilter}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
+              className="px-4 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium"
             >
               Apply Filter
             </button>
@@ -840,7 +840,7 @@ export default function ReportsPage() {
                     card.color === 'blue' && 'bg-blue-50 text-blue-600',
                     card.color === 'green' && 'bg-green-50 text-green-600',
                     card.color === 'red' && 'bg-red-50 text-red-600',
-                    card.color === 'purple' && 'bg-purple-50 text-purple-600'
+                    card.color === 'amber' && 'bg-amber-50 text-[#d6b138]'
                   )}
                 >
                   {card.icon}
@@ -864,7 +864,7 @@ export default function ReportsPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-600" />
+              <FileText className="h-4 w-4 text-[#d6b138]" />
               Available Reports
             </h2>
             <div className="max-w-xs w-full">
@@ -906,7 +906,7 @@ export default function ReportsPage() {
               onClick={() => setModalOpen(false)}
             />
             <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-950/30">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-amber-50 dark:bg-amber-950/30">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                     {modalTitle}

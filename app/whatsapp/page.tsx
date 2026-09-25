@@ -195,7 +195,7 @@ const messageColumns: any[] = [
     return (
       <Layout>
         <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]" />
         </div>
       </Layout>
     );
@@ -220,7 +220,7 @@ const messageColumns: any[] = [
         {/* Webhook URL Card */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center gap-2 mb-2">
-            <Settings className="h-4 w-4 text-blue-600" />
+            <Settings className="h-4 w-4 text-[#d6b138]" />
             <h2 className="font-semibold text-gray-900 dark:text-white">
               Webhook URL (paste this in Meta)
             </h2>
@@ -231,7 +231,7 @@ const messageColumns: any[] = [
             </code>
             <button
               onClick={() => handleCopy(webhookUrl)}
-              className="px-3 py-2 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+              className="px-3 py-2 text-xs font-medium rounded-lg bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900"
             >
               Copy
             </button>
@@ -248,7 +248,7 @@ const messageColumns: any[] = [
             className={cn(
               'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               tab === 'settings'
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-[#d6b138] text-[#d6b138]'
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             )}
           >
@@ -260,7 +260,7 @@ const messageColumns: any[] = [
             className={cn(
               'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               tab === 'messages'
-                ? 'border-blue-600 text-blue-600'
+                ? 'border-[#d6b138] text-[#d6b138]'
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             )}
           >
@@ -369,7 +369,7 @@ const messageColumns: any[] = [
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white rounded-lg text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] disabled:opacity-60 text-gray-900 rounded-lg text-sm font-medium"
               >
                 <Save className="h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Settings'}
@@ -431,7 +431,7 @@ function Field({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none"
       />
     </div>
   );
@@ -455,7 +455,7 @@ function TextArea({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={3}
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y"
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none resize-y"
       />
     </div>
   );
@@ -478,7 +478,7 @@ function Toggle({
         onClick={() => onChange(!checked)}
         className={cn(
           'relative h-6 w-11 rounded-full transition-colors',
-          checked ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+          checked ? 'bg-[#d6b138]' : 'bg-gray-300 dark:bg-gray-600'
         )}
       >
         <span

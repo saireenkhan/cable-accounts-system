@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -10,8 +11,6 @@ import {
   MapPin,
   PlusCircle,
   Users,
-  Edit2,
-  Trash2,
   Building2,
   Home,
   Store,
@@ -55,13 +54,10 @@ type Area = {
   name: string;
   code?: string;
   description?: string;
-
-  // Optional fields are supported when the API provides them.
   region?: string;
   totalStreets: number;
   assignedDealer?: string;
   assignedTechnician?: string;
-
   customers: number;
   active: number;
   inactive: number;
@@ -90,173 +86,219 @@ export default function AreasPage() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  
-const router = useRouter();
 
-const goToAreaCustomers = (areaName: string) => {
-  router.push(`/users?area=${encodeURIComponent(areaName)}`);
-};
+  const router = useRouter();
+
+  const goToAreaCustomers = (areaName: string) => {
+    router.push(`/users?area=${encodeURIComponent(areaName)}`);
+  };
+
   useEffect(() => {
     fetchAreas();
   }, []);
 
-const fetchAreas = async () => {
-  try {
-    const [areasRes, customersRes, paymentsRes] = await Promise.all([
-      api.get('/areas'),
-      api.get('/customers?limit=10000'),
-      api.get('/payments'),
-    ]);
+  const fetchAreas = async () => {
+    try {
+      const [areasRes, customersRes, paymentsRes] = await Promise.all([
+        api.get('/areas'),
+        api.get('/customers?limit=10000'),
+        api.get('/payments'),
+      ]);
 
-    const customers = customersRes.data.success ? customersRes.data.customers : [];
-    const payments = paymentsRes.data.success ? paymentsRes.data.payments : [];
-    const thisMonth = currentMonthKey();
+      const customers = customersRes.data.success
+        ? customersRes.data.customers
+        : [];
 
-    // ✅ Build lookup: ObjectId → area name AND name → name
-    const areaLookup: Record<string, string> = {};
-    const areaList: any[] = areasRes.data.success && Array.isArray(areasRes.data.areas)
-      ? areasRes.data.areas
-      : [];
+      const payments = paymentsRes.data.success
+        ? paymentsRes.data.payments
+        : [];
 
-    areaList.forEach((a: any) => {
-      const id = String(a._id);
-      const name = String(a.name || a.areaName || id);
-      areaLookup[id] = name;          // "6aa54ddd..." -> "Sector 5c4"
-      areaLookup[name] = name;        // "Sector 5c4" -> "Sector 5c4" (identity)
-    });
+      const thisMonth = currentMonthKey();
 
-    // Helper: resolve any customer.area value → canonical area name
-    const resolveArea = (raw: any): string => {
-      if (!raw) return '';
-      if (typeof raw === 'object' && raw.name) return String(raw.name);
-      const s = String(raw).trim();
-      return areaLookup[s] || s;   // try ObjectId lookup, fallback to raw string
-    };
+      const areaLookup: Record<string, string> = {};
 
-    const customerById: Record<string, { area: string; monthlyFee: number }> = {};
-    const areaStats: Record<
-      string,
-      {
-        customers: number;
-        expected: number;
-        active: number;
-        inactive: number;
-        pending: number;
-      }
-    > = {};
+      const areaList: any[] =
+        areasRes.data.success && Array.isArray(areasRes.data.areas)
+          ? areasRes.data.areas
+          : [];
 
-    customers.forEach((customer: any) => {
-      const areaName = resolveArea(customer.area);
-      if (!areaName) return;
+      areaList.forEach((a: any) => {
+        const id = String(a._id);
+        const name = String(a.name || a.areaName || id);
 
-      const fee = Number(customer.monthlyFee || 0);
-
-      if (customer._id) {
-        customerById[String(customer._id)] = {
-          area: areaName,
-          monthlyFee: fee,
-        };
-      }
-
-      if (!areaStats[areaName]) {
-        areaStats[areaName] = {
-          customers: 0,
-          expected: 0,
-          active: 0,
-          inactive: 0,
-          pending: 0,
-        };
-      }
-
-      areaStats[areaName].customers += 1;
-      areaStats[areaName].expected += fee;
-
-      const status = String(customer.status || '').toLowerCase();
-      if (status === 'active') areaStats[areaName].active += 1;
-      else if (status === 'inactive') areaStats[areaName].inactive += 1;
-      else if (status === 'pending') areaStats[areaName].pending += 1;
-    });
-
-    const areaCollected: Record<string, number> = {};
-    payments.forEach((payment: any) => {
-      if (payment.isNoPayment) return;
-      if (payment.month !== thisMonth) return;
-
-      const customerId =
-        typeof payment.customer === 'object'
-          ? payment.customer?._id
-          : payment.customer;
-      if (!customerId) return;
-
-      const customer = customerById[String(customerId)];
-      if (!customer) return;
-
-      areaCollected[customer.area] =
-        (areaCollected[customer.area] || 0) + Number(payment.amount || 0);
-    });
-
-    if (areaList.length > 0) {
-      const formattedAreas: Area[] = areaList.map((area: any, index: number) => {
-        const stats = areaStats[area.name] || {
-          customers: 0,
-          expected: 0,
-          active: 0,
-          inactive: 0,
-          pending: 0,
-        };
-
-        const collected = areaCollected[area.name] || 0;
-
-        const recoveryRate =
-          stats.expected > 0
-            ? Math.min(100, Math.round((collected / stats.expected) * 100))
-            : 0;
-
-        return {
-          id: String(area._id),
-          name: area.name || 'Unnamed Area',
-          code: area.code || '',
-          description: area.description || '',
-          region: area.region || area.regionName || '',
-          totalStreets: Number(
-            area.totalStreets ?? area.streetCount ?? area.streetsCount ?? 0
-          ),
-          assignedDealer:
-            area.assignedDealer?.name ||
-            area.assignedDealerName ||
-            area.dealer?.name ||
-            area.dealerName ||
-            '',
-          assignedTechnician:
-            area.assignedTechnician?.name ||
-            area.assignedTechnicianName ||
-            area.technician?.name ||
-            area.technicianName ||
-            '',
-          customers: stats.customers,
-          active: stats.active,
-          inactive: stats.inactive,
-          pending: stats.pending,
-          collected,
-          expected: stats.expected,
-          recoveryRate,
-          color: (['blue', 'green', 'purple', 'orange', 'red', 'indigo'][
-            index % 6
-          ] || 'blue') as AreaColor,
-          createdAt: area.createdAt,
-          updatedAt: area.updatedAt,
-        };
+        areaLookup[id] = name;
+        areaLookup[name] = name;
       });
 
-      setAreas(formattedAreas);
+      const resolveArea = (raw: any): string => {
+        if (!raw) return '';
+
+        if (typeof raw === 'object' && raw.name) {
+          return String(raw.name);
+        }
+
+        const s = String(raw).trim();
+
+        return areaLookup[s] || s;
+      };
+
+      const customerById: Record<
+        string,
+        { area: string; monthlyFee: number }
+      > = {};
+
+      const areaStats: Record<
+        string,
+        {
+          customers: number;
+          expected: number;
+          active: number;
+          inactive: number;
+          pending: number;
+        }
+      > = {};
+
+      customers.forEach((customer: any) => {
+        const areaName = resolveArea(customer.area);
+
+        if (!areaName) return;
+
+        const fee = Number(customer.monthlyFee || 0);
+
+        if (customer._id) {
+          customerById[String(customer._id)] = {
+            area: areaName,
+            monthlyFee: fee,
+          };
+        }
+
+        if (!areaStats[areaName]) {
+          areaStats[areaName] = {
+            customers: 0,
+            expected: 0,
+            active: 0,
+            inactive: 0,
+            pending: 0,
+          };
+        }
+
+        areaStats[areaName].customers += 1;
+        areaStats[areaName].expected += fee;
+
+        const status = String(customer.status || '').toLowerCase();
+
+        if (status === 'active') {
+          areaStats[areaName].active += 1;
+        } else if (status === 'inactive') {
+          areaStats[areaName].inactive += 1;
+        } else if (status === 'pending') {
+          areaStats[areaName].pending += 1;
+        }
+      });
+
+      const areaCollected: Record<string, number> = {};
+
+      payments.forEach((payment: any) => {
+        if (payment.isNoPayment) return;
+        if (payment.month !== thisMonth) return;
+
+        const customerId =
+          typeof payment.customer === 'object'
+            ? payment.customer?._id
+            : payment.customer;
+
+        if (!customerId) return;
+
+        const customer = customerById[String(customerId)];
+
+        if (!customer) return;
+
+        areaCollected[customer.area] =
+          (areaCollected[customer.area] || 0) +
+          Number(payment.amount || 0);
+      });
+
+      if (areaList.length > 0) {
+        const formattedAreas: Area[] = areaList.map(
+          (area: any, index: number) => {
+            const stats = areaStats[area.name] || {
+              customers: 0,
+              expected: 0,
+              active: 0,
+              inactive: 0,
+              pending: 0,
+            };
+
+            const collected = areaCollected[area.name] || 0;
+
+            const recoveryRate =
+              stats.expected > 0
+                ? Math.min(
+                    100,
+                    Math.round((collected / stats.expected) * 100)
+                  )
+                : 0;
+
+            return {
+              id: String(area._id),
+              name: area.name || 'Unnamed Area',
+              code: area.code || '',
+              description: area.description || '',
+              region: area.region || area.regionName || '',
+
+              totalStreets: Number(
+                area.totalStreets ??
+                  area.streetCount ??
+                  area.streetsCount ??
+                  0
+              ),
+
+              assignedDealer:
+                area.assignedDealer?.name ||
+                area.assignedDealerName ||
+                area.dealer?.name ||
+                area.dealerName ||
+                '',
+
+              assignedTechnician:
+                area.assignedTechnician?.name ||
+                area.assignedTechnicianName ||
+                area.technician?.name ||
+                area.technicianName ||
+                '',
+
+              customers: stats.customers,
+              active: stats.active,
+              inactive: stats.inactive,
+              pending: stats.pending,
+              collected,
+              expected: stats.expected,
+              recoveryRate,
+
+              color: ([
+                'blue',
+                'green',
+                'purple',
+                'orange',
+                'red',
+                'indigo',
+              ][index % 6] || 'blue') as AreaColor,
+
+              createdAt: area.createdAt,
+              updatedAt: area.updatedAt,
+            };
+          }
+        );
+
+        setAreas(formattedAreas);
+      }
+    } catch (error) {
+      console.error('Error fetching areas:', error);
+      toast.error('Failed to load areas');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Error fetching areas:', error);
-    toast.error('Failed to load areas');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleAreaAdded = (data: any) => {
     toast.success(
@@ -267,6 +309,7 @@ const fetchAreas = async () => {
 
     setEditingArea(null);
     setIsModalOpen(false);
+
     fetchAreas();
   };
 
@@ -280,7 +323,9 @@ const fetchAreas = async () => {
         previous.filter((area) => area.id !== id)
       );
 
-      setExpandedId((previous) => (previous === id ? null : previous));
+      setExpandedId((previous) =>
+        previous === id ? null : previous
+      );
 
       if (editingArea?.id === id) {
         setEditingArea(null);
@@ -294,14 +339,19 @@ const fetchAreas = async () => {
     }
   };
 
-  const handleEdit = (area: Area, event?: React.MouseEvent) => {
+  const handleEdit = (
+    area: Area,
+    event?: React.MouseEvent
+  ) => {
     event?.stopPropagation();
     setEditingArea(area);
     setIsModalOpen(true);
   };
 
   const toggleExpand = (id: string) => {
-    setExpandedId((previous) => (previous === id ? null : id));
+    setExpandedId((previous) =>
+      previous === id ? null : id
+    );
   };
 
   const filteredAreas = useMemo(() => {
@@ -315,6 +365,7 @@ const fetchAreas = async () => {
         area.region?.toLowerCase().includes(query);
 
       const isActive = area.customers > 0;
+
       const matchesStatus =
         statusFilter === 'all' ||
         (statusFilter === 'active' && isActive) ||
@@ -339,57 +390,66 @@ const fetchAreas = async () => {
       bg: 'bg-blue-50 dark:bg-blue-950/30',
       icon: 'text-blue-600 dark:text-blue-400',
       text: 'text-sky-500 dark:text-blue-400',
-      button: 'bg-sky-500 hover:bg-blue-700',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     green: {
       border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-green-50 dark:bg-green-950/30',
       icon: 'text-green-600 dark:text-green-400',
       text: 'text-sky-500 dark:text-blue-400',
-      button: 'bg-sky-500 hover:bg-blue-700',
+     button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     purple: {
       border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-purple-50 dark:bg-purple-950/30',
       icon: 'text-purple-600 dark:text-purple-400',
       text: 'text-sky-500 dark:text-blue-400',
-      button: 'bg-sky-500 hover:bg-blue-700',
+     button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     orange: {
       border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-orange-50 dark:bg-orange-950/30',
       icon: 'text-orange-600 dark:text-orange-400',
       text: 'text-sky-500 dark:text-blue-400',
-      button: 'bg-sky-500 hover:bg-blue-700',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     red: {
       border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-red-50 dark:bg-red-950/30',
       icon: 'text-red-600 dark:text-red-400',
       text: 'text-sky-500 dark:text-blue-400',
-      button: 'bg-sky-500 hover:bg-blue-700',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     indigo: {
       border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-indigo-50 dark:bg-indigo-950/30',
       icon: 'text-indigo-600 dark:text-indigo-400',
       text: 'text-sky-500 dark:text-blue-400',
-      button: 'bg-sky-500 hover:bg-blue-700',
+     button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
   };
 
   const getAreaIcon = (name: string) => {
     const lower = name.toLowerCase();
 
-    if (lower.includes('gulshan') || lower.includes('garden')) {
+    if (
+      lower.includes('gulshan') ||
+      lower.includes('garden')
+    ) {
       return <Home className="h-5 w-5" />;
     }
 
-    if (lower.includes('market') || lower.includes('mall')) {
+    if (
+      lower.includes('market') ||
+      lower.includes('mall')
+    ) {
       return <Store className="h-5 w-5" />;
     }
 
-    if (lower.includes('colony') || lower.includes('town')) {
+    if (
+      lower.includes('colony') ||
+      lower.includes('town')
+    ) {
       return <Building2 className="h-5 w-5" />;
     }
 
@@ -443,6 +503,22 @@ const fetchAreas = async () => {
   return (
     <Layout>
       <div className="space-y-4">
+
+        {/* Top actions */}
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingArea(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 rounded-xl bg-[#D9A82E] px-4 py-3 text-sm font-semibold text-gray-900 shadow-lg shadow-yellow-500/20 transition-colors hover:bg-[#c29326]"
+          >
+            <PlusCircle className="h-5 w-5 text-gray-900" />
+            Add Area
+          </button>
+        </div>
+
         {/* Search + filter row */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="min-w-0 flex-1">
@@ -456,18 +532,22 @@ const fetchAreas = async () => {
           <div className="relative w-full md:w-64">
             <button
               type="button"
-              onClick={() => setIsFilterOpen((previous) => !previous)}
+              onClick={() =>
+                setIsFilterOpen((previous) => !previous)
+              }
               className="flex h-11 w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
               aria-expanded={isFilterOpen}
             >
               <span className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-gray-400" />
+
                 {statusFilter === 'all'
                   ? 'All Areas'
                   : statusFilter === 'active'
                   ? 'Active Areas'
                   : 'Inactive Areas'}
               </span>
+
               <ChevronDown
                 className={cn(
                   'h-4 w-4 text-gray-400 transition-transform',
@@ -482,14 +562,25 @@ const fetchAreas = async () => {
                   type="button"
                   className="fixed inset-0 z-10 h-full w-full cursor-default"
                   aria-label="Close filter"
-                  onClick={() => setIsFilterOpen(false)}
+                  onClick={() =>
+                    setIsFilterOpen(false)
+                  }
                 />
 
                 <div className="absolute right-0 z-20 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl dark:border-gray-700 dark:bg-gray-800">
                   {[
-                    { value: 'all' as AreaFilter, label: 'All Areas' },
-                    { value: 'active' as AreaFilter, label: 'Active Areas' },
-                    { value: 'inactive' as AreaFilter, label: 'Inactive Areas' },
+                    {
+                      value: 'all' as AreaFilter,
+                      label: 'All Areas',
+                    },
+                    {
+                      value: 'active' as AreaFilter,
+                      label: 'Active Areas',
+                    },
+                    {
+                      value: 'inactive' as AreaFilter,
+                      label: 'Inactive Areas',
+                    },
                   ].map((option) => (
                     <button
                       key={option.value}
@@ -501,6 +592,7 @@ const fetchAreas = async () => {
                       className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       {option.label}
+
                       {statusFilter === option.value && (
                         <Check className="h-4 w-4 text-blue-600" />
                       )}
@@ -516,9 +608,11 @@ const fetchAreas = async () => {
         {filteredAreas.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-white py-16 text-center dark:border-gray-700 dark:bg-gray-800">
             <MapPin className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+
             <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
               No areas found
             </p>
+
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Try changing your search or filter.
             </p>
@@ -539,11 +633,9 @@ const fetchAreas = async () => {
                     isExpanded && 'shadow-lg'
                   )}
                 >
-                  {/* Colored top border */}
-                  <div className={cn('h-1.5 w-full',)} />
+                  <div className="h-1.5 w-full" />
 
                   <div className="p-4">
-                    {/* Card header */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div
@@ -584,7 +676,9 @@ const fetchAreas = async () => {
 
                         <button
                           type="button"
-                          onClick={() => toggleExpand(area.id)}
+                          onClick={() =>
+                            toggleExpand(area.id)
+                          }
                           className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                           aria-label={
                             isExpanded
@@ -601,26 +695,29 @@ const fetchAreas = async () => {
                       </div>
                     </div>
 
-                    {/* Customer count */}
                     <div className="mt-4 flex items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
                       <Users className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+
                       <span className="text-xl font-bold text-gray-900 dark:text-white">
                         {area.customers.toLocaleString()}
                       </span>
+
                       <span className="text-sm text-gray-500 dark:text-gray-400">
                         Customers
                       </span>
                     </div>
 
-                    {/* Mini stats visible only when expanded */}
                     {isExpanded && (
                       <>
                         <div className="mt-4 grid grid-cols-4 gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
                           <MiniStat
-                            icon={<Users className="h-4 w-4 text-blue-500" />}
+                            icon={
+                              <Users className="h-4 w-4 text-blue-500" />
+                            }
                             value={area.customers}
                             label="Customers"
                           />
+
                           <MiniStat
                             icon={
                               <UserCheck className="h-4 w-4 text-green-500" />
@@ -628,6 +725,7 @@ const fetchAreas = async () => {
                             value={area.active}
                             label="Active"
                           />
+
                           <MiniStat
                             icon={
                               <UserX className="h-4 w-4 text-red-500" />
@@ -635,14 +733,16 @@ const fetchAreas = async () => {
                             value={area.inactive}
                             label="Inactive"
                           />
+
                           <MiniStat
-                            icon={<Clock className="h-4 w-4 text-orange-500" />}
+                            icon={
+                              <Clock className="h-4 w-4 text-orange-500" />
+                            }
                             value={area.pending}
                             label="Pending"
                           />
                         </div>
 
-                        {/* Area information */}
                         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-3 dark:border-gray-700">
                           {area.region && (
                             <InfoBlock
@@ -732,12 +832,12 @@ const fetchAreas = async () => {
                           />
                         </div>
 
-                        {/* Recovery progress */}
                         <div className="mt-4">
                           <div className="mb-1.5 flex items-center justify-between">
                             <span className="text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400">
                               Monthly Recovery
                             </span>
+
                             <span className="text-xs font-bold text-gray-700 dark:text-gray-200">
                               {area.recoveryRate}%
                             </span>
@@ -756,51 +856,60 @@ const fetchAreas = async () => {
                               style={{
                                 width: `${Math.min(
                                   100,
-                                  Math.max(0, area.recoveryRate)
+                                  Math.max(
+                                    0,
+                                    area.recoveryRate
+                                  )
                                 )}%`,
                               }}
                             />
                           </div>
                         </div>
 
-{/* Actions */}
-<div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-  <button
-    type="button"
-    onClick={() => goToAreaCustomers(area.name)}
-    className={cn(
-      'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition',
-      colors.button
-    )}
-  >
-    <Users className="h-4 w-4" />
-    View Customers
-  </button>
+                        <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              goToAreaCustomers(area.name)
+                            }
+                            className={cn(
+                              'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition  ',
+                              colors.button
+                            )}
+                          >
+                            <Users className="h-4 w-4" />
+                            View Customers
+                          </button>
 
-  <button
-    type="button"
-    onClick={() => toggleExpand(area.id)}
-    className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-2.5 text-sm font-semibold text-gray-700 dark:text-gray-200 transition hover:bg-gray-200 dark:hover:bg-gray-600"
-  >
-    <Eye className="h-4 w-4" />
-    View Details
-  </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleExpand(area.id)
+                            }
+                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-gray-100 px-3 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Details
+                          </button>
                         </div>
                       </>
                     )}
 
-                    {/* Collapsed footer */}
                     {!isExpanded && (
                       <button
                         type="button"
-                        onClick={() => toggleExpand(area.id)}
+                        onClick={() =>
+                          toggleExpand(area.id)
+                        }
                         className={cn(
                           'mt-4 flex w-full items-center gap-1 border-t border-gray-100 pt-3 text-sm font-semibold transition-all hover:gap-2 dark:border-gray-700',
                           colors.text
                         )}
                       >
                         View Details
-                        <span aria-hidden="true">→</span>
+                        <span aria-hidden="true">
+                          →
+                        </span>
                       </button>
                     )}
                   </div>
@@ -818,42 +927,37 @@ const fetchAreas = async () => {
             setEditingArea(null);
           }}
           onSuccess={handleAreaAdded}
-          title={editingArea ? 'Edit Area' : 'Add New Area'}
+          title={
+            editingArea ? 'Edit Area' : 'Add New Area'
+          }
           subtitle={
             editingArea
               ? 'Update the area details below'
               : 'Create a new service area for customers'
           }
           fields={areaFields}
-          submitLabel={editingArea ? 'Update Area' : 'Add Area'}
+          submitLabel={
+            editingArea ? 'Update Area' : 'Add Area'
+          }
           color="blue"
-          endpoint={editingArea ? `/areas/${editingArea.id}` : '/areas'}
+          endpoint={
+            editingArea
+              ? `/areas/${editingArea.id}`
+              : '/areas'
+          }
           method={editingArea ? 'PUT' : 'POST'}
           initialData={
             editingArea
               ? {
                   name: editingArea.name,
                   code: editingArea.code || '',
-                  description: editingArea.description || '',
+                  description:
+                    editingArea.description || '',
                 }
               : undefined
           }
           transformData={transformAreaData}
         />
-
-        {/* Add Area button kept floating at the bottom-right so the card grid
-            remains visually close to the reference design. */}
-        <button
-          type="button"
-          onClick={() => {
-            setEditingArea(null);
-            setIsModalOpen(true);
-          }}
-          className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-sky-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/30 transition hover:bg-blue-700"
-        >
-          <PlusCircle className="h-5 w-5" />
-          Add Area
-        </button>
       </div>
     </Layout>
   );
@@ -871,11 +975,15 @@ function MiniStat({
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-1.5">
-        <span className="flex-shrink-0">{icon}</span>
+        <span className="flex-shrink-0">
+          {icon}
+        </span>
+
         <span className="truncate text-base font-bold text-gray-900 dark:text-white">
           {value.toLocaleString()}
         </span>
       </div>
+
       <p className="mt-0.5 truncate text-[9px] font-medium uppercase text-gray-500 dark:text-gray-400">
         {label}
       </p>
@@ -896,15 +1004,20 @@ function InfoBlock({
 }) {
   return (
     <div className="flex min-w-0 items-start gap-2">
-      <span className="mt-0.5 flex-shrink-0">{icon}</span>
+      <span className="mt-0.5 flex-shrink-0">
+        {icon}
+      </span>
+
       <div className="min-w-0 flex-1">
         <p className="text-[9px] font-medium uppercase leading-tight text-gray-500 dark:text-gray-400">
           {label}
         </p>
+
         <p
           className={cn(
             'truncate text-xs font-semibold leading-tight sm:text-sm',
-            valueColor || 'text-gray-900 dark:text-white'
+            valueColor ||
+              'text-gray-900 dark:text-white'
           )}
           title={String(value)}
         >
@@ -914,3 +1027,4 @@ function InfoBlock({
     </div>
   );
 }
+

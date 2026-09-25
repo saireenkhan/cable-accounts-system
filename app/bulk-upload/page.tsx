@@ -364,7 +364,7 @@ export default function BulkUploadPage() {
         {/* PAGE HEADER */}
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <Upload className="h-6 w-6 text-blue-600" />
+            <Upload className="h-6 w-6 text-[#d6b138]" />
             Bulk Upload
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -375,7 +375,7 @@ export default function BulkUploadPage() {
         {/* STEP 0 — TARGET SELECTOR */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+            <div className="h-6 w-6 rounded-full bg-[#d6b138] text-gray-900 flex items-center justify-center text-xs font-bold flex-shrink-0">
               0
             </div>
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
@@ -390,16 +390,16 @@ export default function BulkUploadPage() {
               className={cn(
                 'flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all',
                 target === 'customers'
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 ring-2 ring-blue-500/30'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700'
+                  ? 'border-[#d6b138] bg-amber-50 dark:bg-amber-950/30 ring-2 ring-[#d6b138]/30'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-[#d6b138]/60 dark:hover:border-[#d6b138]/60'
               )}
             >
               <div
                 className={cn(
                   'h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0',
                   target === 'customers'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                    ? 'bg-[#d6b138] text-gray-900'
+                    : 'bg-amber-50 dark:bg-amber-900/30 text-[#d6b138] dark:text-[#f7ce48]'
                 )}
               >
                 <Users className="h-5 w-5" />
@@ -413,7 +413,7 @@ export default function BulkUploadPage() {
                 </p>
               </div>
               {target === 'customers' && (
-                <CheckCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <CheckCircle className="h-5 w-5 text-[#d6b138] dark:text-[#f7ce48] flex-shrink-0" />
               )}
             </button>
 
@@ -423,16 +423,16 @@ export default function BulkUploadPage() {
               className={cn(
                 'flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all',
                 target === 'partners'
-                  ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-950/30 ring-2 ring-cyan-500/30'
-                  : 'border-gray-200 dark:border-gray-700 hover:border-cyan-300 dark:hover:border-cyan-700'
+                  ? 'border-[#d6b138] bg-amber-50 dark:bg-amber-950/30 ring-2 ring-[#d6b138]/30'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-[#d6b138]/60 dark:hover:border-[#d6b138]/60'
               )}
             >
               <div
                 className={cn(
                   'h-10 w-10 rounded-lg flex items-center justify-center flex-shrink-0',
                   target === 'partners'
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400'
+                    ? 'bg-[#d6b138] text-gray-900'
+                    : 'bg-amber-50 dark:bg-amber-900/30 text-[#d6b138] dark:text-[#f7ce48]'
                 )}
               >
                 <Handshake className="h-5 w-5" />
@@ -446,7 +446,7 @@ export default function BulkUploadPage() {
                 </p>
               </div>
               {target === 'partners' && (
-                <CheckCircle className="h-5 w-5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+                <CheckCircle className="h-5 w-5 text-[#d6b138] dark:text-[#f7ce48] flex-shrink-0" />
               )}
             </button>
           </div>
@@ -458,21 +458,21 @@ export default function BulkUploadPage() {
             'rounded-xl shadow-sm border p-5 transition-all',
             selectedArea
               ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800'
-              : 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-800 ring-2 ring-blue-500/20'
+              : 'bg-white dark:bg-gray-800 border-[#d6b138]/60 dark:border-[#d6b138]/60 ring-2 ring-[#d6b138]/20'
           )}
         >
           <div className="flex items-center gap-3 mb-3">
             <div
               className={cn(
                 'h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0',
-                selectedArea ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
+                selectedArea ? 'bg-green-600 text-white' : 'bg-[#d6b138] text-gray-900'
               )}
             >
               {selectedArea ? <Check className="h-4 w-4" /> : '1'}
             </div>
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-blue-600" />
+                <MapPin className="h-4 w-4 text-[#d6b138]" />
                 Select {areaLabel}
                 <span className="text-red-500">*</span>
               </h2>
@@ -510,7 +510,7 @@ export default function BulkUploadPage() {
                 'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-colors',
                 selectedArea
                   ? 'border-green-500 dark:border-green-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500/50'
-                  : 'border-blue-500 dark:border-blue-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/50'
+                  : 'border-[#d6b138] dark:border-[#b8942e] bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#d6b138]/50'
               )}
             >
               <option value="">-- Select {areaLabel} --</option>
@@ -540,7 +540,7 @@ export default function BulkUploadPage() {
               'rounded-xl shadow-sm border p-5 transition-all',
               selectedPartner
                 ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800'
-                : 'bg-white dark:bg-gray-800 border-cyan-300 dark:border-cyan-800 ring-2 ring-cyan-500/20'
+                : 'bg-white dark:bg-gray-800 border-[#d6b138]/60 dark:border-[#d6b138]/60 ring-2 ring-[#d6b138]/20'
             )}
           >
             <div className="flex items-center gap-3 mb-3">
@@ -549,14 +549,14 @@ export default function BulkUploadPage() {
                   'h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0',
                   selectedPartner
                     ? 'bg-green-600 text-white'
-                    : 'bg-cyan-600 text-white'
+                    : 'bg-[#d6b138] text-gray-900'
                 )}
               >
                 {selectedPartner ? <Check className="h-4 w-4" /> : '1B'}
               </div>
               <div>
                 <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                  <Handshake className="h-4 w-4 text-cyan-600" />
+                  <Handshake className="h-4 w-4 text-[#d6b138]" />
                   Select Partner
                   <span className="text-red-500">*</span>
                 </h2>
@@ -593,7 +593,7 @@ export default function BulkUploadPage() {
                   'w-full px-3 py-2.5 rounded-lg border text-sm outline-none transition-colors',
                   selectedPartner
                     ? 'border-green-500 dark:border-green-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-green-500/50'
-                    : 'border-cyan-500 dark:border-cyan-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500/50'
+                    : 'border-[#d6b138] dark:border-[#b8942e] bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-[#d6b138]/50'
                 )}
               >
                 <option value="">-- Select Partner --</option>
@@ -632,18 +632,18 @@ export default function BulkUploadPage() {
         ) : (
           <>
             {/* STEP 2 — INSTRUCTIONS */}
-            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl p-5">
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                <div className="h-6 w-6 rounded-full bg-[#d6b138] text-gray-900 flex items-center justify-center text-xs font-bold flex-shrink-0">
                   2
                 </div>
-                <h2 className="font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2 text-sm">
+                <h2 className="font-semibold text-amber-900 dark:text-amber-100 flex items-center gap-2 text-sm">
                   <FileText className="h-4 w-4" />
                   CSV Format Instructions
                 </h2>
               </div>
 
-              <div className="space-y-3 text-sm text-blue-900/80 dark:text-blue-200/80">
+              <div className="space-y-3 text-sm text-amber-900/80 dark:text-amber-100/80">
                 <p>
                   Your CSV file must have these <strong>4 required columns</strong>{' '}
                   at the start, in this exact order:
@@ -653,7 +653,7 @@ export default function BulkUploadPage() {
                   {REQUIRED_HEADERS.map((h) => (
                     <span
                       key={h}
-                      className="px-2.5 py-1 bg-blue-600 text-white rounded-md font-mono text-xs font-medium"
+                      className="px-2.5 py-1 bg-[#d6b138] text-gray-900 rounded-md font-mono text-xs font-medium"
                     >
                       {h}
                     </span>
@@ -669,7 +669,7 @@ export default function BulkUploadPage() {
                   {OPTIONAL_HEADERS.map((h) => (
                     <span
                       key={h}
-                      className="px-2.5 py-1 bg-blue-200 dark:bg-blue-900 text-blue-900 dark:text-blue-200 rounded-md font-mono text-xs font-medium"
+                      className="px-2.5 py-1 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 rounded-md font-mono text-xs font-medium"
                     >
                       {h}
                     </span>
@@ -699,14 +699,14 @@ export default function BulkUploadPage() {
                     </li>
                     <li>
                       Missing optional columns default to:{' '}
-                      <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded">
+                      <code className="bg-amber-100 dark:bg-amber-900/50 px-1 py-0.5 rounded">
                         package=&quot;&quot;, discount=0, monthlyFee=0,
                         status=active, activationDate=today
                       </code>
                     </li>
                     <li>
                       <strong>activationDate</strong> format:{' '}
-                      <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded">
+                      <code className="bg-amber-100 dark:bg-amber-900/50 px-1 py-0.5 rounded">
                         YYYY-MM-DD
                       </code>{' '}
                       (e.g. 2026-09-15). Expiry is auto-computed as +1 month.
@@ -725,7 +725,7 @@ export default function BulkUploadPage() {
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-blue-600" />
+                  <FileText className="h-4 w-4 text-[#d6b138]" />
                   Sample CSV
                 </h2>
 
@@ -748,7 +748,7 @@ export default function BulkUploadPage() {
                   </button>
                   <button
                     onClick={handleDownloadSample}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-900 bg-[#d6b138] hover:bg-[#f7ce48] rounded-md transition-colors"
                   >
                     <Download className="h-3 w-3" />
                     Download
@@ -781,7 +781,7 @@ export default function BulkUploadPage() {
                           className={cn(
                             'px-3 py-2 text-left font-mono font-semibold whitespace-nowrap',
                             REQUIRED_HEADERS.includes(h)
-                              ? 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                              ? 'text-amber-700 dark:text-[#f7ce48] bg-amber-50 dark:bg-amber-950/50'
                               : 'text-gray-600 dark:text-gray-400'
                           )}
                         >
@@ -840,7 +840,7 @@ export default function BulkUploadPage() {
 
               <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 dark:text-gray-400">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 bg-blue-100 dark:bg-blue-950/50 border border-blue-300 dark:border-blue-800 rounded" />
+                  <span className="w-3 h-3 bg-amber-100 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded" />
                   Required
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -850,7 +850,7 @@ export default function BulkUploadPage() {
               </div>
 
               <details className="mt-4 group">
-                <summary className="cursor-pointer text-xs text-blue-600 dark:text-blue-400 hover:underline select-none flex items-center gap-1">
+                <summary className="cursor-pointer text-xs text-[#d6b138] dark:text-[#f7ce48] hover:underline select-none flex items-center gap-1">
                   <FileText className="h-3 w-3" />
                   View raw CSV text
                 </summary>
@@ -863,7 +863,7 @@ export default function BulkUploadPage() {
             {/* STEP 3 — UPLOAD ZONE */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-6 w-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                <div className="h-6 w-6 rounded-full bg-[#d6b138] text-gray-900 flex items-center justify-center text-xs font-bold flex-shrink-0">
                   3
                 </div>
                 <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
@@ -881,15 +881,15 @@ export default function BulkUploadPage() {
                 className={cn(
                   'border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer',
                   isDragging
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30'
-                    : 'border-gray-300 dark:border-gray-600 hover:border-blue-400'
+                    ? 'border-[#d6b138] bg-amber-50 dark:bg-amber-950/30'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-[#d6b138]'
                 )}
                 onClick={() => fileInputRef.current?.click()}
               >
                 <Upload className="h-10 w-10 text-gray-400 mx-auto mb-3" />
                 {file ? (
                   <div className="flex items-center justify-center gap-2">
-                    <FileText className="h-5 w-5 text-blue-600" />
+                    <FileText className="h-5 w-5 text-[#d6b138]" />
                     <span className="font-medium text-gray-900 dark:text-white">
                       {file.name}
                     </span>
@@ -911,7 +911,7 @@ export default function BulkUploadPage() {
                   <>
                     <p className="text-gray-600 dark:text-gray-400">
                       Drag and drop your CSV file here, or{' '}
-                      <span className="text-blue-600 font-medium">browse</span>
+                      <span className="text-[#d6b138] font-medium">browse</span>
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                       Only .csv files, max 10 MB
@@ -937,12 +937,7 @@ export default function BulkUploadPage() {
                     (target === 'partners' && !selectedPartner) ||
                     isUploading
                   }
-                  className={cn(
-                    'flex items-center gap-2 px-6 py-2 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed',
-                    target === 'customers'
-                      ? 'bg-blue-600 hover:bg-blue-700'
-                      : 'bg-cyan-600 hover:bg-cyan-700'
-                  )}
+                  className="flex items-center gap-2 px-6 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUploading ? (
                     <>

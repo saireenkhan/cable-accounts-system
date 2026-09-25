@@ -3,18 +3,40 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-  Users, UserPlus, Edit, Trash2, Eye, UserCheck, UserX, UserMinus,
-  X, Phone, MapPin, Package as PackageIcon, DollarSign, Hash, Home,
-  CheckCircle, XCircle, Clock, User as UserIcon, Percent, CalendarDays,
+  Users,
+  UserPlus,
+  Edit,
+  Trash2,
+  Eye,
+  UserCheck,
+  UserX,
+  UserMinus,
+  X,
+  Phone,
+  MapPin,
+  Package as PackageIcon,
+  DollarSign,
+  Hash,
+  Home,
+  CheckCircle,
+  XCircle,
+  Clock,
+  User as UserIcon,
+  Percent,
+  CalendarDays,
   Handshake,
 } from 'lucide-react';
 import Layout from '@/app/components/ui/Layout';
-import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
+import {
+  AddUserModal,
+  Field,
+} from '@/app/components/modals/AddUserModal';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
+
 import {
   areaName,
   findPackage,
@@ -22,7 +44,6 @@ import {
   displayDate,
   expiryDate,
   effectiveStatus,
-  upcomingExpiry,
   statusStyles,
 } from '@/app/lib/userUtils';
 
@@ -35,11 +56,16 @@ const spinner = (
 );
 
 const colorClasses: Record<string, string> = {
-  blue: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-500 ring-blue-500/30',
-  green: 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border-green-500 ring-green-500/30',
-  gray: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/30 border-gray-500 ring-gray-500/30',
-  orange: 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-500 ring-orange-500/30',
-  red: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-500 ring-red-500/30',
+  blue:
+    'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-500 ring-blue-500/30',
+  green:
+    'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border-green-500 ring-green-500/30',
+  gray:
+    'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/30 border-gray-500 ring-gray-500/30',
+  orange:
+    'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-500 ring-orange-500/30',
+  red:
+    'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-500 ring-red-500/30',
 };
 
 const statusLabels: Record<string, string> = {
@@ -50,116 +76,321 @@ const statusLabels: Record<string, string> = {
   suspended: 'Suspended',
 };
 
-// ============================================================
-// ✅ Allocation helpers — determine REAL expired status
-// ============================================================
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
-const parseMonthKey = (monthStr: string) => {
-  const parts = (monthStr || '').split(' ');
-  return {
-    name: parts[0] || '',
-    year: parseInt(parts[1] || '0'),
-    idx: MONTHS.indexOf(parts[0]),
-  };
-};
-
-const compareMonths = (a: string, b: string) => {
-  const pa = parseMonthKey(a);
-  const pb = parseMonthKey(b);
-  if (isNaN(pa.year) || isNaN(pb.year) || pa.idx === -1 || pb.idx === -1) return 0;
-  if (pa.year !== pb.year) return pa.year - pb.year;
-  return pa.idx - pb.idx;
-};
-
-interface MonthAllocation {
-  month: string;
-  expected: number;
-  applied: number;
-  remaining: number;
-  isPaid: boolean;
-}
-
-function allocatePayments(
-  monthlyFee: number,
-  payments: { month: string; amount: number }[]
-): MonthAllocation[] {
-  if (!monthlyFee || monthlyFee <= 0) return [];
-
-  const byMonth: Record<string, number> = {};
-  payments.forEach((p) => {
-    if (!p.month) return;
-    byMonth[p.month] =
-      (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
-  });
-
-  const months = Object.keys(byMonth).sort(compareMonths);
-  if (months.length === 0) return [];
-
-  const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
-
-  let pool = totalPool;
-  const result: MonthAllocation[] = [];
-
-  for (const month of months) {
-    const applied = Math.min(pool, monthlyFee);
-    const remaining = Math.max(0, monthlyFee - applied);
-    pool -= applied;
-
-    result.push({
-      month,
-      expected: monthlyFee,
-      applied,
-      remaining,
-      isPaid: remaining === 0,
-    });
-  }
-
-  return result;
-}
+/* ============================================================
+   DATE HELPERS
+============================================================ */
 
 const toDateSafe = (val: any): Date | null => {
   if (!val) return null;
-  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+
+  if (val instanceof Date) {
+    return isNaN(val.getTime()) ? null : val;
+  }
+
   const d = new Date(val);
+
   return isNaN(d.getTime()) ? null : d;
 };
 
-// ✅ Compute real effective status — Expired only if expiry month is UNPAID
-function computeEffectiveStatus(user: any, payments: any[]): string {
-  const baseStatus = effectiveStatus(user);
+const getToday = (): Date => {
+  const now = new Date();
 
-  if (baseStatus !== 'Expired') return baseStatus;
-
-  const monthlyFee = Number(user.monthlyFeeRaw || 0);
-  if (!monthlyFee) return baseStatus;
-
-  const userPayments = payments.filter(
-    (p) => (p.partner?.name || p.partner) === user.name && !p.isNoPayment
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
   );
+};
 
-  const allocs = allocatePayments(
-    monthlyFee,
-    userPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
-  );
+const getCurrentMonth = (): string => {
+  const now = new Date();
 
-  const expDate = toDateSafe(user.expiryDate);
-  if (!expDate) return baseStatus;
+  return `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+};
 
-  const expiryMonth = `${MONTHS[expDate.getMonth()]} ${expDate.getFullYear()}`;
-  const expiryAlloc = allocs.find((a) => a.month === expiryMonth);
+/* ============================================================
+   PAYMENT HELPERS
+============================================================ */
 
-  // ✅ If the expiry month is fully paid → not Expired
-  if (expiryAlloc?.isPaid) return 'Inactive';
+/**
+ * Match payments with the current partner.
+ *
+ * Supports:
+ * - payment.partner._id
+ * - payment.partner.id
+ * - payment.partner
+ * - payment.partnerId
+ * - payment.partner.name
+ * - payment.partnerName
+ * - payment.name
+ * - partner's Mongo _id
+ * - partner's partnerId
+ * - partner's name
+ *
+ * Identifier matches take priority; name matching is only a
+ * fallback for payments with NO identifier at all.
+ */
+function getUserPayments(
+  user: any,
+  payments: any[]
+): any[] {
+  return payments.filter((p) => {
+    if (p.isNoPayment) return false;
 
-  return 'Expired';
+    const partner =
+      p.partner &&
+      typeof p.partner === 'object'
+        ? p.partner
+        : null;
+
+    const paymentPartnerId =
+      partner?._id ??
+      partner?.id ??
+      (typeof p.partner === 'string'
+        ? p.partner
+        : null);
+
+    const paymentPartnerCode =
+      partner?.partnerId ??
+      p.partnerId;
+
+    const hasIdentifier =
+      Boolean(paymentPartnerId) ||
+      Boolean(paymentPartnerCode);
+
+    if (hasIdentifier) {
+      const matchesMongoId =
+        paymentPartnerId &&
+        String(paymentPartnerId) === String(user.id);
+
+      const matchesPartnerId =
+        paymentPartnerCode &&
+        String(paymentPartnerCode) ===
+          String(user.customerId);
+
+      return (
+        Boolean(matchesMongoId) ||
+        Boolean(matchesPartnerId)
+      );
+    }
+
+    const paymentPartnerName =
+      partner?.name ??
+      p.partnerName ??
+      p.name;
+
+    const matchesName =
+      paymentPartnerName &&
+      String(paymentPartnerName).trim().toLowerCase() ===
+        String(user.name).trim().toLowerCase();
+
+    return Boolean(matchesName);
+  });
 }
 
+/**
+ * Determine the amount ACTUALLY RECEIVED for a single payment
+ * record. `amount` is the received figure for these records;
+ * alternate field names are supported as a fallback.
+ */
+function getPaymentPaidAmount(p: any): number {
+  const candidates = [
+    p.amount,
+    p.paidAmount,
+    p.amountPaid,
+    p.receivedAmount,
+    p.amountReceived,
+    p.paid,
+  ];
+
+  for (const c of candidates) {
+    if (c !== undefined && c !== null && c !== '') {
+      const n = parseFloat(String(c));
+      if (!isNaN(n)) return n;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Get the total amount ACTUALLY PAID by this partner
+ * for a particular month.
+ */
+function getMonthPaidAmount(
+  user: any,
+  payments: any[],
+  month: string
+): number {
+  const userPayments = getUserPayments(user, payments);
+
+  return userPayments
+    .filter((p) => {
+      return (
+        String(p.month || '').trim().toLowerCase() ===
+        String(month || '').trim().toLowerCase()
+      );
+    })
+    .reduce(
+      (sum, p) => sum + getPaymentPaidAmount(p),
+      0
+    );
+}
+
+/**
+ * A month is fully paid only when:
+ *   total ACTUAL payments received >= monthly fee
+ * Partial payments do NOT count as paid.
+ */
+function isMonthPaid(
+  user: any,
+  payments: any[],
+  month: string
+): boolean {
+  const monthlyFee = Number(user.monthlyFeeRaw || 0);
+
+  if (!monthlyFee) return false;
+
+  const monthTotal = getMonthPaidAmount(
+    user,
+    payments,
+    month
+  );
+
+  return monthTotal >= monthlyFee;
+}
+
+function isCurrentMonthFullyPaid(
+  user: any,
+  payments: any[]
+): boolean {
+  return isMonthPaid(
+    user,
+    payments,
+    getCurrentMonth()
+  );
+}
+
+/* ============================================================
+   PAYMENT-AWARE UPCOMING EXPIRY
+============================================================ */
+
+function isPaymentAwareUpcomingExpiry(
+  user: any,
+  payments: any[]
+): boolean {
+  const expiry = toDateSafe(user.expiryDate);
+
+  if (!expiry) return false;
+
+  if (isCurrentMonthFullyPaid(user, payments)) {
+    return false;
+  }
+
+  const today = getToday();
+
+  const expiryDay = new Date(
+    expiry.getFullYear(),
+    expiry.getMonth(),
+    expiry.getDate()
+  );
+
+  if (expiryDay < today) {
+    return false;
+  }
+
+  const diffMs =
+    expiryDay.getTime() - today.getTime();
+
+  const diffDays = Math.floor(
+    diffMs / (1000 * 60 * 60 * 24)
+  );
+
+  return diffDays >= 0 && diffDays <= 7;
+}
+
+/* ============================================================
+   EFFECTIVE STATUS
+============================================================ */
+
+function computeEffectiveStatus(
+  user: any,
+  payments: any[]
+): string {
+  const rawStatus = String(
+    user.statusRaw || ''
+  ).toLowerCase();
+
+  if (
+    rawStatus === 'inactive' ||
+    rawStatus === 'suspended'
+  ) {
+    return rawStatus === 'inactive'
+      ? 'Inactive'
+      : 'Suspended';
+  }
+
+  if (isCurrentMonthFullyPaid(user, payments)) {
+    return 'Active';
+  }
+
+  const expiry = toDateSafe(user.expiryDate);
+
+  if (!expiry) {
+    return effectiveStatus(user);
+  }
+
+  const today = getToday();
+
+  const expiryDay = new Date(
+    expiry.getFullYear(),
+    expiry.getMonth(),
+    expiry.getDate()
+  );
+
+  if (expiryDay < today) {
+    return 'Expired';
+  }
+
+  const diffMs =
+    expiryDay.getTime() - today.getTime();
+
+  const diffDays = Math.floor(
+    diffMs / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays >= 0 && diffDays <= 7) {
+    return 'Upcoming Expiry';
+  }
+
+  return effectiveStatus(user);
+}
+
+/* ============================================================
+   VIEW FIELD
+============================================================ */
+
 function ViewField({
-  icon, label, value, highlight, fullWidth,
+  icon,
+  label,
+  value,
+  highlight,
+  fullWidth,
 }: {
   icon: React.ReactNode;
   label: string;
@@ -168,52 +399,81 @@ function ViewField({
   fullWidth?: boolean;
 }) {
   return (
-    <div className={cn(
-      'p-3 rounded-lg border',
-      fullWidth && 'sm:col-span-2',
-      highlight
-        ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'
-        : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
-    )}>
-      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
-        {icon}{label}
-      </div>
-      <p className={cn(
-        'font-semibold',
+    <div
+      className={cn(
+        'p-3 rounded-lg border',
+        fullWidth && 'sm:col-span-2',
         highlight
-          ? 'text-blue-700 dark:text-blue-400 text-lg'
-          : 'text-gray-900 dark:text-white'
-      )}>
+          ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'
+          : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+      )}
+    >
+      <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 uppercase mb-1">
+        {icon}
+        {label}
+      </div>
+
+      <p
+        className={cn(
+          'font-semibold',
+          highlight
+            ? 'text-blue-700 dark:text-blue-400 text-lg'
+            : 'text-gray-900 dark:text-white'
+        )}
+      >
         {value}
       </p>
     </div>
   );
 }
 
+/* ============================================================
+   PAGE
+============================================================ */
+
 function PartnersPageContent() {
   const searchParams = useSearchParams();
 
   const [modal, setModal] = useState(false);
   const [view, setView] = useState(false);
-  const [viewingUser, setViewingUser] = useState<any>(null);
-  const [editingUser, setEditingUser] = useState<any>(null);
+  const [viewingUser, setViewingUser] =
+    useState<any>(null);
+  const [editingUser, setEditingUser] =
+    useState<any>(null);
+
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+  const [areaFilter, setAreaFilter] =
+    useState<string>('');
+
   const [loading, setLoading] = useState(true);
+
   const [users, setUsers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [partnerList, setPartnerList] = useState<any[]>([]);
+
+  /* ==========================================================
+     URL FILTERS
+  ========================================================== */
 
   useEffect(() => {
     const status = searchParams.get('status');
     if (status) setFilter(status.toLowerCase());
+
+    const area = searchParams.get('area');
+    if (area) setAreaFilter(area);
   }, [searchParams]);
 
-  // ✅ Fetch partner areas
+  /* ==========================================================
+     FETCH PARTNER AREAS
+  ========================================================== */
+
   const fetchAreas = async () => {
     try {
       if (!sessionStorage.getItem('token')) return [];
+
       const { data } = await api.get('/partner-areas');
       const list = data.success ? data.areas || [] : [];
       setAreas(list);
@@ -224,9 +484,14 @@ function PartnersPageContent() {
     }
   };
 
+  /* ==========================================================
+     FETCH PACKAGES
+  ========================================================== */
+
   const fetchPackages = async () => {
     try {
       if (!sessionStorage.getItem('token')) return;
+
       const { data } = await api.get('/packages');
       if (data.success) setPackages(data.packages || []);
     } catch (e) {
@@ -234,10 +499,14 @@ function PartnersPageContent() {
     }
   };
 
-  // ✅ Fetch master partner list
+  /* ==========================================================
+     FETCH MASTER PARTNER LIST
+  ========================================================== */
+
   const fetchPartnerList = async () => {
     try {
       if (!sessionStorage.getItem('token')) return [];
+
       const { data } = await api.get('/partners-list');
       const list = data.success ? data.partners || [] : [];
       setPartnerList(list);
@@ -248,59 +517,73 @@ function PartnersPageContent() {
     }
   };
 
-  // ✅ Fetch partners + partner payments
+  /* ==========================================================
+     FETCH PARTNERS + PAYMENTS
+  ========================================================== */
+
   const fetchUsers = async (areaList = areas) => {
     try {
-      if (!sessionStorage.getItem('token')) return setLoading(false);
+      if (!sessionStorage.getItem('token')) {
+        setLoading(false);
+        return;
+      }
 
-      // ✅ Fetch partners AND partner-payments together
       const [partnersRes, paymentsRes] = await Promise.all([
         api.get('/partners?limit=10000'),
         api.get('/partner-payments'),
       ]);
 
       const partners = partnersRes.data.partners || [];
-      const payments = paymentsRes.data.payments || [];
+      const paymentList = paymentsRes.data.payments || [];
 
       if (!partnersRes.data.success) return;
 
-      setUsers(
-        partners.map((c: any) => {
-          const activation = dateInput(c.activationDate);
-          const expiry = c.expiryDate
-            ? dateInput(c.expiryDate)
-            : expiryDate(activation);
+      // Store payments in state.
+      setPayments(paymentList);
 
-          const user = {
-            id: c._id,
-            customerId: c.partnerId || 'N/A',
-            name: c.name || '',
-            phone: c.phone || '',
-            address: c.address || '',
-            area: areaName(c.area, areaList),
-            package: c.package || '',
-            packagePrice: Number(c.packagePrice || 0),
-            discount: Number(c.discount || 0),
-            discountRaw: Number(c.discount || 0),
-            monthlyFeeRaw: Number(c.monthlyFee || 0),
-            monthlyFee: `Rs. ${Number(c.monthlyFee || 0).toLocaleString()}`,
-            activationDate: activation,
-            expiryDate: expiry,
-            statusRaw: c.status || 'active',
-            partner: c.partner || '',
-          };
+      const mappedUsers = partners.map((c: any) => {
+        const activation = dateInput(c.activationDate);
+        const expiry = c.expiryDate
+          ? dateInput(c.expiryDate)
+          : expiryDate(activation);
 
-          // ✅ Use allocation-aware status
-          return { ...user, status: computeEffectiveStatus(user, payments) };
-        })
-      );
+        const user = {
+          id: c._id,
+          customerId: c.partnerId || 'N/A',
+          name: c.name || '',
+          phone: c.phone || '',
+          address: c.address || '',
+          area: areaName(c.area, areaList),
+          package: c.package || '',
+          packagePrice: Number(c.packagePrice || 0),
+          discount: Number(c.discount || 0),
+          discountRaw: Number(c.discount || 0),
+          monthlyFeeRaw: Number(c.monthlyFee || 0),
+          monthlyFee: `Rs. ${Number(c.monthlyFee || 0).toLocaleString()}`,
+          activationDate: activation,
+          expiryDate: expiry,
+          statusRaw: c.status || 'active',
+          partner: c.partner || '',
+        };
+
+        return {
+          ...user,
+          status: computeEffectiveStatus(user, paymentList),
+        };
+      });
+
+      setUsers(mappedUsers);
     } catch (e) {
-      console.error('Error fetching User:', e);
-      toast.error('Failed to load User');
+      console.error('Error fetching partners:', e);
+      toast.error('Failed to load partners');
     } finally {
       setLoading(false);
     }
   };
+
+  /* ==========================================================
+     INITIAL LOAD
+  ========================================================== */
 
   useEffect(() => {
     (async () => {
@@ -311,26 +594,99 @@ function PartnersPageContent() {
     })();
   }, []);
 
+  /* ==========================================================
+     STATS
+  ========================================================== */
+
+  const statsUsers = areaFilter
+    ? users.filter((u) => u.area === areaFilter)
+    : users;
+
   const stats = [
-    ['all', 'TOTAL USERS', users.length, Users, 'blue'],
-    ['active', 'ACTIVE', users.filter(u => u.status === 'Active').length, UserCheck, 'green'],
-    ['inactive', 'INACTIVE', users.filter(u => u.status === 'Inactive').length, UserX, 'gray'],
-    ['upcoming-expiry', 'UPCOMING EXPIRIES', users.filter(upcomingExpiry).length, Clock, 'orange', 'Within 7 days'],
-    ['expired', 'EXPIRED', users.filter(u => u.status === 'Expired').length, UserMinus, 'red'],
+    [
+      'all',
+      'TOTAL USERS',
+      statsUsers.length,
+      Users,
+      'blue',
+    ],
+    [
+      'active',
+      'ACTIVE',
+      statsUsers.filter((u) => u.status === 'Active').length,
+      UserCheck,
+      'green',
+    ],
+    [
+      'inactive',
+      'INACTIVE',
+      statsUsers.filter((u) => u.status === 'Inactive').length,
+      UserX,
+      'gray',
+    ],
+    [
+      'upcoming-expiry',
+      'UPCOMING EXPIRIES',
+      statsUsers.filter((u) =>
+        isPaymentAwareUpcomingExpiry(u, payments)
+      ).length,
+      Clock,
+      'orange',
+      'Within 7 days',
+    ],
+    [
+      'expired',
+      'EXPIRED',
+      statsUsers.filter((u) => u.status === 'Expired').length,
+      UserMinus,
+      'red',
+    ],
   ] as const;
 
+  /* ==========================================================
+     USER FORM FIELDS
+  ========================================================== */
+
   const userFields: Field[] = [
-    { name: 'customerId', label: 'User ID', type: 'text', required: true, readOnly: !!editingUser },
-    { name: 'name', label: 'Full Name', type: 'text', required: true, placeholder: 'Enter full name', readOnly: !!editingUser },
-    { name: 'phone', label: 'Phone', type: 'text', required: true, placeholder: '0300-1234567' },
-    { name: 'address', label: 'Address', type: 'text', required: true, placeholder: 'House #, Street' },
+    {
+      name: 'customerId',
+      label: 'User ID',
+      type: 'text',
+      required: true,
+      readOnly: !!editingUser,
+    },
+    {
+      name: 'name',
+      label: 'Full Name',
+      type: 'text',
+      required: true,
+      placeholder: 'Enter full name',
+      readOnly: !!editingUser,
+    },
+    {
+      name: 'phone',
+      label: 'Phone',
+      type: 'text',
+      required: true,
+      placeholder: '0300-1234567',
+    },
+    {
+      name: 'address',
+      label: 'Address',
+      type: 'text',
+      required: true,
+      placeholder: 'House #, Street',
+    },
     {
       name: 'area',
-      label: ' Area',
+      label: 'Area',
       type: 'select',
       required: true,
       searchable: true,
-      options: areas.map(a => ({ label: a.name, value: a.name })),
+      options: areas.map((a) => ({
+        label: a.name,
+        value: a.name,
+      })),
     },
     {
       name: 'partner',
@@ -338,14 +694,22 @@ function PartnersPageContent() {
       type: 'select',
       required: true,
       searchable: true,
-      placeholder: partnerList.length > 0 ? 'Select Partner' : 'No partners available',
+      placeholder:
+        partnerList.length > 0
+          ? 'Select Partner'
+          : 'No partners available',
       options:
         partnerList.length > 0
           ? partnerList.map((p: any) => ({
               label: `${p.partnerId} - ${p.name}`,
               value: p.name,
             }))
-          : [{ label: 'No partners available - add one first', value: '' }],
+          : [
+              {
+                label: 'No partners available - add one first',
+                value: '',
+              },
+            ],
     },
     {
       name: 'package',
@@ -353,8 +717,10 @@ function PartnersPageContent() {
       type: 'select',
       required: true,
       searchable: true,
-      options: packages.map(p => ({
-        label: `${p.name} - Rs. ${Number(p.sellingPrice || 0).toLocaleString()}`,
+      options: packages.map((p) => ({
+        label: `${p.name} - Rs. ${Number(
+          p.sellingPrice || 0
+        ).toLocaleString()}`,
         value: p.name,
       })),
     },
@@ -381,7 +747,12 @@ function PartnersPageContent() {
       defaultValue: '0',
       min: 0,
       max: (data, context) =>
-        Number(findPackage(context?.packages || [], data?.package)?.sellingPrice || 0),
+        Number(
+          findPackage(
+            context?.packages || [],
+            data?.package
+          )?.sellingPrice || 0
+        ),
     },
     {
       name: 'monthlyFee',
@@ -392,9 +763,16 @@ function PartnersPageContent() {
       dependsOn: 'package',
       updateOnChange: (_, data, context) => {
         const price = Number(
-          findPackage(context?.packages || [], data?.package)?.sellingPrice || 0
+          findPackage(
+            context?.packages || [],
+            data?.package
+          )?.sellingPrice || 0
         );
-        return Math.max(0, price - Number(data?.discount || 0));
+
+        return Math.max(
+          0,
+          price - Number(data?.discount || 0)
+        );
       },
     },
     {
@@ -411,12 +789,19 @@ function PartnersPageContent() {
     },
   ];
 
+  /* ==========================================================
+     TRANSFORM FORM DATA
+  ========================================================== */
+
   const transformUserData = (data: any) => {
     const pkg = findPackage(packages, data.package);
     const price = Number(pkg?.sellingPrice || 0);
     const discount = Number(data.discount || 0);
 
-    if (discount < 0) throw new Error('Discount cannot be negative.');
+    if (discount < 0) {
+      throw new Error('Discount cannot be negative.');
+    }
+
     if (price > 0 && discount > price) {
       throw new Error(
         `Discount (Rs. ${discount.toLocaleString()}) cannot exceed the package price (Rs. ${price.toLocaleString()}).`
@@ -424,7 +809,10 @@ function PartnersPageContent() {
     }
 
     const activation = dateInput(data.activationDate);
-    if (!activation) throw new Error('Activation Date is required.');
+
+    if (!activation) {
+      throw new Error('Activation Date is required.');
+    }
 
     return {
       partnerId: data.customerId,
@@ -442,32 +830,51 @@ function PartnersPageContent() {
     };
   };
 
+  /* ==========================================================
+     SUCCESS
+  ========================================================== */
+
   const handleSuccess = (data: any) => {
     toast.success(
       editingUser
         ? `${data.name} updated successfully!`
         : `${data.name} added successfully!`
     );
+
     setEditingUser(null);
     setModal(false);
     fetchUsers(areas);
   };
 
+  /* ==========================================================
+     DELETE
+  ========================================================== */
+
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
+    if (!confirm(`Are you sure you want to delete ${name}?`)) {
+      return;
+    }
 
     try {
       await api.delete(`/partners/${id}`);
-      setUsers(prev => prev.filter(u => u.id !== id));
+
+      setUsers((prev) => prev.filter((u) => u.id !== id));
       toast.success(`${name} deleted`);
-      if (editingUser?.id === id) setEditingUser(null);
+
+      if (editingUser?.id === id) {
+        setEditingUser(null);
+      }
     } catch (e) {
       console.error(e);
-      toast.error('Failed to delete User');
+      toast.error('Failed to delete partner');
     }
   };
 
-  const filteredUsers = users.filter(u => {
+  /* ==========================================================
+     FILTERED USERS
+  ========================================================== */
+
+  const filteredUsers = users.filter((u) => {
     const status = u.status;
     const q = search.toLowerCase();
 
@@ -477,7 +884,8 @@ function PartnersPageContent() {
       (filter === 'inactive' && status === 'Inactive') ||
       (filter === 'expired' && status === 'Expired') ||
       (filter === 'suspended' && status === 'Suspended') ||
-      (filter === 'upcoming-expiry' && upcomingExpiry(u));
+      (filter === 'upcoming-expiry' &&
+        isPaymentAwareUpcomingExpiry(u, payments));
 
     const matchesSearch =
       u.name?.toLowerCase().includes(q) ||
@@ -485,8 +893,15 @@ function PartnersPageContent() {
       u.phone?.includes(q) ||
       u.partner?.toLowerCase().includes(q);
 
-    return matchesStatus && matchesSearch;
+    const matchesArea =
+      !areaFilter || u.area === areaFilter;
+
+    return matchesStatus && matchesSearch && matchesArea;
   });
+
+  /* ==========================================================
+     TABLE COLUMNS
+  ========================================================== */
 
   const columns = [
     { key: 'customerId', header: 'User ID' },
@@ -498,6 +913,7 @@ function PartnersPageContent() {
           <span className="font-medium text-gray-900 dark:text-white">
             {u.name}
           </span>
+
           <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             <CalendarDays className="h-3 w-3 text-blue-500" />
             Activated: {displayDate(u.activationDate)}
@@ -506,28 +922,44 @@ function PartnersPageContent() {
       ),
     },
     { key: 'phone', header: 'Phone' },
-    { key: 'area', header: ' Area' },
+    { key: 'area', header: 'Area' },
     { key: 'partner', header: 'Partner' },
     { key: 'monthlyFee', header: 'Monthly Fee' },
     {
       key: 'status',
       header: 'Status',
       render: (u: any) => (
-        <span className={cn(
-          'px-2 py-1 rounded-full text-xs font-medium',
-          statusStyles[u.status]
-        )}>
+        <span
+          className={cn(
+            'px-2 py-1 rounded-full text-xs font-medium',
+            statusStyles[u.status] ||
+              (u.status === 'Upcoming Expiry'
+                ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300')
+          )}
+        >
           {u.status}
         </span>
       ),
     },
   ];
 
+  /* ==========================================================
+     LOADING
+  ========================================================== */
+
   if (loading) return spinner;
+
+  /* ==========================================================
+     RENDER
+  ========================================================== */
 
   return (
     <Layout>
       <div className="space-y-5">
+        {/* ==================================================
+            HEADER
+        ================================================== */}
 
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -535,8 +967,9 @@ function PartnersPageContent() {
               <Handshake className="h-6 w-6 text-blue-600" />
               Partner User Management
             </h1>
+
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Manage User connections and details.
+              Manage partner connections and details.
             </p>
           </div>
 
@@ -545,12 +978,16 @@ function PartnersPageContent() {
               setEditingUser(null);
               setModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
             Add User
           </button>
         </header>
+
+        {/* ==================================================
+            STATS
+        ================================================== */}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map(([key, label, value, Icon, color, sub]) => {
@@ -571,17 +1008,30 @@ function PartnersPageContent() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-                    <p className={cn('text-2xl font-bold mt-1', parts[0])}>{value}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {label}
+                    </p>
+
+                    <p
+                      className={cn(
+                        'text-2xl font-bold mt-1',
+                        parts[0]
+                      )}
+                    >
+                      {value}
+                    </p>
+
                     <p className="text-xs mt-1 text-gray-500 dark:text-gray-400">
                       {sub || (active ? 'Filtered' : '')}
                     </p>
                   </div>
 
-                  <div className={cn(
-                    'h-12 w-12 rounded-full flex items-center justify-center',
-                    parts.slice(1, 3).join(' ')
-                  )}>
+                  <div
+                    className={cn(
+                      'h-12 w-12 rounded-full flex items-center justify-center',
+                      parts.slice(1, 3).join(' ')
+                    )}
+                  >
                     <Icon className={cn('h-6 w-6', parts[0])} />
                   </div>
                 </div>
@@ -590,15 +1040,23 @@ function PartnersPageContent() {
           })}
         </div>
 
+        {/* ==================================================
+            SEARCH
+        ================================================== */}
+
         <SearchBar
           placeholder="Search by name, User ID, phone or partner..."
           value={search}
           onChange={setSearch}
         />
 
+        {/* ==================================================
+            USER LIST
+        ================================================== */}
+
         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
                 User List
               </h2>
@@ -612,28 +1070,63 @@ function PartnersPageContent() {
                   <X className="h-3 w-3" />
                 </button>
               )}
+
+              {areaFilter && (
+                <button
+                  onClick={() => {
+                    setAreaFilter('');
+
+                    if (typeof window !== 'undefined') {
+                      const url = new URL(window.location.href);
+                      url.searchParams.delete('area');
+                      window.history.replaceState(
+                        {},
+                        '',
+                        url.toString()
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                >
+                  Area: {areaFilter}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
             </div>
 
             <span className="text-xs text-gray-500 dark:text-gray-400">
-              {filteredUsers.length} User found
+              {filteredUsers.length} users found
             </span>
           </div>
 
-          <div className="p-4">
+          <div className="p-2">
             <DataTable
               data={filteredUsers}
               columns={columns}
               actions={[
-                { value: 'edit', icon: <Edit className="h-4 w-4" /> },
-                { value: 'view', icon: <Eye className="h-4 w-4" /> },
-                { value: 'delete', icon: <Trash2 className="h-4 w-4" /> },
+                {
+                  value: 'edit',
+                  icon: <Edit className="h-3 w-3" />,
+                },
+                {
+                  value: 'view',
+                  icon: <Eye className="h-3 w-3" />,
+                },
+                {
+                  value: 'delete',
+                  icon: <Trash2 className="h-3 w-3" />,
+                },
               ]}
               onAction={(item, action) => {
-                if (action === 'delete') handleDelete(item.id, item.name);
+                if (action === 'delete') {
+                  handleDelete(item.id, item.name);
+                }
+
                 if (action === 'edit') {
                   setEditingUser(item);
                   setModal(true);
                 }
+
                 if (action === 'view') {
                   setViewingUser(item);
                   setView(true);
@@ -641,10 +1134,14 @@ function PartnersPageContent() {
               }}
               accordionTitle="name"
               accordionSubtitle="customerId"
-              emptyMessage="No User found matching your search"
+              emptyMessage="No users found matching your search"
             />
           </div>
         </section>
+
+        {/* ==================================================
+            ADD / EDIT USER MODAL
+        ================================================== */}
 
         <AddUserModal
           isOpen={modal}
@@ -654,31 +1151,47 @@ function PartnersPageContent() {
           }}
           onSuccess={handleSuccess}
           title={editingUser ? 'Edit User' : 'Add New User'}
-          subtitle={editingUser
-            ? 'Update the User details below'
-            : 'Create a new User connection'}
+          subtitle={
+            editingUser
+              ? 'Update the partner details below'
+              : 'Create a new partner connection'
+          }
           fields={userFields}
           submitLabel={editingUser ? 'Update User' : 'Add User'}
           color="blue"
-          endpoint={editingUser ? `/partners/${editingUser.id}` : '/partners'}
+          endpoint={
+            editingUser
+              ? `/partners/${editingUser.id}`
+              : '/partners'
+          }
           method={editingUser ? 'PUT' : 'POST'}
-          initialData={editingUser ? {
-            customerId: editingUser.customerId,
-            name: editingUser.name,
-            phone: editingUser.phone,
-            address: editingUser.address,
-            area: areaName(editingUser.area, areas),
-            partner: editingUser.partner || '',
-            package: editingUser.package,
-            activationDate: dateInput(editingUser.activationDate),
-            expiryDate: dateInput(editingUser.expiryDate),
-            discount: editingUser.discountRaw || 0,
-            monthlyFee: editingUser.monthlyFeeRaw,
-            status: editingUser.statusRaw,
-          } : undefined}
+          initialData={
+            editingUser
+              ? {
+                  customerId: editingUser.customerId,
+                  name: editingUser.name,
+                  phone: editingUser.phone,
+                  address: editingUser.address,
+                  area: areaName(editingUser.area, areas),
+                  partner: editingUser.partner || '',
+                  package: editingUser.package,
+                  activationDate: dateInput(
+                    editingUser.activationDate
+                  ),
+                  expiryDate: dateInput(editingUser.expiryDate),
+                  discount: editingUser.discountRaw || 0,
+                  monthlyFee: editingUser.monthlyFeeRaw,
+                  status: editingUser.statusRaw,
+                }
+              : undefined
+          }
           transformData={transformUserData}
           context={{ packages, areas, partnerList }}
         />
+
+        {/* ==================================================
+            VIEW USER MODAL
+        ================================================== */}
 
         {view && viewingUser && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -693,10 +1206,12 @@ function PartnersPageContent() {
                   <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center">
                     <UserIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                   </div>
+
                   <div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                       {viewingUser.name}
                     </h2>
+
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       User ID: {viewingUser.customerId}
                     </p>
@@ -714,19 +1229,27 @@ function PartnersPageContent() {
               <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)] space-y-4">
                 {(() => {
                   const status = viewingUser.status;
+
                   const StatusIcon =
                     status === 'Active'
                       ? CheckCircle
                       : status === 'Expired'
                         ? Clock
-                        : XCircle;
+                        : status === 'Upcoming Expiry'
+                          ? Clock
+                          : XCircle;
 
                   return (
                     <div className="flex justify-center">
-                      <span className={cn(
-                        'px-4 py-1.5 rounded-full text-sm font-semibold inline-flex items-center gap-1.5',
-                        statusStyles[status]
-                      )}>
+                      <span
+                        className={cn(
+                          'px-4 py-1.5 rounded-full text-sm font-semibold inline-flex items-center gap-1.5',
+                          statusStyles[status] ||
+                            (status === 'Upcoming Expiry'
+                              ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'
+                              : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300')
+                        )}
+                      >
                         <StatusIcon className="h-4 w-4" />
                         {status}
                       </span>
@@ -735,30 +1258,77 @@ function PartnersPageContent() {
                 })()}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <ViewField icon={<Hash className="h-4 w-4" />} label="User ID" value={viewingUser.customerId} />
-                  <ViewField icon={<UserIcon className="h-4 w-4" />} label="Full Name" value={viewingUser.name} />
-                  <ViewField icon={<Phone className="h-4 w-4" />} label="Phone" value={viewingUser.phone} />
-                  <ViewField icon={<MapPin className="h-4 w-4" />} label="Area" value={areaName(viewingUser.area, areas)} />
-                  <ViewField icon={<Handshake className="h-4 w-4" />} label="Partner" value={viewingUser.partner || 'N/A'} />
-                  <ViewField icon={<PackageIcon className="h-4 w-4" />} label="Package" value={viewingUser.package || 'No package assigned'} />
-                  <ViewField icon={<CalendarDays className="h-4 w-4" />} label="Activation Date" value={displayDate(viewingUser.activationDate)} />
+                  <ViewField
+                    icon={<Hash className="h-4 w-4" />}
+                    label="User ID"
+                    value={viewingUser.customerId}
+                  />
+
+                  <ViewField
+                    icon={<UserIcon className="h-4 w-4" />}
+                    label="Full Name"
+                    value={viewingUser.name}
+                  />
+
+                  <ViewField
+                    icon={<Phone className="h-4 w-4" />}
+                    label="Phone"
+                    value={viewingUser.phone}
+                  />
+
+                  <ViewField
+                    icon={<MapPin className="h-4 w-4" />}
+                    label="Area"
+                    value={areaName(viewingUser.area, areas)}
+                  />
+
+                  <ViewField
+                    icon={<Handshake className="h-4 w-4" />}
+                    label="Partner"
+                    value={viewingUser.partner || 'N/A'}
+                  />
+
+                  <ViewField
+                    icon={<PackageIcon className="h-4 w-4" />}
+                    label="Package"
+                    value={
+                      viewingUser.package || 'No package assigned'
+                    }
+                  />
+
+                  <ViewField
+                    icon={<CalendarDays className="h-4 w-4" />}
+                    label="Activation Date"
+                    value={displayDate(viewingUser.activationDate)}
+                  />
+
                   <ViewField
                     icon={<CalendarDays className="h-4 w-4" />}
                     label="Expiry Date"
                     value={displayDate(viewingUser.expiryDate)}
-                    highlight={viewingUser.status === 'Expired'}
+                    highlight={
+                      viewingUser.status === 'Expired' ||
+                      viewingUser.status === 'Upcoming Expiry'
+                    }
                   />
+
                   <ViewField
                     icon={<Percent className="h-4 w-4" />}
                     label="Discount"
-                    value={`Rs. ${Number(viewingUser.discount || 0).toLocaleString()}`}
+                    value={`Rs. ${Number(
+                      viewingUser.discount || 0
+                    ).toLocaleString()}`}
                   />
+
                   <ViewField
                     icon={<DollarSign className="h-4 w-4" />}
                     label="Monthly Fee"
-                    value={`Rs. ${Number(viewingUser.monthlyFeeRaw || 0).toLocaleString()}`}
+                    value={`Rs. ${Number(
+                      viewingUser.monthlyFeeRaw || 0
+                    ).toLocaleString()}`}
                     highlight
                   />
+
                   <ViewField
                     icon={<Home className="h-4 w-4" />}
                     label="Address"
@@ -796,6 +1366,14 @@ function PartnersPageContent() {
   );
 }
 
+/* ============================================================
+   EXPORT
+============================================================ */
+
 export default function PartnersPage() {
-  return <Suspense fallback={spinner}>{<PartnersPageContent />}</Suspense>;
+  return (
+    <Suspense fallback={spinner}>
+      <PartnersPageContent />
+    </Suspense>
+  );
 }
