@@ -1,17 +1,6 @@
 const multer = require('multer');
 const path = require('path');
 
-// Store uploaded files temporarily in uploads/ folder
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `bulk-${unique}${path.extname(file.originalname)}`);
-  },
-});
-
 // Only accept .csv
 const fileFilter = (req, file, cb) => {
   if (file.originalname.toLowerCase().endsWith('.csv')) {
@@ -21,8 +10,9 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// ✅ Memory storage — file lives in req.file.buffer, never touches disk
 module.exports = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
 });

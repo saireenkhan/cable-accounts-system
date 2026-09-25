@@ -1,5 +1,5 @@
-const fs = require('fs');
 const csv = require('csv-parser');
+const { Readable } = require('stream');
 const Customer = require('../models/Customer');
 const Partner = require('../models/Partner');
 const PartnerArea = require('../models/PartnerArea');
@@ -31,12 +31,13 @@ const VALID_STATUSES = ['active', 'inactive', 'suspended', 'expired'];
 // SHARED HELPERS
 // ============================================================
 
-const parseCSV = (filePath) => {
+// ✅ NEW — parse from an in-memory Buffer instead of a file on disk
+const parseCSVFromBuffer = (buffer) => {
   return new Promise((resolve, reject) => {
     const rows = [];
     let headers = null;
 
-    fs.createReadStream(filePath)
+    Readable.from(buffer)
       .pipe(csv())
       .on('headers', (h) => {
         headers = h.map((x) =>
@@ -133,23 +134,13 @@ const normalizePhone = (phone) => {
   return p;
 };
 
-const cleanupFile = (filePath) => {
-  if (filePath && fs.existsSync(filePath)) {
-    try {
-      fs.unlinkSync(filePath);
-    } catch (e) {
-      console.error('Failed to delete temp file:', e.message);
-    }
-  }
-};
+// (cleanupFile removed — no file on disk to clean up)
 
 // ============================================================
 // CUSTOMER BULK UPLOAD
 // POST /api/customers/bulk-upload
 // ============================================================
 exports.bulkUpload = async (req, res) => {
-  const filePath = req.file?.path;
-
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -166,7 +157,8 @@ exports.bulkUpload = async (req, res) => {
       });
     }
 
-    const { headers, rows } = await parseCSV(filePath);
+    // ✅ Parse from memory buffer
+    const { headers, rows } = await parseCSVFromBuffer(req.file.buffer);
 
     console.log('📋 Customer CSV headers:', headers);
     console.log('📊 Customer CSV rows:', rows.length);
@@ -300,17 +292,15 @@ exports.bulkUpload = async (req, res) => {
       success: false,
       message: error.message || 'Server error during bulk upload',
     });
-  } finally {
-    cleanupFile(filePath);
   }
+  // ✅ No finally/cleanupFile — nothing on disk
 };
+
 // ============================================================
 // PARTNER BULK UPLOAD
 // POST /api/partners/bulk-upload
 // ============================================================
 exports.bulkUploadPartners = async (req, res) => {
-  const filePath = req.file?.path;
-
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -327,7 +317,7 @@ exports.bulkUploadPartners = async (req, res) => {
       });
     }
 
-    // ✅ NEW — REQUIRED partner
+    // ✅ REQUIRED partner
     const selectedPartner = String(req.body.partner || '').trim();
     if (!selectedPartner) {
       return res.status(400).json({
@@ -345,12 +335,13 @@ exports.bulkUploadPartners = async (req, res) => {
       });
     }
 
-    const { headers, rows } = await parseCSV(filePath);
+    // ✅ Parse from memory buffer
+    const { headers, rows } = await parseCSVFromBuffer(req.file.buffer);
 
     console.log('📋 Partner CSV headers:', headers);
     console.log('📊 Partner CSV rows:', rows.length);
     console.log('📍 Target partner area:', selectedArea);
-    console.log('📍 Target partner:', selectedPartner);   // ✅ debug
+    console.log('📍 Target partner:', selectedPartner);
 
     const headerCheck = validateHeaders(headers);
     if (!headerCheck.ok) {
@@ -505,7 +496,7 @@ exports.bulkUploadPartners = async (req, res) => {
 
     console.log(`\n📊 Partner bulk upload summary:`);
     console.log(`   Area:       "${selectedArea}"`);
-    console.log(`   Partner:    "${selectedPartner}"`);   // ✅ debug
+    console.log(`   Partner:    "${selectedPartner}"`);
     console.log(`   Total rows: ${rows.length}`);
     console.log(`   Inserted:   ${inserted.length}`);
     console.log(`   Skipped:    ${skipped.length}`);
@@ -531,9 +522,8 @@ exports.bulkUploadPartners = async (req, res) => {
       success: false,
       message: error.message || 'Server error during partner bulk upload',
     });
-  } finally {
-    cleanupFile(filePath);
   }
+  // ✅ No finally/cleanupFile — nothing on disk
 };
 
 // ============================================================
