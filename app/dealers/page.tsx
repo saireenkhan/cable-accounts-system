@@ -259,22 +259,6 @@ export default function DealerDashboardPage() {
               Dealer balances, recovery and payment overview.
             </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => router.push('/dealer-payments')}
-              className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors"
-            >
-              <CreditCard className="h-4 w-4" />
-              Dealer Payments
-            </button>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm"
-            >
-              <UserPlus className="h-4 w-4" />
-              Add Dealer
-            </button>
-          </div>
         </div>
 
         {/* Stats - 4 cards */}
