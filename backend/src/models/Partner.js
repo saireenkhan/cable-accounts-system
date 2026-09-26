@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 
 const partnerSchema = new mongoose.Schema(
   {
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    required: false,
+    index: true,
+  },
     partnerId: {
       type: String,
       trim: true,
@@ -66,5 +72,8 @@ const partnerSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+
+partnerSchema.index({ tenantId: 1, partnerId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Partner', partnerSchema);

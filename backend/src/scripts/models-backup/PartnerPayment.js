@@ -1,20 +1,14 @@
 const mongoose = require('mongoose');
 
-const PaymentSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
+const PartnerPaymentSchema = new mongoose.Schema({
   receiptNo: {
     type: String,
     required: true,
     unique: true,
   },
-  customer: {
+  partner: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Customer',
+    ref: 'Partner',
     required: true,
   },
   month: {
@@ -54,14 +48,13 @@ const PaymentSchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// ✅ Prevent duplicate payment for same customer + same month
-// (Partial filter — allows multiple "no payment" markers per month if needed)
-PaymentSchema.index(
-  { customer: 1, month: 1 },
+// ✅ Prevent duplicate payment for same partner + same month
+PartnerPaymentSchema.index(
+  { partner: 1, month: 1 },
   {
     unique: true,
     partialFilterExpression: { isNoPayment: false },
   }
 );
 
-module.exports = mongoose.model('Payment', PaymentSchema);
+module.exports = mongoose.model('PartnerPayment', PartnerPaymentSchema);

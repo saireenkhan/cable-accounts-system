@@ -1,12 +1,6 @@
 const mongoose = require('mongoose');
 
 const purchaseSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   purchaseNo: {
     type: String,
     unique: true,

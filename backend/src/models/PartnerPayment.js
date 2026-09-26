@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
 const PartnerPaymentSchema = new mongoose.Schema({
+  tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    required: false,
+    index: true,
+  },
   receiptNo: {
     type: String,
     required: true,

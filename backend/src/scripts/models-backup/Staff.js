@@ -1,14 +1,9 @@
 const mongoose = require('mongoose');
 
 const staffSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   staffId: {
     type: String,
+    unique: true,
     required: true,
   },
   name: {
@@ -61,8 +56,5 @@ const staffSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
-
-
-staffSchema.index({ tenantId: 1, staffId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Staff', staffSchema);

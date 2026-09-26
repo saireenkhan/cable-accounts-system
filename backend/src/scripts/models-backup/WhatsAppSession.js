@@ -2,12 +2,6 @@ const mongoose = require('mongoose');
 
 const whatsappSessionSchema = new mongoose.Schema(
   {
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
     phone: {
       type: String,
       required: true,

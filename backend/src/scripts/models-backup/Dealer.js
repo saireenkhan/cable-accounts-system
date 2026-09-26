@@ -1,14 +1,9 @@
 const mongoose = require('mongoose');
 
 const dealerSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   dealerId: {
     type: String,
+    unique: true,
     required: true,
   },
   name: {
@@ -59,8 +54,5 @@ const dealerSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
-
-
-dealerSchema.index({ tenantId: 1, dealerId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Dealer', dealerSchema);

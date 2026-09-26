@@ -1,15 +1,10 @@
 const mongoose = require('mongoose');
 
 const packageSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   name: {
     type: String,
     required: true,
+    unique: true,
     trim: true,
     uppercase: true, // ✅ stores name as UPPERCASE automatically
   },
@@ -63,8 +58,5 @@ packageSchema.pre('findOneAndUpdate', function (next) {
   }
   next();
 });
-
-
-packageSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model('Package', packageSchema);

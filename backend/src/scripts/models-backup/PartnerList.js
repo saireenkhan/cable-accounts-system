@@ -2,15 +2,10 @@ const mongoose = require('mongoose');
 
 const partnerListSchema = new mongoose.Schema(
   {
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
     partnerId: {
       type: String,
       required: true,
+      unique: true,
       trim: true,
     },
     name: {
@@ -52,8 +47,5 @@ const partnerListSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
-
-partnerListSchema.index({ tenantId: 1, partnerId: 1 }, { unique: true });
 
 module.exports = mongoose.model('PartnerList', partnerListSchema);

@@ -1,12 +1,6 @@
 const mongoose = require('mongoose');
 
 const billSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   billNo: {
     type: String,
     unique: true,

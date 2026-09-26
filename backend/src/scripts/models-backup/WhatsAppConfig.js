@@ -2,12 +2,6 @@ const mongoose = require('mongoose');
 
 const whatsappConfigSchema = new mongoose.Schema(
   {
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
     // Only one config document should exist; we use this as a singleton.
     singletonKey: {
       type: String,

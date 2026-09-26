@@ -1,15 +1,10 @@
 const mongoose = require('mongoose');
 
 const dealerAreaSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   name: {
     type: String,
     required: true,
+    unique: true,
     trim: true,
   },
   code: {
@@ -31,8 +26,5 @@ const dealerAreaSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
-
-
-dealerAreaSchema.index({ tenantId: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model('DealerArea', dealerAreaSchema);

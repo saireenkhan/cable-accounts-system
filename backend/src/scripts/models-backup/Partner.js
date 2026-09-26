@@ -1,14 +1,8 @@
 const mongoose = require('mongoose');
 
-const customerSchema = new mongoose.Schema(
+const partnerSchema = new mongoose.Schema(
   {
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
-    customerId: {
+    partnerId: {
       type: String,
       trim: true,
     },
@@ -35,6 +29,7 @@ const customerSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // ✅ Area stored as string (matches PartnerArea.name for easy counting)
     area: {
       type: String,
       trim: true,
@@ -52,6 +47,11 @@ const customerSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+        partner: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     status: {
       type: String,
       enum: ['active', 'inactive', 'suspended', 'expired'],
@@ -67,7 +67,4 @@ const customerSchema = new mongoose.Schema(
   }
 );
 
-
-customerSchema.index({ tenantId: 1, customerId: 1 }, { unique: true });
-
-module.exports = mongoose.model('Customer', customerSchema);
+module.exports = mongoose.model('Partner', partnerSchema);

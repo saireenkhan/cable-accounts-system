@@ -1,12 +1,6 @@
 const mongoose = require('mongoose');
 
 const installationChargeSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   date: {
     type: Date,
     default: Date.now,

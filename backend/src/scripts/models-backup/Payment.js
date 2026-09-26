@@ -1,12 +1,6 @@
 const mongoose = require('mongoose');
 
 const PaymentSchema = new mongoose.Schema({
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
   receiptNo: {
     type: String,
     required: true,
