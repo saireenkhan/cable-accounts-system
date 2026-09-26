@@ -49,22 +49,22 @@ export default function Header({ onMenuClick }: HeaderProps) {
   }, [menuOpen]);
 
 
-  useEffect(() => {
-    const loadCompany = () => {
-      const stored = sessionStorage.getItem('companyName');
-      setCompanyName(stored || 'Cable Management System');
-    };
+useEffect(() => {
+  const loadCompany = () => {
+    const stored = localStorage.getItem('companyName');
+    setCompanyName(stored || 'Cable Management System');
+  };
 
-    loadCompany();
+  loadCompany();
 
-    window.addEventListener('company-updated', loadCompany);
-    window.addEventListener('storage', loadCompany);
+  window.addEventListener('company-updated', loadCompany);
+  window.addEventListener('storage', loadCompany);
 
-    return () => {
-      window.removeEventListener('company-updated', loadCompany);
-      window.removeEventListener('storage', loadCompany);
-    };
-  }, []);
+  return () => {
+    window.removeEventListener('company-updated', loadCompany);
+    window.removeEventListener('storage', loadCompany);
+  };
+}, []);
 
   // Notification count
   useEffect(() => {
@@ -127,7 +127,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5 text-gray-600 dark:text-gray-300" />
           </button>
 
-          <h1 className="text-lg text-gray-900 dark:text-white hidden sm:block truncate">
+          <h1 className="text-lg text-[#d6b138] dark:text-[#d6b138] hidden sm:block truncate">
             {companyName}
           </h1>
         </div>

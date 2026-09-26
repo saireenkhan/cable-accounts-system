@@ -262,18 +262,11 @@ export function Sidebar({
 
     if (match) {
       setExpanded(match.section);
+      onSectionChange(match.section);
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
-
-  /* =======================================================
-     KEEP SECTION SYNCHRONIZED
-  ======================================================= */
-
-  useEffect(() => {
-    setExpanded(activeSection);
-  }, [activeSection]);
 
   /* =======================================================
      ACTIVE ROUTE
@@ -381,6 +374,7 @@ export function Sidebar({
           </span>
 
           {/* Mobile Close */}
+
           {isMobile && (
             <button
               onClick={onClose}
@@ -548,6 +542,7 @@ export function Sidebar({
                         >
 
                           {/* Icon */}
+
                           <span
                             className={cn(
                               `
@@ -571,6 +566,7 @@ export function Sidebar({
                           </span>
 
                           {/* Label */}
+
                           <span className="truncate">
                             {item.label}
                           </span>
@@ -591,4 +587,3 @@ export function Sidebar({
     </>
   );
 }
-
