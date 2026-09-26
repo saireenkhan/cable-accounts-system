@@ -7,6 +7,12 @@ const userSchema = new mongoose.Schema({
     required: true,
     trim: true,
   },
+    tenantId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Tenant',
+    required: false,
+    index: true,
+  },
   email: {
     type: String,
     required: true,
