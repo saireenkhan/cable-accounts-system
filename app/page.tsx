@@ -59,7 +59,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg shadow-blue-500/25 mb-4">
+          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-[#d6b138]  mb-4">
             <span className="text-white font-bold text-2xl">SR</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -133,7 +133,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={fillDemoCredentials}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                className="text-xs text-[#d6b138]dark:text-[#f7ce48] hover:underline"
               >
                 Use demo credentials
               </button>
@@ -142,7 +142,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium shadow-lg shadow-blue-500/25 hover:shadow-xl transition-all disabled:opacity-70"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-[#d6b138] hover:bg-[#f7ce48] text-white font-medium disabled:opacity-70"
             >
               {isLoading ? (
                 <>
