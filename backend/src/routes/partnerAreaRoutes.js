@@ -10,7 +10,7 @@ const {
 const { protect, authorize } = require('../middleware/auth');
 
 // ⚠️ Temporarily remove auth for testing (same as your Area routes)
-// router.use(protect);
+router.use(protect);
 
 router.route('/').get(getPartnerAreas).post(createPartnerArea);
 

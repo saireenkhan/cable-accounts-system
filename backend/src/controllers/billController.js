@@ -1,8 +1,9 @@
-const Bill = require('../models/Bill');
-const Customer = require('../models/Customer');
-const Area = require('../models/Area');
-const Package = require('../models/Package');
+const BillModel = require('../models/Bill');
+const CustomerModel = require('../models/Customer');
+const AreaModel = require('../models/Area');
+const PackageModel = require('../models/Package');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 const generateBillNo = async () => {
   // ✅ Get the last bill and increment
@@ -21,6 +22,10 @@ const generateBillNo = async () => {
 };
 
 exports.getBills = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Bill = tenantScope(BillModel, req);
+    const Customer = tenantScope(CustomerModel, req);
+    const Package = tenantScope(PackageModel, req);
   try {
     const { month, status, customerId } = req.query;
     const filter = {};
@@ -41,6 +46,10 @@ exports.getBills = async (req, res) => {
 };
 
 exports.getBill = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Bill = tenantScope(BillModel, req);
+    const Customer = tenantScope(CustomerModel, req);
+    const Package = tenantScope(PackageModel, req);
   try {
     const bill = await Bill.findById(req.params.id).populate('customer');
     
@@ -56,6 +65,10 @@ exports.getBill = async (req, res) => {
 };
 
 exports.createBill = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Bill = tenantScope(BillModel, req);
+    const Customer = tenantScope(CustomerModel, req);
+    const Package = tenantScope(PackageModel, req);
   try {
     const { customer, month, totalAmount, paidAmount, status } = req.body;
 
@@ -147,6 +160,8 @@ exports.createBill = async (req, res) => {
 };
 
 exports.generateMonthlyBills = async (req, res) => {
+    const Bill = tenantScope(BillModel, req);
+    const Customer = tenantScope(CustomerModel, req);
   try {
     const { month, year } = req.body;
     const monthString = `${month} ${year}`;
@@ -191,6 +206,7 @@ exports.generateMonthlyBills = async (req, res) => {
 };
 
 exports.updateBillStatus = async (req, res) => {
+    const Bill = tenantScope(BillModel, req);
   try {
     const { status } = req.body;
     const bill = await Bill.findByIdAndUpdate(

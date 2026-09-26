@@ -21,16 +21,15 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Notification count
   const [notificationCount, setNotificationCount] = useState(0);
 
   const [user, setUser] = useState<{
     name?: string;
     email?: string;
     avatar?: string;
+    tenantName?: string;
   } | null>(null);
 
-  const [companyName, setCompanyName] = useState('Cable Management System');
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Load user from sessionStorage + listen for updates
@@ -47,24 +46,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
     window.addEventListener('user-updated', loadUser);
     return () => window.removeEventListener('user-updated', loadUser);
   }, [menuOpen]);
-
-
-useEffect(() => {
-  const loadCompany = () => {
-    const stored = localStorage.getItem('companyName');
-    setCompanyName(stored || 'Cable Management System');
-  };
-
-  loadCompany();
-
-  window.addEventListener('company-updated', loadCompany);
-  window.addEventListener('storage', loadCompany);
-
-  return () => {
-    window.removeEventListener('company-updated', loadCompany);
-    window.removeEventListener('storage', loadCompany);
-  };
-}, []);
 
   // Notification count
   useEffect(() => {
@@ -128,7 +109,7 @@ useEffect(() => {
           </button>
 
           <h1 className="text-lg text-[#d6b138] dark:text-[#d6b138] hidden sm:block truncate">
-            {companyName}
+            {user?.tenantName || 'Cable Management System'}
           </h1>
         </div>
 

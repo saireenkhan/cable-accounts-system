@@ -1,6 +1,7 @@
-const Staff = require('../models/Staff');
-const Area = require('../models/Area');
+const StaffModel = require('../models/Staff');
+const AreaModel = require('../models/Area');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 const generateStaffId = async () => {
   const count = await Staff.countDocuments();
@@ -8,6 +9,8 @@ const generateStaffId = async () => {
 };
 
 exports.getStaff = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const { search, status } = req.query;
     const filter = {};
@@ -33,6 +36,8 @@ exports.getStaff = async (req, res) => {
 };
 
 exports.createStaff = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const { 
       name, phone, email, cnic, designation, salary, 
@@ -92,6 +97,7 @@ exports.createStaff = async (req, res) => {
 };
 
 exports.updateStaff = async (req, res) => {
+    const Staff = tenantScope(StaffModel, req);
   try {
     const staff = await Staff.findByIdAndUpdate(
       req.params.id,
@@ -111,6 +117,7 @@ exports.updateStaff = async (req, res) => {
 };
 
 exports.deleteStaff = async (req, res) => {
+    const Staff = tenantScope(StaffModel, req);
   try {
     const staff = await Staff.findByIdAndDelete(req.params.id);
     if (!staff) {

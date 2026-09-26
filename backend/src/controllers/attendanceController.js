@@ -1,12 +1,15 @@
-const Attendance = require('../models/Attendance');
-const Staff = require('../models/Staff');
+const AttendanceModel = require('../models/Attendance');
+const StaffModel = require('../models/Staff');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // ✅ GET ATTENDANCE (single day OR filter by staffId)
 // GET /api/attendance?date=YYYY-MM-DD&staffId=ST-001
 // ============================================================
 exports.getAttendance = async (req, res) => {
+    const Attendance = tenantScope(AttendanceModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const { date, staffId } = req.query;
     const filter = {};
@@ -57,6 +60,8 @@ exports.getAttendance = async (req, res) => {
 // Body: { staffId, date, status, checkIn, checkOut, remarks }
 // ============================================================
 exports.markAttendance = async (req, res) => {
+    const Attendance = tenantScope(AttendanceModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const { staffId, date, status, checkIn, checkOut, remarks } = req.body;
 
@@ -148,6 +153,8 @@ exports.markAttendance = async (req, res) => {
 // PUT /api/attendance/:id
 // ============================================================
 exports.updateAttendance = async (req, res) => {
+    const Attendance = tenantScope(AttendanceModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const updates = { ...req.body };
 
@@ -187,6 +194,8 @@ exports.updateAttendance = async (req, res) => {
 // DELETE /api/attendance/:id
 // ============================================================
 exports.deleteAttendance = async (req, res) => {
+    const Attendance = tenantScope(AttendanceModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const attendance = await Attendance.findByIdAndDelete(req.params.id);
 
@@ -211,6 +220,8 @@ exports.deleteAttendance = async (req, res) => {
 // Returns per-staff day-by-day status + summary counts + %.
 // ============================================================
 exports.getMonthlyReport = async (req, res) => {
+    const Attendance = tenantScope(AttendanceModel, req);
+    const Staff = tenantScope(StaffModel, req);
   try {
     const { month } = req.query; // e.g. "2026-09"
 

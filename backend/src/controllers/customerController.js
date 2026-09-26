@@ -1,7 +1,8 @@
-const Customer = require('../models/Customer');
-const Area = require('../models/Area');
-const Payment = require('../models/Payment');
+const CustomerModel = require('../models/Customer');
+const AreaModel = require('../models/Area');
+const PaymentModel = require('../models/Payment');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // HELPER: Calculate expiry date
@@ -26,6 +27,8 @@ const calculateExpiryDate = (activationDate) => {
 // GET all customers
 // ============================================================
 exports.getCustomers = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Customer = tenantScope(CustomerModel, req);
   try {
     const { search, status, area, limit } = req.query;
     const filter = {};
@@ -70,6 +73,8 @@ exports.getCustomers = async (req, res) => {
 // GET single customer
 // ============================================================
 exports.getCustomer = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Customer = tenantScope(CustomerModel, req);
   try {
     const customer = await Customer.findById(req.params.id)
       .populate('area', 'name')
@@ -100,6 +105,8 @@ exports.getCustomer = async (req, res) => {
 // CREATE customer
 // ============================================================
 exports.createCustomer = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Customer = tenantScope(CustomerModel, req);
   try {
     const {
       customerId,
@@ -274,6 +281,8 @@ exports.createCustomer = async (req, res) => {
 // UPDATE customer
 // ============================================================
 exports.updateCustomer = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Customer = tenantScope(CustomerModel, req);
   try {
     const {
       customerId,
@@ -494,6 +503,8 @@ exports.updateCustomer = async (req, res) => {
 // DELETE customer
 // ============================================================
 exports.deleteCustomer = async (req, res) => {
+    const Customer = tenantScope(CustomerModel, req);
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const customer = await Customer.findByIdAndDelete(req.params.id);
 
@@ -522,6 +533,8 @@ exports.deleteCustomer = async (req, res) => {
 // GET dashboard stats
 // ============================================================
 exports.getDashboardStats = async (req, res) => {
+    const Customer = tenantScope(CustomerModel, req);
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const totalCustomers = await Customer.countDocuments();
 

@@ -1,6 +1,7 @@
-const Payment = require('../models/Payment');
-const Customer = require('../models/Customer');
+const PaymentModel = require('../models/Payment');
+const CustomerModel = require('../models/Customer');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // Generate unique receipt number
@@ -36,6 +37,8 @@ const generateReceiptNo = async () => {
 // GET all payments
 // ============================================================
 exports.getPayments = async (req, res) => {
+    const Customer = tenantScope(CustomerModel, req);
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const { customerId, month } = req.query;
     const filter = {};
@@ -109,6 +112,8 @@ const recalculateCustomerStatus = async (customerDoc) => {
 // CREATE payment
 // ============================================================
 exports.createPayment = async (req, res) => {
+    const Customer = tenantScope(CustomerModel, req);
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const {
       customer,
@@ -291,6 +296,7 @@ if (typeof customer === 'object' && customer._id) {
 // DELETE payment
 // ============================================================
 exports.deletePayment = async (req, res) => {
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const payment = await Payment.findByIdAndDelete(req.params.id);
     if (!payment) {

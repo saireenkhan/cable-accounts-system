@@ -40,7 +40,7 @@ router.get('/', protect, getCustomers);
 router.get('/:id', protect, getCustomer);
 
 // Create single customer (public for testing — change to protect later)
-router.post('/', createCustomer);
+router.post('/', protect, createCustomer);
 
 // Update customer
 router.put('/:id', protect, authorize('admin', 'manager'), updateCustomer);

@@ -1,7 +1,9 @@
-const DealerArea = require('../models/DealerArea');
+const DealerAreaModel = require('../models/DealerArea');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 exports.getDealerAreas = async (req, res) => {
+    const DealerArea = tenantScope(DealerAreaModel, req);
   try {
     const areas = await DealerArea.find();
     res.json({ success: true, areas });
@@ -12,6 +14,7 @@ exports.getDealerAreas = async (req, res) => {
 };
 
 exports.createDealerArea = async (req, res) => {
+    const DealerArea = tenantScope(DealerAreaModel, req);
   try {
     const { name, code, description } = req.body;
 
@@ -57,6 +60,7 @@ exports.createDealerArea = async (req, res) => {
 };
 
 exports.updateDealerArea = async (req, res) => {
+    const DealerArea = tenantScope(DealerAreaModel, req);
   try {
     const area = await DealerArea.findByIdAndUpdate(
       req.params.id,
@@ -74,6 +78,7 @@ exports.updateDealerArea = async (req, res) => {
 };
 
 exports.deleteDealerArea = async (req, res) => {
+    const DealerArea = tenantScope(DealerAreaModel, req);
   try {
     const area = await DealerArea.findByIdAndDelete(req.params.id);
     if (!area) {

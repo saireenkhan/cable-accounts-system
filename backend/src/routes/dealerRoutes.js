@@ -10,7 +10,7 @@ const {
 const { protect, authorize } = require('../middleware/auth');
 
 // ⚠️ Temporarily remove auth for testing
-// router.use(protect);
+router.use(protect);
 
 router.get('/stats', getDealerStats);
 router.route('/')

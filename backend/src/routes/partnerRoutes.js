@@ -43,7 +43,9 @@ router.get('/', protect, getPartners);
 router.get('/:id', protect, getPartner);
 
 // Create single partner
-router.post('/', createPartner);
+// Create single partner
+// Create single partner
+router.post('/', protect, createPartner);
 
 // Update partner
 router.put('/:id', protect, authorize('admin', 'manager'), updatePartner);

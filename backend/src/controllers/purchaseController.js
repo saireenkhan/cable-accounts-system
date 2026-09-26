@@ -1,5 +1,6 @@
-const Purchase = require('../models/Purchase');
+const PurchaseModel = require('../models/Purchase');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 const generatePurchaseNo = async () => {
   const count = await Purchase.countDocuments();
@@ -7,6 +8,7 @@ const generatePurchaseNo = async () => {
 };
 
 exports.getPurchases = async (req, res) => {
+    const Purchase = tenantScope(PurchaseModel, req);
   try {
     const { vendor, status } = req.query;
     const filter = {};
@@ -26,6 +28,7 @@ exports.getPurchases = async (req, res) => {
 };
 
 exports.createPurchase = async (req, res) => {
+    const Purchase = tenantScope(PurchaseModel, req);
   try {
     const { vendor, item, quantity, unit, amount, paidAmount, status, purchaseDate, remarks } = req.body;
 
@@ -67,6 +70,7 @@ exports.createPurchase = async (req, res) => {
 };
 
 exports.updatePurchase = async (req, res) => {
+    const Purchase = tenantScope(PurchaseModel, req);
   try {
     const purchase = await Purchase.findByIdAndUpdate(
       req.params.id,
@@ -86,6 +90,7 @@ exports.updatePurchase = async (req, res) => {
 };
 
 exports.deletePurchase = async (req, res) => {
+    const Purchase = tenantScope(PurchaseModel, req);
   try {
     const purchase = await Purchase.findByIdAndDelete(req.params.id);
     if (!purchase) {

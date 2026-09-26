@@ -1,7 +1,9 @@
-const Area = require('../models/Area');
+const AreaModel = require('../models/Area');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 exports.getAreas = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
   try {
     const areas = await Area.find();
     res.json({ success: true, areas });
@@ -12,6 +14,7 @@ exports.getAreas = async (req, res) => {
 };
 
 exports.createArea = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
   try {
     const { name, code, description } = req.body;
     
@@ -58,6 +61,7 @@ exports.createArea = async (req, res) => {
 };
 
 exports.updateArea = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
   try {
     const { name, code, description, isActive } = req.body;
 
@@ -121,6 +125,7 @@ exports.updateArea = async (req, res) => {
 };
 
 exports.deleteArea = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
   try {
     const area = await Area.findByIdAndDelete(req.params.id);
     if (!area) {

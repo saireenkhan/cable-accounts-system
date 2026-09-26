@@ -1,7 +1,8 @@
-const Dealer = require('../models/Dealer');
-const DealerPayment = require('../models/DealerPayment');
-const Area = require('../models/Area');
+const DealerModel = require('../models/Dealer');
+const DealerPaymentModel = require('../models/DealerPayment');
+const AreaModel = require('../models/Area');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 const generateDealerId = async () => {
   const count = await Dealer.countDocuments();
@@ -9,6 +10,8 @@ const generateDealerId = async () => {
 };
 
 exports.getDealers = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Dealer = tenantScope(DealerModel, req);
   try {
     const { search, status } = req.query;
     const filter = {};
@@ -35,6 +38,9 @@ exports.getDealers = async (req, res) => {
 };
 
 exports.createDealer = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Dealer = tenantScope(DealerModel, req);
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const { 
       dealerId,    // ✅ Get from request
@@ -113,6 +119,8 @@ exports.createDealer = async (req, res) => {
   }
 };
 exports.updateDealer = async (req, res) => {
+    const Dealer = tenantScope(DealerModel, req);
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const dealer = await Dealer.findByIdAndUpdate(
       req.params.id,
@@ -132,6 +140,8 @@ exports.updateDealer = async (req, res) => {
 };
 
 exports.deleteDealer = async (req, res) => {
+    const Dealer = tenantScope(DealerModel, req);
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const dealer = await Dealer.findByIdAndDelete(req.params.id);
     if (!dealer) {
@@ -145,6 +155,8 @@ exports.deleteDealer = async (req, res) => {
 };
 
 exports.getDealerStats = async (req, res) => {
+    const Dealer = tenantScope(DealerModel, req);
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const totalDealers = await Dealer.countDocuments();
     const activeDealers = await Dealer.countDocuments({ status: 'active' });

@@ -1,11 +1,13 @@
-const Package = require('../models/Package');
+const PackageModel = require('../models/Package');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // GET ALL PACKAGES
 // GET /api/packages
 // ============================================================
 exports.getPackages = async (req, res) => {
+    const Package = tenantScope(PackageModel, req);
   try {
     const packages = await Package.find().sort({ createdAt: -1 });
     res.json({ success: true, packages });
@@ -21,6 +23,7 @@ exports.getPackages = async (req, res) => {
 // Body: { name, bandwidth, sellingPrice, purchasePrice, description }
 // ============================================================
 exports.createPackage = async (req, res) => {
+    const Package = tenantScope(PackageModel, req);
   try {
     const { name, bandwidth, sellingPrice, purchasePrice, description } = req.body;
 
@@ -108,6 +111,7 @@ exports.createPackage = async (req, res) => {
 // Body: partial { name, bandwidth, sellingPrice, purchasePrice, description, isActive }
 // ============================================================
 exports.updatePackage = async (req, res) => {
+    const Package = tenantScope(PackageModel, req);
   try {
     const { name, bandwidth, sellingPrice, purchasePrice, description, isActive } = req.body;
 
@@ -230,6 +234,7 @@ exports.updatePackage = async (req, res) => {
 // DELETE /api/packages/:id
 // ============================================================
 exports.deletePackage = async (req, res) => {
+    const Package = tenantScope(PackageModel, req);
   try {
     const pkg = await Package.findByIdAndDelete(req.params.id);
 

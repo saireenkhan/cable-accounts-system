@@ -1,10 +1,12 @@
-const PartnerList = require('../models/PartnerList');
+const PartnerListModel = require('../models/PartnerList');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // GET all partners
 // ============================================================
 exports.getPartners = async (req, res) => {
+    const PartnerList = tenantScope(PartnerListModel, req);
   try {
     const { search, status, area } = req.query;
     const filter = {};
@@ -33,6 +35,7 @@ exports.getPartners = async (req, res) => {
 // GET single partner
 // ============================================================
 exports.getPartner = async (req, res) => {
+    const PartnerList = tenantScope(PartnerListModel, req);
   try {
     const partner = await PartnerList.findById(req.params.id);
 
@@ -53,6 +56,7 @@ exports.getPartner = async (req, res) => {
 // CREATE partner
 // ============================================================
 exports.createPartner = async (req, res) => {
+    const PartnerList = tenantScope(PartnerListModel, req);
   try {
     const {
       partnerId,
@@ -131,6 +135,7 @@ exports.createPartner = async (req, res) => {
 // UPDATE partner
 // ============================================================
 exports.updatePartner = async (req, res) => {
+    const PartnerList = tenantScope(PartnerListModel, req);
   try {
     const {
       partnerId,
@@ -193,6 +198,7 @@ exports.updatePartner = async (req, res) => {
 // DELETE partner
 // ============================================================
 exports.deletePartner = async (req, res) => {
+    const PartnerList = tenantScope(PartnerListModel, req);
   try {
     const partner = await PartnerList.findByIdAndDelete(req.params.id);
 
@@ -209,6 +215,7 @@ exports.deletePartner = async (req, res) => {
   }
 };
 exports.updatePartner = async (req, res) => {
+    const PartnerList = tenantScope(PartnerListModel, req);
   try {
     const {
       partnerId,

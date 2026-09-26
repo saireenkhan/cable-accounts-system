@@ -1,6 +1,7 @@
-const PartnerPayment = require('../models/PartnerPayment');
-const Partner = require('../models/Partner');
+const PartnerPaymentModel = require('../models/PartnerPayment');
+const PartnerModel = require('../models/Partner');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // Generate unique receipt number
@@ -36,6 +37,8 @@ const generateReceiptNo = async () => {
 // GET all partner payments
 // ============================================================
 exports.getPartnerPayments = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const PartnerPayment = tenantScope(PartnerPaymentModel, req);
   try {
     const { partnerId, month } = req.query;
     const filter = {};
@@ -109,6 +112,8 @@ const recalculatePartnerStatus = async (partnerDoc) => {
 // CREATE partner payment
 // ============================================================
 exports.createPartnerPayment = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const PartnerPayment = tenantScope(PartnerPaymentModel, req);
   try {
     const {
       partner,
@@ -225,6 +230,7 @@ exports.createPartnerPayment = async (req, res) => {
 // DELETE partner payment
 // ============================================================
 exports.deletePartnerPayment = async (req, res) => {
+    const PartnerPayment = tenantScope(PartnerPaymentModel, req);
   try {
     const payment = await PartnerPayment.findByIdAndDelete(req.params.id);
     if (!payment) {

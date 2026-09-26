@@ -1,11 +1,14 @@
-const DealerPayment = require('../models/DealerPayment');
-const Dealer = require('../models/Dealer');
+const DealerPaymentModel = require('../models/DealerPayment');
+const DealerModel = require('../models/Dealer');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // GET all dealer payments
 // ============================================================
 exports.getDealerPayments = async (req, res) => {
+    const Dealer = tenantScope(DealerModel, req);
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const { dealerId, month, paymentType } = req.query;
     const filter = {};
@@ -37,6 +40,8 @@ exports.getDealerPayments = async (req, res) => {
 // CREATE dealer payment
 // ============================================================
 exports.createDealerPayment = async (req, res) => {
+    const Dealer = tenantScope(DealerModel, req);
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const {
       dealerId,
@@ -165,6 +170,7 @@ exports.createDealerPayment = async (req, res) => {
 // DELETE dealer payment
 // ============================================================
 exports.deleteDealerPayment = async (req, res) => {
+    const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const payment = await DealerPayment.findByIdAndDelete(req.params.id);
     if (!payment) {

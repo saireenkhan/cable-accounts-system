@@ -1,8 +1,10 @@
-const PartnerArea = require('../models/PartnerArea');
+const PartnerAreaModel = require('../models/PartnerArea');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ✅ Get all partner areas
 exports.getPartnerAreas = async (req, res) => {
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const areas = await PartnerArea.find().sort({ createdAt: -1 });
     res.json({ success: true, areas });
@@ -14,6 +16,7 @@ exports.getPartnerAreas = async (req, res) => {
 
 // ✅ Get single partner area by ID
 exports.getPartnerArea = async (req, res) => {
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const area = await PartnerArea.findById(req.params.id);
     if (!area) {
@@ -31,6 +34,7 @@ exports.getPartnerArea = async (req, res) => {
 
 // ✅ Create partner area
 exports.createPartnerArea = async (req, res) => {
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const { name, code, description } = req.body;
 
@@ -78,6 +82,7 @@ exports.createPartnerArea = async (req, res) => {
 
 // ✅ Update partner area
 exports.updatePartnerArea = async (req, res) => {
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const { name, code, description, isActive } = req.body;
 
@@ -133,6 +138,7 @@ exports.updatePartnerArea = async (req, res) => {
 
 // ✅ Delete partner area
 exports.deletePartnerArea = async (req, res) => {
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const area = await PartnerArea.findByIdAndDelete(req.params.id);
     if (!area) {

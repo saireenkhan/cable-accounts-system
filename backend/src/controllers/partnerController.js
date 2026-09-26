@@ -1,7 +1,8 @@
-const Partner = require('../models/Partner');
-const PartnerArea = require('../models/PartnerArea');
-const Payment = require('../models/Payment');
+const PartnerModel = require('../models/Partner');
+const PartnerAreaModel = require('../models/PartnerArea');
+const PaymentModel = require('../models/Payment');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // HELPER: Calculate expiry date (one calendar month later)
@@ -22,6 +23,8 @@ const calculateExpiryDate = (activationDate) => {
 // GET all partners
 // ============================================================
 exports.getPartners = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const { search, status, area, limit } = req.query;
     const filter = {};
@@ -66,6 +69,8 @@ exports.getPartners = async (req, res) => {
 // GET single partner
 // ============================================================
 exports.getPartner = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const partner = await Partner.findById(req.params.id).populate(
       'createdBy',
@@ -97,6 +102,8 @@ exports.getPartner = async (req, res) => {
 // CREATE partner
 // ============================================================
 exports.createPartner = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const {
       partnerId,
@@ -244,6 +251,8 @@ exports.createPartner = async (req, res) => {
 // UPDATE partner
 // ============================================================
 exports.updatePartner = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const {
       partnerId,
@@ -404,6 +413,8 @@ exports.updatePartner = async (req, res) => {
 // DELETE partner
 // ============================================================
 exports.deletePartner = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const partner = await Partner.findByIdAndDelete(req.params.id);
 
@@ -432,6 +443,8 @@ exports.deletePartner = async (req, res) => {
 // GET dashboard stats
 // ============================================================
 exports.getPartnerDashboardStats = async (req, res) => {
+    const Partner = tenantScope(PartnerModel, req);
+    const Payment = tenantScope(PaymentModel, req);
   try {
     const totalPartners = await Partner.countDocuments();
     const activePartners = await Partner.countDocuments({ status: 'active' });

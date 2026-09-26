@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Tenant = require('../models/Tenant');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
 
@@ -7,6 +8,16 @@ const generateToken = (id, tenantId) => {
     expiresIn: process.env.JWT_EXPIRE || '30d',
   });
 };
+
+// Helper: attach tenantName to a user object
+async function attachTenantName(user) {
+  let tenantName = null;
+  if (user.tenantId) {
+    const t = await Tenant.findById(user.tenantId).lean();
+    if (t) tenantName = t.name;
+  }
+  return tenantName;
+}
 
 exports.login = async (req, res) => {
   try {
@@ -25,6 +36,8 @@ exports.login = async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    const tenantName = await attachTenantName(user);
+
     res.json({
       success: true,
       user: {
@@ -33,6 +46,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId || null,
+        tenantName,
         phone: user.phone || '',
         address: user.address || '',
         avatar: user.avatar || '',
@@ -48,8 +62,26 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    res.json({ success: true, user });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const tenantName = await attachTenantName(user);
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId || null,
+        tenantName,
+        phone: user.phone || '',
+        address: user.address || '',
+        avatar: user.avatar || '',
+      },
+    });
   } catch (error) {
+    logger.error(`getMe error: ${error.message}`);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -68,6 +100,8 @@ exports.updateMe = async (req, res) => {
 
     await user.save();
 
+    const tenantName = await attachTenantName(user);
+
     res.json({
       success: true,
       user: {
@@ -75,6 +109,8 @@ exports.updateMe = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        tenantId: user.tenantId || null,
+        tenantName,
         phone: user.phone || '',
         address: user.address || '',
         avatar: user.avatar || '',
@@ -128,7 +164,6 @@ exports.updateAvatar = async (req, res) => {
       return res.status(400).json({ message: 'Invalid image data' });
     }
 
-    // Limit to ~2MB
     if (avatar.length > 2_800_000) {
       return res.status(400).json({ message: 'Image too large (max ~2MB)' });
     }
@@ -145,6 +180,7 @@ exports.updateAvatar = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 // Verify current password (for live validation on profile page)
 exports.verifyPassword = async (req, res) => {
   try {
@@ -166,6 +202,46 @@ exports.verifyPassword = async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     logger.error(`verifyPassword error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Update the current tenant's name
+exports.updateTenantName = async (req, res) => {
+  try {
+    const { companyName } = req.body;
+
+    if (!companyName || !String(companyName).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company name is required',
+      });
+    }
+
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'No tenant linked to this account',
+      });
+    }
+
+    const tenant = await Tenant.findByIdAndUpdate(
+      tenantId,
+      { name: String(companyName).trim() },
+      { new: true }
+    );
+
+    if (!tenant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tenant not found',
+      });
+    }
+
+    res.json({ success: true, tenant });
+  } catch (error) {
+    logger.error(`updateTenantName error: ${error.message}`);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

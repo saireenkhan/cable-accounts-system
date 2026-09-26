@@ -1,5 +1,6 @@
-const Expense = require('../models/Expense');
+const ExpenseModel = require('../models/Expense');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 const generateExpenseNo = async () => {
   const count = await Expense.countDocuments();
@@ -7,6 +8,7 @@ const generateExpenseNo = async () => {
 };
 
 exports.getExpenses = async (req, res) => {
+    const Expense = tenantScope(ExpenseModel, req);
   try {
     const { category, fromDate, toDate } = req.query;
     const filter = {};
@@ -31,6 +33,7 @@ exports.getExpenses = async (req, res) => {
 };
 
 exports.createExpense = async (req, res) => {
+    const Expense = tenantScope(ExpenseModel, req);
   try {
     const expenseNo = await generateExpenseNo();
     const expense = await Expense.create({
@@ -51,6 +54,7 @@ exports.createExpense = async (req, res) => {
 };
 
 exports.updateExpense = async (req, res) => {
+    const Expense = tenantScope(ExpenseModel, req);
   try {
     const expense = await Expense.findByIdAndUpdate(
       req.params.id,
@@ -70,6 +74,7 @@ exports.updateExpense = async (req, res) => {
 };
 
 exports.deleteExpense = async (req, res) => {
+    const Expense = tenantScope(ExpenseModel, req);
   try {
     const expense = await Expense.findByIdAndDelete(req.params.id);
     if (!expense) {

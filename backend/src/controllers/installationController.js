@@ -1,9 +1,13 @@
-const InstallationCharge = require('../models/InstallationCharge');
-const Customer = require('../models/Customer');
-const Area = require('../models/Area');
+const InstallationChargeModel = require('../models/InstallationCharge');
+const CustomerModel = require('../models/Customer');
+const AreaModel = require('../models/Area');
 const logger = require('../utils/logger');
+const tenantScope = require('../utils/tenantScope');
 
 exports.getInstallationCharges = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Customer = tenantScope(CustomerModel, req);
+    const InstallationCharge = tenantScope(InstallationChargeModel, req);
   try {
     const { customerId, status } = req.query;
     const filter = {};
@@ -25,6 +29,9 @@ exports.getInstallationCharges = async (req, res) => {
 };
 
 exports.createInstallationCharge = async (req, res) => {
+    const Area = tenantScope(AreaModel, req);
+    const Customer = tenantScope(CustomerModel, req);
+    const InstallationCharge = tenantScope(InstallationChargeModel, req);
   try {
     const { customer, area, chargeType, amount, status, date, remarks } = req.body;
 
@@ -81,6 +88,7 @@ exports.createInstallationCharge = async (req, res) => {
 };
 
 exports.updateInstallationCharge = async (req, res) => {
+    const InstallationCharge = tenantScope(InstallationChargeModel, req);
   try {
     const charge = await InstallationCharge.findByIdAndUpdate(
       req.params.id,
@@ -100,6 +108,7 @@ exports.updateInstallationCharge = async (req, res) => {
 };
 
 exports.deleteInstallationCharge = async (req, res) => {
+    const InstallationCharge = tenantScope(InstallationChargeModel, req);
   try {
     const charge = await InstallationCharge.findByIdAndDelete(req.params.id);
     if (!charge) {

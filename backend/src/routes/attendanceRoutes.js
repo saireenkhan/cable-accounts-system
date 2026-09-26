@@ -10,7 +10,7 @@ const {
 const { protect, authorize } = require('../middleware/auth');
 
 
-// router.use(protect);
+router.use(protect);
 
 // ============================================================
 // ✅ Monthly report MUST come BEFORE any /:id route
