@@ -2,8 +2,8 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+const generateToken = (id, tenantId) => {
+  return jwt.sign({ id, tenantId: tenantId || null }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE || '30d',
   });
 };
@@ -32,11 +32,12 @@ exports.login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        tenantId: user.tenantId || null,
         phone: user.phone || '',
         address: user.address || '',
         avatar: user.avatar || '',
       },
-      token: generateToken(user._id),
+      token: generateToken(user._id, user.tenantId),
     });
   } catch (error) {
     logger.error(`Login error: ${error.message}`);
