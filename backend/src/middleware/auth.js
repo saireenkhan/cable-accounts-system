@@ -26,6 +26,7 @@ const protect = async (req, res, next) => {
     }
 
     req.user = user;
+    req.tenantId = user.tenantId || null;
     next();
   } catch (error) {
     logger.error(`Auth error: ${error.message}`);
