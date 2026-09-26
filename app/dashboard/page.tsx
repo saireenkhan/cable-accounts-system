@@ -251,13 +251,6 @@ export default function DashboardPage() {
               Quick overview of customer accounts, billing and payment activity.
             </p>
           </div>
-          <button
-            onClick={() => router.push('/users')}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48]-400 text-gray-900 rounded-lg text-sm font-semibold transition-colors shadow-sm"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add User
-          </button>
         </div>
 
         {/* ========== STATS CARDS - TOP ROW (4 cards) ========== */}

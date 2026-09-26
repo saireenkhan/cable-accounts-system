@@ -471,7 +471,7 @@ const generateMonthPDF = () => {
           <div className="flex gap-2">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm "
             >
               <UserCheck className="h-4 w-4" />
               Mark Attendance
@@ -569,7 +569,7 @@ const generateMonthPDF = () => {
               <button
                 onClick={fetchMonthlyReport}
                 disabled={reportLoading}
-                className="flex items-center gap-2 px-3 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm font-medium  disabled:opacity-50"
               >
                 {reportLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -581,7 +581,7 @@ const generateMonthPDF = () => {
               <button
                 onClick={generateMonthPDF}
                 disabled={!reportData}
-                className="flex items-center gap-2 px-3 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm  disabled:opacity-50"
               >
                 <Download className="h-4 w-4" />
                 Generate PDF

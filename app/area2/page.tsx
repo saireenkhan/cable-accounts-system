@@ -471,7 +471,7 @@ export default function DealerAreasPage() {
               setEditingArea(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#d6b138] px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm transition-colors hover:bg-[#f7ce48]"
+            className="flex items-center gap-2 rounded-xl bg-[#d6b138] px-4 py-2.5 text-sm  text-white-900 "
           >
             <PlusCircle className="h-4 w-4" />
             Add Dealer Area

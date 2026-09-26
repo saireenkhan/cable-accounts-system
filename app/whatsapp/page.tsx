@@ -231,7 +231,7 @@ const messageColumns: any[] = [
             </code>
             <button
               onClick={() => handleCopy(webhookUrl)}
-              className="px-3 py-2 text-xs font-medium rounded-lg bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900"
+              className="px-3 py-2 text-xs font-medium rounded-lg bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 "
             >
               Copy
             </button>
@@ -369,7 +369,7 @@ const messageColumns: any[] = [
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] disabled:opacity-60 text-gray-900 rounded-lg text-sm font-medium"
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] disabled:opacity-60 text-white-900  rounded-lg text-sm font-medium"
               >
                 <Save className="h-4 w-4" />
                 {saving ? 'Saving...' : 'Save Settings'}

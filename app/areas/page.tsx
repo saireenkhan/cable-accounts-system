@@ -512,9 +512,9 @@ export default function AreasPage() {
               setEditingArea(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#D9A82E] px-4 py-3 text-sm font-semibold text-gray-900 shadow-lg shadow-yellow-500/20 transition-colors hover:bg-[#c29326]"
+            className="flex items-center gap-2 rounded-xl bg-[#D9A82E] px-4 py-3 text-sm text-white"
           >
-            <PlusCircle className="h-5 w-5 text-gray-900" />
+            <PlusCircle className="h-5 w-5 text-white-900" />
             Add Area
           </button>
         </div>

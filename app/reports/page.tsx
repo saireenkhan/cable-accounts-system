@@ -813,7 +813,7 @@ export default function ReportsPage() {
           <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={handleApplyFilter}
-              className="px-4 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium"
+              className="px-4 py-2 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm "
             >
               Apply Filter
             </button>

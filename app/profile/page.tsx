@@ -274,7 +274,7 @@ export default function ProfilePage() {
               <button
                 onClick={() => fileRef.current?.click()}
                 disabled={uploadingAvatar}
-                className="absolute -bottom-1 -right-1 p-2 rounded-full bg-[#d6b138] text-gray-900 shadow-lg hover:bg-[#f7ce48] disabled:opacity-60"
+                className="absolute -bottom-1 -right-1 p-2 rounded-full bg-[#d6b138] text-white-900  shadow-lg hover:bg-[#f7ce48] disabled:opacity-60"
                 title="Change picture"
               >
                 {uploadingAvatar ? (
@@ -338,7 +338,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={savingCompany}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm font-medium disabled:opacity-60"
             >
               {savingCompany ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -398,7 +398,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={savingProfile}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm font-medium disabled:opacity-60"
             >
               {savingProfile ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -488,7 +488,7 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={savingPassword}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium disabled:opacity-60"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm font-medium disabled:opacity-60"
             >
               {savingPassword ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

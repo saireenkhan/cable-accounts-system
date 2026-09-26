@@ -978,7 +978,7 @@ function PartnersPageContent() {
               setEditingUser(null);
               setModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-gray-900 rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm "
           >
             <UserPlus className="h-4 w-4" />
             Add User
