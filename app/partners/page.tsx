@@ -605,7 +605,7 @@ function PartnersPageContent() {
   const stats = [
     [
       'all',
-      'TOTAL USERS',
+      'TOTAL PARTNERS',
       statsUsers.length,
       Users,
       'blue',
@@ -965,11 +965,11 @@ function PartnersPageContent() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Handshake className="h-6 w-6 text-blue-600" />
-              Partner User Management
+              Partner Management
             </h1>
 
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Manage partner connections and details.
+              Manage partners and their service connections.
             </p>
           </div>
 
@@ -981,7 +981,7 @@ function PartnersPageContent() {
             className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm "
           >
             <UserPlus className="h-4 w-4" />
-            Add User
+            Add Partner
           </button>
         </header>
 
@@ -1045,7 +1045,7 @@ function PartnersPageContent() {
         ================================================== */}
 
         <SearchBar
-          placeholder="Search by name, User ID, phone or partner..."
+          placeholder="Search by name, Partner ID, phone or partner..."
           value={search}
           onChange={setSearch}
         />
@@ -1058,7 +1058,7 @@ function PartnersPageContent() {
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
-                User List
+                Partner List
               </h2>
 
               {filter !== 'all' && (
@@ -1088,14 +1088,14 @@ function PartnersPageContent() {
                   }}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                 >
-                  Area: {areaFilter}
+                  Partner Area: {areaFilter}
                   <X className="h-3 w-3" />
                 </button>
               )}
             </div>
 
             <span className="text-xs text-gray-500 dark:text-gray-400">
-              {filteredUsers.length} users found
+              {filteredUsers.length} partners found
             </span>
           </div>
 
@@ -1134,7 +1134,7 @@ function PartnersPageContent() {
               }}
               accordionTitle="name"
               accordionSubtitle="customerId"
-              emptyMessage="No users found matching your search"
+              emptyMessage="No partners found matching your search"
             />
           </div>
         </section>
@@ -1150,14 +1150,14 @@ function PartnersPageContent() {
             setEditingUser(null);
           }}
           onSuccess={handleSuccess}
-          title={editingUser ? 'Edit User' : 'Add New User'}
+          title={editingUser ? 'Edit Partner' : 'Add New User'}
           subtitle={
             editingUser
               ? 'Update the partner details below'
               : 'Create a new partner connection'
           }
           fields={userFields}
-          submitLabel={editingUser ? 'Update User' : 'Add User'}
+          submitLabel={editingUser ? 'Update User' : 'Add Partner'}
           color="blue"
           endpoint={
             editingUser
@@ -1213,7 +1213,7 @@ function PartnersPageContent() {
                     </h2>
 
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      User ID: {viewingUser.customerId}
+                      Partner ID: {viewingUser.customerId}
                     </p>
                   </div>
                 </div>
@@ -1260,7 +1260,7 @@ function PartnersPageContent() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <ViewField
                     icon={<Hash className="h-4 w-4" />}
-                    label="User ID"
+                    label="Partner ID"
                     value={viewingUser.customerId}
                   />
 

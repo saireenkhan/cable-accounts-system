@@ -306,50 +306,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-
-        {/* Company Settings */}
-        <form
-          onSubmit={handleSaveCompany}
-          className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 space-y-4"
-        >
-          <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            Company Settings
-          </h3>
-
-          {companySaved && (
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800">
-              <Check className="h-4 w-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-green-700 dark:text-green-300">
-                Company name updated. It now appears in the header.
-              </p>
-            </div>
-          )}
-
-          <Field
-            icon={<Building2 className="h-4 w-4" />}
-            label="Company / Brand Name (shown in header)"
-            value={companyName}
-            onChange={setCompanyName}
-            placeholder="Cable Management System"
-          />
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={savingCompany}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900  rounded-lg text-sm font-medium disabled:opacity-60"
-            >
-              {savingCompany ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              Save Company Name
-            </button>
-          </div>
-        </form>
-
         {/* Profile form */}
         <form
           onSubmit={handleSaveProfile}

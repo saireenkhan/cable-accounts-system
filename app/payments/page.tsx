@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef ,useMemo} from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { DataTable } from '@/app/components/ui/DataTable';
 import { SearchBar } from '@/app/components/ui/SearchBar';
@@ -275,6 +275,7 @@ function ReceivePartnerPaymentModal({
   areaLookup: Record<string, string>;
   fetchData: () => void;
 }) {
+  const [selectedPartner, setSelectedPartner] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -287,24 +288,70 @@ function ReceivePartnerPaymentModal({
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
 
-  // ✅ Build area options from the `/partner-areas` endpoint, NOT from partners
-  const areaOptions = areas
-    .map((a: any) => ({
-      label: a.name || a.areaName || String(a._id),
-      value: a.name || a.areaName || String(a._id),
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  // ============================================================
+  // ✅ Build a unique list of partner names from the customers
+  //    (each customer has a `partner` field — the partner they
+  //    are assigned to).
+  // ============================================================
+  const partnerOptions = useMemo(() => {
+    const names = new Set<string>();
+    customers.forEach((c: any) => {
+      const p =
+        typeof c.partner === 'object' && c.partner?.name
+          ? c.partner.name
+          : c.partner;
+      if (p && String(p).trim()) names.add(String(p).trim());
+    });
+    return Array.from(names)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ label: name, value: name }));
+  }, [customers]);
 
-  // ✅ Filter partners by resolved area name
-  const getFilteredCustomers = () => {
-    if (!selectedArea) return [];
+  // ============================================================
+  // ✅ Areas that belong to the selected partner.
+  //    Derived from the customers assigned to that partner.
+  // ============================================================
+  const partnerAreaOptions = useMemo(() => {
+    if (!selectedPartner) return [];
+
+    const areaNames = new Set<string>();
+    customers.forEach((c: any) => {
+      const partnerName =
+        typeof c.partner === 'object' && c.partner?.name
+          ? c.partner.name
+          : c.partner;
+
+      if (String(partnerName || '').trim() !== selectedPartner) return;
+
+      const resolved = resolveAreaName(c.area, areaLookup);
+      if (resolved && resolved !== 'Unknown Area' && resolved !== 'No Area') {
+        areaNames.add(resolved);
+      }
+    });
+
+    return Array.from(areaNames)
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({ label: name, value: name }));
+  }, [selectedPartner, customers, areaLookup]);
+
+  // ============================================================
+  // ✅ Users filtered by BOTH partner AND area
+  // ============================================================
+  const filteredCustomers = useMemo(() => {
+    if (!selectedPartner || !selectedArea) return [];
+
     return customers.filter((c: any) => {
+      const partnerName =
+        typeof c.partner === 'object' && c.partner?.name
+          ? c.partner.name
+          : c.partner;
+
+      if (String(partnerName || '').trim() !== selectedPartner) return false;
+
       const resolved = resolveAreaName(c.area, areaLookup);
       return resolved === selectedArea;
     });
-  };
-
-  const filteredCustomers = getFilteredCustomers();
+  }, [selectedPartner, selectedArea, customers, areaLookup]);
 
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.partnerId || c.code || 'N/A';
@@ -317,12 +364,16 @@ function ReceivePartnerPaymentModal({
   const currentYear = new Date().getFullYear();
   const monthOptions = MONTHS.map((month) => `${month} ${currentYear}`);
 
+  // ============================================================
+  // Reset form when modal opens
+  // ============================================================
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
       const defaultMonth = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       setSelectedMonth(defaultMonth);
       setPaymentDate(now.toISOString().split('T')[0]);
+      setSelectedPartner('');
       setSelectedArea('');
       setSelectedCustomerId('');
       setReceiveAmount('');
@@ -333,6 +384,9 @@ function ReceivePartnerPaymentModal({
     }
   }, [isOpen]);
 
+  // ============================================================
+  // When a user is selected, compute their payment summary
+  // ============================================================
   useEffect(() => {
     if (selectedCustomerId) {
       const customer = customers.find((c) => c._id === selectedCustomerId);
@@ -360,6 +414,19 @@ function ReceivePartnerPaymentModal({
     }
   }, [selectedCustomerId, customers, payments]);
 
+  // ============================================================
+  // Reset downstream selections when partner changes
+  // ============================================================
+  useEffect(() => {
+    setSelectedArea('');
+    setSelectedCustomerId('');
+    setCustomerDetails(null);
+    setMonthlySummary([]);
+  }, [selectedPartner]);
+
+  // ============================================================
+  // Reset user when area changes
+  // ============================================================
   useEffect(() => {
     setSelectedCustomerId('');
     setCustomerDetails(null);
@@ -408,8 +475,9 @@ function ReceivePartnerPaymentModal({
   const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
 
   const handleSubmit = async () => {
-    if (!selectedArea) return toast.error('Please select an area first');
-    if (!selectedCustomerId) return toast.error('Please select a partner');
+    if (!selectedPartner) return toast.error('Please select a partner first');
+    if (!selectedArea) return toast.error('Please select an area');
+    if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
     if (!receiveAmount || parseFloat(receiveAmount) <= 0)
       return toast.error('Please enter a valid amount');
@@ -460,8 +528,9 @@ function ReceivePartnerPaymentModal({
   };
 
   const handleNoPayment = async () => {
-    if (!selectedArea) return toast.error('Please select an area first');
-    if (!selectedCustomerId) return toast.error('Please select a partner');
+    if (!selectedPartner) return toast.error('Please select a partner first');
+    if (!selectedArea) return toast.error('Please select an area');
+    if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
 
     setIsSubmittingNoPayment(true);
@@ -515,7 +584,7 @@ function ReceivePartnerPaymentModal({
               Receive Partner Payment
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Select area, then partner ID to record payment
+              Select partner, then area, then user to record payment
             </p>
           </div>
           <button
@@ -558,44 +627,76 @@ function ReceivePartnerPaymentModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
+              {/* ✅ 1. PARTNER (new first step) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <User className="h-4 w-4 inline mr-1" />
+                  Partner *
+                </label>
+                <SearchableSelect
+                  options={partnerOptions}
+                  value={selectedPartner}
+                  onChange={setSelectedPartner}
+                  placeholder="Search & Select Partner"
+                  label="Partner"
+                />
+              </div>
+
+              {/* ✅ 2. AREA (filtered by partner) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <MapPin className="h-4 w-4 inline mr-1" />
                   Area *
                 </label>
                 <SearchableSelect
-                  options={areaOptions}
+                  options={partnerAreaOptions}
                   value={selectedArea}
                   onChange={setSelectedArea}
-                  placeholder="Search & Select Area"
+                  placeholder={
+                    selectedPartner
+                      ? partnerAreaOptions.length > 0
+                        ? 'Search & Select Area'
+                        : 'No areas found for this partner'
+                      : 'Select partner first'
+                  }
                   label="Area"
+                  disabled={!selectedPartner || partnerAreaOptions.length === 0}
                 />
               </div>
 
+              {/* ✅ 3. USER (filtered by partner + area) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <User className="h-4 w-4 inline mr-1" />
-                  Partner ID *
+                  User ID *
                 </label>
                 <SearchableSelect
                   options={userOptions}
                   value={selectedCustomerId}
                   onChange={setSelectedCustomerId}
-                  placeholder={selectedArea ? 'Select Partner ID' : 'Select area first'}
-                  label="Partner ID"
-                  disabled={!selectedArea}
+                  placeholder={
+                    !selectedPartner
+                      ? 'Select partner first'
+                      : !selectedArea
+                        ? 'Select area first'
+                        : userOptions.length > 0
+                          ? 'Select User ID'
+                          : 'No users found'
+                  }
+                  label="User ID"
+                  disabled={!selectedPartner || !selectedArea || userOptions.length === 0}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Partner Name
+                  User Name
                 </label>
                 <input
                   type="text"
                   value={customerDetails?.name || ''}
                   readOnly
-                  placeholder="Auto-filled from Partner ID"
+                  placeholder="Auto-filled from User ID"
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white cursor-not-allowed font-semibold"
                 />
               </div>
@@ -785,7 +886,12 @@ function ReceivePartnerPaymentModal({
             <button
               type="button"
               onClick={handleNoPayment}
-              disabled={isSubmittingNoPayment || !selectedCustomerId || !selectedArea}
+              disabled={
+                isSubmittingNoPayment ||
+                !selectedCustomerId ||
+                !selectedArea ||
+                !selectedPartner
+              }
               className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-500/25"
             >
               {isSubmittingNoPayment ? (
@@ -808,6 +914,7 @@ function ReceivePartnerPaymentModal({
                 isSubmitting ||
                 !selectedCustomerId ||
                 !selectedArea ||
+                !selectedPartner ||
                 !receiveAmount ||
                 isDuplicateMonth
               }

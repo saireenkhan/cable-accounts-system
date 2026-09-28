@@ -696,16 +696,47 @@ export default function AreasPage() {
                       </div>
                     </div>
 
-                    <div className="mt-4 flex items-center gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
-                      <Users className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
+                    {/* ✅ CUSTOMER COUNT ROW — with collapsed edit/delete icons */}
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
 
-                      <span className="text-xl font-bold text-gray-900 dark:text-white">
-                        {area.customers.toLocaleString()}
-                      </span>
+                        <span className="text-xl font-bold text-gray-900 dark:text-white">
+                          {area.customers.toLocaleString()}
+                        </span>
 
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        Customers
-                      </span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          Customers
+                        </span>
+                      </div>
+
+                      {!isExpanded && (
+                        <div className="flex flex-shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(event) =>
+                              handleEdit(area, event)
+                            }
+                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 dark:hover:text-amber-400"
+                            aria-label={`Edit ${area.name}`}
+                            title="Edit"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(area.id, area.name)
+                            }
+                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                            aria-label={`Delete ${area.name}`}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {isExpanded && (
@@ -893,7 +924,6 @@ export default function AreasPage() {
                             View Details
                           </button>
 
-                          {/* ✅ NEW — Edit button */}
                           <button
                             type="button"
                             onClick={(event) =>
@@ -906,7 +936,6 @@ export default function AreasPage() {
                             Edit
                           </button>
 
-                          {/* ✅ NEW — Delete button */}
                           <button
                             type="button"
                             onClick={() =>

@@ -5,21 +5,30 @@ import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
+import { useRouter } from 'next/navigation';
 import {
   MapPin,
   PlusCircle,
-  Edit2,
-  Trash2,
+  Users,
   Building2,
   Home,
   Store,
-  Users,
-  Handshake,
+  DollarSign,
+  TrendingUp,
+  CalendarDays,
+  Clock,
+  Eye,
+  UserCheck,
+  UserX,
   ChevronDown,
   ChevronUp,
   Check,
   SlidersHorizontal,
-  MoreHorizontal,
+  UserRound,
+  Grid2X2,
+  Wrench,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -39,20 +48,24 @@ const MONTHS = [
   'December',
 ];
 
-type AreaColor =
-  | 'blue'
-  | 'green'
-  | 'purple'
-  | 'orange'
-  | 'red'
-  | 'indigo';
+type AreaColor = 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'indigo';
 
 type PartnerArea = {
   id: string;
   name: string;
   code?: string;
   description?: string;
+  region?: string;
+  totalStreets: number;
+  assignedDealer?: string;
+  assignedTechnician?: string;
   partners: number;
+  active: number;
+  inactive: number;
+  pending: number;
+  collected: number;
+  expected: number;
+  recoveryRate: number;
   color: AreaColor;
   createdAt?: string | Date;
   updatedAt?: string | Date;
@@ -60,101 +73,229 @@ type PartnerArea = {
 
 type AreaFilter = 'all' | 'active' | 'inactive';
 
+function currentMonthKey() {
+  const now = new Date();
+  return `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
+}
+
 export default function PartnerAreasPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] =
-    useState<AreaFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<AreaFilter>('all');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [areas, setAreas] = useState<PartnerArea[]>([]);
-  const [editingArea, setEditingArea] =
-    useState<PartnerArea | null>(null);
+  const [editingArea, setEditingArea] = useState<PartnerArea | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
+  const router = useRouter();
+
+  const goToAreaPartners = (areaName: string) => {
+    router.push(`/partners?area=${encodeURIComponent(areaName)}`);
+  };
+
   useEffect(() => {
-    fetchPartnerAreas();
+    fetchAreas();
   }, []);
 
-  const fetchPartnerAreas = async () => {
+  const fetchAreas = async () => {
     try {
-      const token = sessionStorage.getItem('token');
-
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-
-      const [areasRes, partnersRes] = await Promise.all([
+      const [areasRes, partnersRes, paymentsRes] = await Promise.all([
         api.get('/partner-areas'),
         api.get('/partners?limit=10000'),
+        api.get('/partner-payments'),
       ]);
 
-      const partnerCounts: Record<string, number> = {};
+      const partners = partnersRes.data.success
+        ? partnersRes.data.partners
+        : [];
 
-      if (partnersRes.data.success) {
-        partnersRes.data.partners.forEach(
-          (partner: any) => {
-            const areaKey =
-              partner.partnerAreaName ||
-              partner.area?.name ||
-              partner.area ||
-              partner.areaId;
+      const payments = paymentsRes.data.success
+        ? paymentsRes.data.payments
+        : [];
 
-            if (areaKey) {
-              partnerCounts[areaKey] =
-                (partnerCounts[areaKey] || 0) + 1;
-            }
-          }
-        );
-      }
+      const thisMonth = currentMonthKey();
 
-      if (
-        areasRes.data.success &&
-        Array.isArray(areasRes.data.areas)
-      ) {
-        const formattedAreas: PartnerArea[] =
-          areasRes.data.areas.map(
-            (area: any, index: number) => ({
+      const areaLookup: Record<string, string> = {};
+
+      const areaList: any[] =
+        areasRes.data.success && Array.isArray(areasRes.data.areas)
+          ? areasRes.data.areas
+          : [];
+
+      areaList.forEach((a: any) => {
+        const id = String(a._id);
+        const name = String(a.name || a.areaName || id);
+
+        areaLookup[id] = name;
+        areaLookup[name] = name;
+      });
+
+      const resolvePartnerArea = (raw: any): string => {
+        if (!raw) return '';
+
+        if (typeof raw === 'object' && raw.name) {
+          return String(raw.name);
+        }
+
+        const s = String(raw).trim();
+
+        return areaLookup[s] || s;
+      };
+
+      const partnerById: Record<
+        string,
+        { area: string; monthlyFee: number }
+      > = {};
+
+      const areaStats: Record<
+        string,
+        {
+          partners: number;
+          expected: number;
+          active: number;
+          inactive: number;
+          pending: number;
+        }
+      > = {};
+
+      partners.forEach((partner: any) => {
+        const areaName = resolvePartnerArea(partner.area ?? partner.partnerAreaName ?? partner.areaId);
+
+        if (!areaName) return;
+
+        const fee = Number(partner.monthlyFee || 0);
+
+        if (partner._id) {
+          partnerById[String(partner._id)] = {
+            area: areaName,
+            monthlyFee: fee,
+          };
+        }
+
+        if (!areaStats[areaName]) {
+          areaStats[areaName] = {
+            partners: 0,
+            expected: 0,
+            active: 0,
+            inactive: 0,
+            pending: 0,
+          };
+        }
+
+        areaStats[areaName].partners += 1;
+        areaStats[areaName].expected += fee;
+
+        const status = String(partner.status || '').toLowerCase();
+
+        if (status === 'active') {
+          areaStats[areaName].active += 1;
+        } else if (status === 'inactive') {
+          areaStats[areaName].inactive += 1;
+        } else if (status === 'pending') {
+          areaStats[areaName].pending += 1;
+        }
+      });
+
+      const areaCollected: Record<string, number> = {};
+
+      payments.forEach((payment: any) => {
+        if (payment.isNoPayment) return;
+        if (payment.month !== thisMonth) return;
+
+        const partnerId =
+          typeof payment.partner === 'object'
+            ? payment.partner?._id
+            : payment.partner;
+
+        if (!partnerId) return;
+
+        const partner = partnerById[String(partnerId)];
+
+        if (!partner) return;
+
+        areaCollected[partner.area] =
+          (areaCollected[partner.area] || 0) +
+          Number(payment.amount || 0);
+      });
+
+      if (areaList.length > 0) {
+        const formattedAreas: PartnerArea[] = areaList.map(
+          (area: any, index: number) => {
+            const stats = areaStats[area.name] || {
+              partners: 0,
+              expected: 0,
+              active: 0,
+              inactive: 0,
+              pending: 0,
+            };
+
+            const collected = areaCollected[area.name] || 0;
+
+            const recoveryRate =
+              stats.expected > 0
+                ? Math.min(
+                    100,
+                    Math.round((collected / stats.expected) * 100)
+                  )
+                : 0;
+
+            return {
               id: String(area._id),
               name: area.name || 'Unnamed Area',
               code: area.code || '',
               description: area.description || '',
-              partners:
-                partnerCounts[area.name] ||
-                partnerCounts[String(area._id)] ||
-                0,
-              color:
-                ([
-                  'blue',
-                  'green',
-                  'purple',
-                  'orange',
-                  'red',
-                  'indigo',
-                ][index % 6] || 'blue') as AreaColor,
+              region: area.region || area.regionName || '',
+
+              totalStreets: Number(
+                area.totalStreets ??
+                  area.streetCount ??
+                  area.streetsCount ??
+                  0
+              ),
+
+              assignedDealer:
+                area.assignedDealer?.name ||
+                area.assignedDealerName ||
+                area.dealer?.name ||
+                area.dealerName ||
+                '',
+
+              assignedTechnician:
+                area.assignedTechnician?.name ||
+                area.assignedTechnicianName ||
+                area.technician?.name ||
+                area.technicianName ||
+                '',
+
+              partners: stats.partners,
+              active: stats.active,
+              inactive: stats.inactive,
+              pending: stats.pending,
+              collected,
+              expected: stats.expected,
+              recoveryRate,
+
+              color: ([
+                'blue',
+                'green',
+                'purple',
+                'orange',
+                'red',
+                'indigo',
+              ][index % 6] || 'blue') as AreaColor,
+
               createdAt: area.createdAt,
               updatedAt: area.updatedAt,
-            })
-          );
+            };
+          }
+        );
 
         setAreas(formattedAreas);
-
-        // Keep previous behavior.
-        // Uncomment if you want first area expanded automatically.
-        // setExpandedId(
-        //   (previous) =>
-        //     previous ??
-        //     formattedAreas[0]?.id ??
-        //     null
-        // );
       }
     } catch (error) {
-      console.error(
-        'Error fetching partner areas:',
-        error
-      );
-      toast.error('Failed to load partner areas');
+      console.error('Error fetching areas:', error);
+      toast.error('Failed to load areas');
     } finally {
       setLoading(false);
     }
@@ -163,26 +304,18 @@ export default function PartnerAreasPage() {
   const handleAreaAdded = (data: any) => {
     toast.success(
       editingArea
-        ? `Partner area "${data.name}" updated successfully!`
-        : `Partner area "${data.name}" added successfully!`
+        ? `Area "${data.name}" updated successfully!`
+        : `Area "${data.name}" added successfully!`
     );
 
     setEditingArea(null);
     setIsModalOpen(false);
-    fetchPartnerAreas();
+
+    fetchAreas();
   };
 
-  const handleDelete = async (
-    id: string,
-    name: string
-  ) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete "${name}"?`
-      )
-    ) {
-      return;
-    }
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
 
     try {
       await api.delete(`/partner-areas/${id}`);
@@ -200,16 +333,15 @@ export default function PartnerAreasPage() {
         setIsModalOpen(false);
       }
 
-      toast.success(
-        `Partner area "${name}" deleted`
-      );
-    } catch {
-      toast.error('Failed to delete partner area');
+      toast.success(`Area "${name}" deleted`);
+    } catch (error) {
+      console.error('Error deleting area:', error);
+      toast.error('Failed to delete area');
     }
   };
 
   const handleEdit = (
-    area: PartnerArea,
+    area:PartnerArea,
     event?: React.MouseEvent
   ) => {
     event?.stopPropagation();
@@ -230,7 +362,8 @@ export default function PartnerAreasPage() {
       const matchesSearch =
         !query ||
         area.name.toLowerCase().includes(query) ||
-        area.code?.toLowerCase().includes(query);
+        area.code?.toLowerCase().includes(query) ||
+        area.region?.toLowerCase().includes(query);
 
       const isActive = area.partners > 0;
 
@@ -254,81 +387,46 @@ export default function PartnerAreasPage() {
     }
   > = {
     blue: {
-      border:
-        'border-blue-200 dark:border-blue-800',
-      bg:
-        'bg-blue-50 dark:bg-blue-950/30',
-      icon:
-        'text-blue-600 dark:text-blue-400',
-      text:
-        'text-blue-600 dark:text-blue-400',
-      button:
-        'bg-blue-600 hover:bg-blue-700',
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-blue-50 dark:bg-blue-950/30',
+      icon: 'text-blue-600 dark:text-blue-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
-
     green: {
-      border:
-        'border-green-200 dark:border-green-800',
-      bg:
-        'bg-green-50 dark:bg-green-950/30',
-      icon:
-        'text-green-600 dark:text-green-400',
-      text:
-        'text-green-600 dark:text-green-400',
-      button:
-        'bg-green-600 hover:bg-green-700',
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-green-50 dark:bg-green-950/30',
+      icon: 'text-green-600 dark:text-green-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
-
     purple: {
-      border:
-        'border-purple-200 dark:border-purple-800',
-      bg:
-        'bg-purple-50 dark:bg-purple-950/30',
-      icon:
-        'text-purple-600 dark:text-purple-400',
-      text:
-        'text-purple-600 dark:text-purple-400',
-      button:
-        'bg-purple-600 hover:bg-purple-700',
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-purple-50 dark:bg-purple-950/30',
+      icon: 'text-purple-600 dark:text-purple-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
-
     orange: {
-      border:
-        'border-orange-200 dark:border-orange-800',
-      bg:
-        'bg-orange-50 dark:bg-orange-950/30',
-      icon:
-        'text-orange-600 dark:text-orange-400',
-      text:
-        'text-orange-600 dark:text-orange-400',
-      button:
-        'bg-orange-600 hover:bg-orange-700',
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-orange-50 dark:bg-orange-950/30',
+      icon: 'text-orange-600 dark:text-orange-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
-
     red: {
-      border:
-        'border-red-200 dark:border-red-800',
-      bg:
-        'bg-red-50 dark:bg-red-950/30',
-      icon:
-        'text-red-600 dark:text-red-400',
-      text:
-        'text-red-600 dark:text-red-400',
-      button:
-        'bg-red-600 hover:bg-red-700',
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-red-50 dark:bg-red-950/30',
+      icon: 'text-red-600 dark:text-red-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
-
     indigo: {
-      border:
-        'border-indigo-200 dark:border-indigo-800',
-      bg:
-        'bg-indigo-50 dark:bg-indigo-950/30',
-      icon:
-        'text-indigo-600 dark:text-indigo-400',
-      text:
-        'text-indigo-600 dark:text-indigo-400',
-      button:
-        'bg-indigo-600 hover:bg-indigo-700',
+      border: 'border-blue-50 dark:border-blue-800',
+      bg: 'bg-indigo-50 dark:bg-indigo-950/30',
+      icon: 'text-indigo-600 dark:text-indigo-400',
+      text: 'text-sky-500 dark:text-blue-400',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
   };
 
@@ -359,16 +457,12 @@ export default function PartnerAreasPage() {
     return <MapPin className="h-5 w-5" />;
   };
 
-  const formatDate = (
-    value?: string | Date
-  ) => {
+  const formatDate = (value?: string | Date) => {
     if (!value) return '—';
 
     const date = new Date(value);
 
-    if (Number.isNaN(date.getTime())) {
-      return '—';
-    }
+    if (Number.isNaN(date.getTime())) return '—';
 
     return `${date.getDate()} ${
       MONTHS[date.getMonth()]
@@ -382,12 +476,6 @@ export default function PartnerAreasPage() {
       type: 'text',
       required: true,
       placeholder: 'Enter partner area name',
-    },
-    {
-      name: 'code',
-      label: 'Area Code',
-      type: 'text',
-      placeholder: 'Optional area code',
     },
     {
       name: 'description',
@@ -407,7 +495,7 @@ export default function PartnerAreasPage() {
     return (
       <Layout>
         <div className="flex min-h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-amber-500" />
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
         </div>
       </Layout>
     );
@@ -415,40 +503,24 @@ export default function PartnerAreasPage() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-4">
 
-        {/* HEADER */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-3">
-              <Handshake className="h-8 w-8 text-amber-500" />
-
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                  Partner Areas / Streets
-                </h1>
-
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                  Organize partners by service area.
-                </p>
-              </div>
-            </div>
-          </div>
-
+        {/* Top actions */}
+        <div className="flex items-center justify-end">
           <button
             type="button"
             onClick={() => {
               setEditingArea(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#d6b138] px-4 py-2.5 text-sm t-white-900 "
+            className="flex items-center gap-2 rounded-xl bg-[#D9A82E] px-4 py-3 text-sm text-white"
           >
-            <PlusCircle className="h-4 w-4" />
+            <PlusCircle className="h-5 w-5 text-white-900" />
             Add Partner Area
           </button>
         </div>
 
-        {/* SEARCH + FILTER */}
+        {/* Search + filter row */}
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="min-w-0 flex-1">
             <SearchBar
@@ -462,20 +534,19 @@ export default function PartnerAreasPage() {
             <button
               type="button"
               onClick={() =>
-                setIsFilterOpen(
-                  (previous) => !previous
-                )
+                setIsFilterOpen((previous) => !previous)
               }
-              className="flex h-11 w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              className="flex h-11 w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+              aria-expanded={isFilterOpen}
             >
               <span className="flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-gray-400" />
 
                 {statusFilter === 'all'
-                  ? 'All Areas'
+                  ? 'All Partner Areas'
                   : statusFilter === 'active'
-                    ? 'Active Areas'
-                    : 'Inactive Areas'}
+                  ? 'Active Partner Areas'
+                  : 'Inactive Partner Areas'}
               </span>
 
               <ChevronDown
@@ -491,43 +562,40 @@ export default function PartnerAreasPage() {
                 <button
                   type="button"
                   className="fixed inset-0 z-10 h-full w-full cursor-default"
+                  aria-label="Close filter"
                   onClick={() =>
                     setIsFilterOpen(false)
                   }
-                  aria-label="Close filter"
                 />
 
                 <div className="absolute right-0 z-20 mt-2 w-full overflow-hidden rounded-xl border border-gray-200 bg-white p-1.5 shadow-xl dark:border-gray-700 dark:bg-gray-800">
                   {[
                     {
                       value: 'all' as AreaFilter,
-                      label: 'All Areas',
+                      label: 'All Partner Areas',
                     },
                     {
                       value: 'active' as AreaFilter,
-                      label: 'Active Areas',
+                      label: 'Active Partner Areas',
                     },
                     {
                       value: 'inactive' as AreaFilter,
-                      label: 'Inactive Areas',
+                      label: 'Inactive Partner Areas',
                     },
                   ].map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       onClick={() => {
-                        setStatusFilter(
-                          option.value
-                        );
+                        setStatusFilter(option.value);
                         setIsFilterOpen(false);
                       }}
-                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
+                      className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       {option.label}
 
-                      {statusFilter ===
-                        option.value && (
-                        <Check className="h-4 w-4 text-amber-500" />
+                      {statusFilter === option.value && (
+                        <Check className="h-4 w-4 text-blue-600" />
                       )}
                     </button>
                   ))}
@@ -537,10 +605,10 @@ export default function PartnerAreasPage() {
           </div>
         </div>
 
-        {/* AREA CARDS */}
+        {/* Area cards */}
         {filteredAreas.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-300 bg-white py-16 text-center dark:border-gray-700 dark:bg-gray-800">
-            <MapPin className="mx-auto mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" />
+            <MapPin className="mx-auto mb-3 h-10 w-10 text-gray-300" />
 
             <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
               No partner areas found
@@ -554,10 +622,8 @@ export default function PartnerAreasPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filteredAreas.map((area) => {
               const colors = colorMap[area.color];
-              const isExpanded =
-                expandedId === area.id;
-              const isActive =
-                area.partners > 0;
+              const isExpanded = expandedId === area.id;
+              const isActive = area.partners > 0;
 
               return (
                 <article
@@ -568,14 +634,14 @@ export default function PartnerAreasPage() {
                     isExpanded && 'shadow-lg'
                   )}
                 >
-                  <div className="p-5">
+                  <div className="h-1.5 w-full" />
 
-                    {/* CARD HEADER */}
-                    <div className="flex items-start justify-between gap-3">
+                  <div className="p-4">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div
                           className={cn(
-                            'flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl',
+                            'flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl',
                             colors.bg
                           )}
                         >
@@ -590,7 +656,7 @@ export default function PartnerAreasPage() {
                           </h3>
 
                           {area.code && (
-                            <p className="mt-1 truncate text-sm font-medium text-gray-500 dark:text-gray-400">
+                            <p className="mt-1 truncate text-sm font-medium text-gray-600 dark:text-gray-300">
                               {area.code}
                             </p>
                           )}
@@ -606,9 +672,7 @@ export default function PartnerAreasPage() {
                               : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                           )}
                         >
-                          {isActive
-                            ? 'Active'
-                            : 'Inactive'}
+                          {isActive ? 'Active' : 'Inactive'}
                         </span>
 
                         <button
@@ -616,11 +680,11 @@ export default function PartnerAreasPage() {
                           onClick={() =>
                             toggleExpand(area.id)
                           }
-                          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                          className="rounded-md p-1.5 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-200"
                           aria-label={
                             isExpanded
-                              ? 'Collapse'
-                              : 'Expand'
+                              ? `Collapse ${area.name}`
+                              : `Expand ${area.name}`
                           }
                         >
                           {isExpanded ? (
@@ -632,110 +696,237 @@ export default function PartnerAreasPage() {
                       </div>
                     </div>
 
-                    {/* PARTNER COUNT */}
-                    <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4 dark:border-gray-700">
+                    {/* ✅ CUSTOMER COUNT ROW — with collapsed edit/delete icons */}
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
                       <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-gray-400" />
+                        <Users className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
 
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                          Total Partners
+                        <span className="text-xl font-bold text-gray-900 dark:text-white">
+                          {area.partners.toLocaleString()}
+                        </span>
+
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          Partners
                         </span>
                       </div>
 
-                      <span className="text-xl font-bold text-gray-900 dark:text-white">
-                        {area.partners.toLocaleString()}
-                      </span>
-                    </div>
-
-                    {/* EXPANDED DETAILS */}
-                    {isExpanded && (
-                      <>
-                        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-4 dark:border-gray-700">
-                          <InfoBlock
-                            icon={
-                              <Users className="h-4 w-4 text-amber-500" />
-                            }
-                            label="Total Partners"
-                            value={area.partners}
-                          />
-
-                          <InfoBlock
-                            icon={
-                              <MapPin className="h-4 w-4 text-gray-500" />
-                            }
-                            label="Area Code"
-                            value={
-                              area.code || '—'
-                            }
-                          />
-
-                          <InfoBlock
-                            icon={
-                              <Home className="h-4 w-4 text-gray-400" />
-                            }
-                            label="Created On"
-                            value={formatDate(
-                              area.createdAt
-                            )}
-                          />
-
-                          <InfoBlock
-                            icon={
-                              <Home className="h-4 w-4 text-gray-400" />
-                            }
-                            label="Last Updated"
-                            value={formatDate(
-                              area.updatedAt
-                            )}
-                          />
-                        </div>
-
-                        {/* ACTION BUTTONS */}
-                        <div className="mt-4 flex gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              toggleExpand(
-                                area.id
-                              )
-                            }
-                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-[#0f172a] px-3 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-slate-800"
-                          >
-                            View Details
-                          </button>
-
+                      {!isExpanded && (
+                        <div className="flex flex-shrink-0 items-center gap-1">
                           <button
                             type="button"
                             onClick={(event) =>
-                              handleEdit(
-                                area,
-                                event
-                              )
+                              handleEdit(area, event)
                             }
-                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-600 transition-colors hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-900/40"
+                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 dark:hover:text-amber-400"
+                            aria-label={`Edit ${area.name}`}
+                            title="Edit"
                           >
                             <Edit2 className="h-4 w-4" />
-                            Edit Area
                           </button>
 
                           <button
                             type="button"
                             onClick={() =>
-                              handleDelete(
-                                area.id,
-                                area.name
-                              )
+                              handleDelete(area.id, area.name)
                             }
-                            className="flex items-center justify-center rounded-xl bg-red-50 px-3 py-2.5 text-red-600 transition-colors hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/40"
+                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
                             aria-label={`Delete ${area.name}`}
+                            title="Delete"
                           >
                             <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {isExpanded && (
+                      <>
+                        <div className="mt-4 grid grid-cols-4 gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          <MiniStat
+                            icon={
+                              <Users className="h-4 w-4 text-blue-500" />
+                            }
+                            value={area.partners}
+                            label="Partners"
+                          />
+
+                          <MiniStat
+                            icon={
+                              <UserCheck className="h-4 w-4 text-green-500" />
+                            }
+                            value={area.active}
+                            label="Active"
+                          />
+
+                          <MiniStat
+                            icon={
+                              <UserX className="h-4 w-4 text-red-500" />
+                            }
+                            value={area.inactive}
+                            label="Inactive"
+                          />
+
+                          <MiniStat
+                            icon={
+                              <Clock className="h-4 w-4 text-orange-500" />
+                            }
+                            value={area.pending}
+                            label="Pending"
+                          />
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          {area.region && (
+                            <InfoBlock
+                              icon={
+                                <MapPin className="h-4 w-4 text-gray-500" />
+                              }
+                              label="Region"
+                              value={area.region}
+                            />
+                          )}
+
+                          {area.totalStreets > 0 && (
+                            <InfoBlock
+                              icon={
+                                <Grid2X2 className="h-4 w-4 text-gray-500" />
+                              }
+                              label="Total Streets"
+                              value={area.totalStreets}
+                            />
+                          )}
+
+                          {area.assignedDealer && (
+                            <InfoBlock
+                              icon={
+                                <UserRound className="h-4 w-4 text-gray-500" />
+                              }
+                              label="Assigned Dealer"
+                              value={area.assignedDealer}
+                            />
+                          )}
+
+                          {area.assignedTechnician && (
+                            <InfoBlock
+                              icon={
+                                <Wrench className="h-4 w-4 text-gray-500" />
+                              }
+                              label="Assigned Technician"
+                              value={area.assignedTechnician}
+                            />
+                          )}
+
+                          <InfoBlock
+                            icon={
+                              <DollarSign className="h-4 w-4 text-gray-500" />
+                            }
+                            label="Expected Amount"
+                            value={`Rs. ${area.expected.toLocaleString()}`}
+                          />
+
+                          <InfoBlock
+                            icon={
+                              <DollarSign className="h-4 w-4 text-emerald-500" />
+                            }
+                            label="Total Collected"
+                            value={`Rs. ${area.collected.toLocaleString()}`}
+                          />
+
+                          <InfoBlock
+                            icon={
+                              <TrendingUp className="h-4 w-4 text-orange-500" />
+                            }
+                            label="Recovery Rate"
+                            value={`${area.recoveryRate}%`}
+                            valueColor={
+                              area.recoveryRate >= 80
+                                ? 'text-green-600 dark:text-green-400'
+                                : area.recoveryRate >= 50
+                                ? 'text-orange-600 dark:text-orange-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }
+                          />
+
+                          <InfoBlock
+                            icon={
+                              <CalendarDays className="h-4 w-4 text-gray-400" />
+                            }
+                            label="Created On"
+                            value={formatDate(area.createdAt)}
+                          />
+
+                          <InfoBlock
+                            icon={
+                              <Clock className="h-4 w-4 text-gray-400" />
+                            }
+                            label="Last Updated"
+                            value={formatDate(area.updatedAt)}
+                          />
+                        </div>
+
+                        <div className="mt-4">
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400">
+                              Monthly Recovery
+                            </span>
+
+                            <span className="text-xs font-bold text-gray-700 dark:text-gray-200">
+                              {area.recoveryRate}%
+                            </span>
+                          </div>
+
+                          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all',
+                                area.recoveryRate >= 80
+                                  ? 'bg-green-500'
+                                  : area.recoveryRate >= 50
+                                  ? 'bg-orange-500'
+                                  : 'bg-red-500'
+                              )}
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    area.recoveryRate
+                                  )
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              goToAreaPartners(area.name)
+                            }
+                            className={cn(
+                              'flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold text-white transition  ',
+                              colors.button
+                            )}
+                          >
+                            <Users className="h-4 w-4" />
+                            View Partners
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleExpand(area.id)
+                            }
+                            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-gray-100 px-3 py-2.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Details
                           </button>
                         </div>
                       </>
                     )}
 
-                    {/* COLLAPSED VIEW */}
                     {!isExpanded && (
                       <button
                         type="button"
@@ -760,7 +951,7 @@ export default function PartnerAreasPage() {
           </div>
         )}
 
-        {/* ADD / EDIT MODAL */}
+        {/* Add / Edit Modal */}
         <AddUserModal
           isOpen={isModalOpen}
           onClose={() => {
@@ -769,9 +960,7 @@ export default function PartnerAreasPage() {
           }}
           onSuccess={handleAreaAdded}
           title={
-            editingArea
-              ? 'Edit Partner Area'
-              : 'Add New Partner Area'
+            editingArea ? 'Edit Partner Area' : 'Add New Area'
           }
           subtitle={
             editingArea
@@ -780,9 +969,7 @@ export default function PartnerAreasPage() {
           }
           fields={areaFields}
           submitLabel={
-            editingArea
-              ? 'Update Partner Area'
-              : 'Add Partner Area'
+            editingArea ? 'Update Area' : 'Add Partner Area'
           }
           color="blue"
           endpoint={
@@ -790,18 +977,14 @@ export default function PartnerAreasPage() {
               ? `/partner-areas/${editingArea.id}`
               : '/partner-areas'
           }
-          method={
-            editingArea ? 'PUT' : 'POST'
-          }
+          method={editingArea ? 'PUT' : 'POST'}
           initialData={
             editingArea
               ? {
                   name: editingArea.name,
-                  code:
-                    editingArea.code || '',
+                  code: editingArea.code || '',
                   description:
-                    editingArea.description ||
-                    '',
+                    editingArea.description || '',
                 }
               : undefined
           }
@@ -812,7 +995,33 @@ export default function PartnerAreasPage() {
   );
 }
 
-/* ---------- Helpers ---------- */
+function MiniStat({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  value: number;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="flex items-center gap-1.5">
+        <span className="flex-shrink-0">
+          {icon}
+        </span>
+
+        <span className="truncate text-base font-bold text-gray-900 dark:text-white">
+          {value.toLocaleString()}
+        </span>
+      </div>
+
+      <p className="mt-0.5 truncate text-[9px] font-medium uppercase text-gray-500 dark:text-gray-400">
+        {label}
+      </p>
+    </div>
+  );
+}
 
 function InfoBlock({
   icon,
