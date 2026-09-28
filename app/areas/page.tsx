@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -28,6 +27,8 @@ import {
   UserRound,
   Grid2X2,
   Wrench,
+  Edit2,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -397,14 +398,14 @@ export default function AreasPage() {
       bg: 'bg-green-50 dark:bg-green-950/30',
       icon: 'text-green-600 dark:text-green-400',
       text: 'text-sky-500 dark:text-blue-400',
-     button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     purple: {
       border: 'border-blue-50 dark:border-blue-800',
       bg: 'bg-purple-50 dark:bg-purple-950/30',
       icon: 'text-purple-600 dark:text-purple-400',
       text: 'text-sky-500 dark:text-blue-400',
-     button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
     orange: {
       border: 'border-blue-50 dark:border-blue-800',
@@ -425,7 +426,7 @@ export default function AreasPage() {
       bg: 'bg-indigo-50 dark:bg-indigo-950/30',
       icon: 'text-indigo-600 dark:text-indigo-400',
       text: 'text-sky-500 dark:text-blue-400',
-     button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
+      button: 'bg-[#d6b138] hover:bg-[#f7ce48]',
     },
   };
 
@@ -891,6 +892,35 @@ export default function AreasPage() {
                             <Eye className="h-4 w-4" />
                             View Details
                           </button>
+
+                          {/* ✅ NEW — Edit button */}
+                          <button
+                            type="button"
+                            onClick={(event) =>
+                              handleEdit(area, event)
+                            }
+                            className="flex items-center justify-center gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-600 transition hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-900/40"
+                            aria-label={`Edit ${area.name}`}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            Edit
+                          </button>
+
+                          {/* ✅ NEW — Delete button */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(
+                                area.id,
+                                area.name
+                              )
+                            }
+                            className="flex items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/40"
+                            aria-label={`Delete ${area.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
+                          </button>
                         </div>
                       </>
                     )}
@@ -1027,4 +1057,3 @@ function InfoBlock({
     </div>
   );
 }
-

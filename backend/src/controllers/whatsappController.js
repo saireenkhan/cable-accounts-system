@@ -1,12 +1,13 @@
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
 const WhatsAppConfig = require('../models/WhatsAppConfig');
+const Customer = require('../models/Customer');
 const { detectIntent } = require('../services/whatsapp/intents');
 const handlers = require('../services/whatsapp/handlers');
 
 /**
  * GET /api/whatsapp/webhook
- * Meta's verification handshake.
+ * Meta's verification handshake — NO auth, NO tenant.
  */
 async function verifyWebhook(req, res) {
   try {
@@ -32,11 +33,11 @@ async function verifyWebhook(req, res) {
 
 /**
  * POST /api/whatsapp/webhook
- * Receives incoming message events from Meta.
+ * Receives incoming messages from Meta. No auth — Meta calls it.
  *
- * IMPORTANT: We await all DB + WhatsApp work BEFORE responding.
- * On Vercel serverless, sending the response first can terminate the
- * function before the async work finishes.
+ * Tenant resolution: we look up the WhatsAppConfig that has a matching
+ * phoneNumberId from the incoming payload. That tells us which tenant
+ * this message belongs to.
  */
 async function receiveWebhook(req, res) {
   try {
@@ -48,7 +49,6 @@ async function receiveWebhook(req, res) {
     const message = value?.messages?.[0];
 
     if (!message) {
-      // Status update (delivered/read) — ignore, respond OK.
       return res.status(200).send('EVENT_RECEIVED');
     }
 
@@ -60,21 +60,45 @@ async function receiveWebhook(req, res) {
       '';
     const waMessageId = message.id;
 
-    console.log(`📥 [WhatsApp] Incoming from ${from}: "${text}"`);
+    // Try to resolve the tenant by the phoneNumberId in the payload.
+    const phoneNumberId = value?.metadata?.phone_number_id;
+    let tenantId = null;
 
-    // Deduplicate.
+    if (phoneNumberId) {
+      const cfg = await WhatsAppConfig.findOne({ phoneNumberId }).lean();
+      if (cfg?.tenantId) tenantId = cfg.tenantId;
+    }
+
+    // Fallback: if there's exactly ONE config, use its tenant.
+    if (!tenantId) {
+      const all = await WhatsAppConfig.find({}, { tenantId: 1 }).lean();
+      if (all.length === 1) tenantId = all[0].tenantId;
+    }
+
+    console.log(
+      `📥 [WhatsApp] Incoming from ${from}: "${text}" (tenant: ${tenantId || 'unresolved'})`
+    );
+
+    // Deduplicate — scope check by tenantId when known.
     if (waMessageId) {
-      const existing = await WhatsAppMessage.findOne({ waMessageId });
+      const dupQuery = tenantId
+        ? { waMessageId, tenantId }
+        : { waMessageId };
+      const existing = await WhatsAppMessage.findOne(dupQuery);
       if (existing) {
         console.log(`♻️ [WhatsApp] Duplicate ${waMessageId} skipped`);
         return res.status(200).send('EVENT_RECEIVED');
       }
     }
 
-    // Load or create session.
-    let session = await WhatsAppSession.findOne({ phone: from });
+    // Load or create session — scope by tenant if known.
+    const sessionQuery = tenantId ? { phone: from, tenantId } : { phone: from };
+    let session = await WhatsAppSession.findOne(sessionQuery);
     if (!session) {
-      session = await WhatsAppSession.create({ phone: from });
+      session = await WhatsAppSession.create({
+        phone: from,
+        tenantId: tenantId || null,
+      });
     }
 
     // Log incoming.
@@ -84,6 +108,7 @@ async function receiveWebhook(req, res) {
       body: text,
       waMessageId,
       status: 'received',
+      tenantId: tenantId || null,
     });
 
     // Detect intent.
@@ -94,35 +119,36 @@ async function receiveWebhook(req, res) {
     let result;
     switch (intent) {
       case 'packages':
-        result = await handlers.handlePackages(from);
+        result = await handlers.handlePackages(from, tenantId);
         session.state = 'idle';
         break;
 
       case 'expiry_ask_id':
-        result = await handlers.handleExpiryAskId(from);
+        result = await handlers.handleExpiryAskId(from, tenantId);
         session.state = 'awaiting_customer_id';
         break;
 
       case 'customer_id':
         result = await handlers.handleCustomerId(from, text, {
           requirePhoneMatch: true,
+          tenantId,
         });
         session.state = 'idle';
         break;
 
       case 'greeting':
-        result = await handlers.handleGreeting(from);
+        result = await handlers.handleGreeting(from, tenantId);
         session.state = 'idle';
         break;
 
       case 'help':
-        result = await handlers.handleHelp(from);
+        result = await handlers.handleHelp(from, tenantId);
         session.state = 'idle';
         break;
 
       case 'fallback':
       default:
-        result = await handlers.handleFallback(from);
+        result = await handlers.handleFallback(from, tenantId);
         break;
     }
 
@@ -138,27 +164,37 @@ async function receiveWebhook(req, res) {
       intent: result.intent,
       customerId: result.customerId || null,
       status: 'sent',
+      tenantId: tenantId || null,
     });
 
     console.log(`📤 [WhatsApp] Replied to ${from} (intent: ${result.intent})`);
 
-    // ✅ Respond AFTER all work is done.
     return res.status(200).send('EVENT_RECEIVED');
   } catch (err) {
     console.error('❌ [WhatsApp] Handler error:', err);
-    // Always respond 200 so Meta doesn't retry forever.
     return res.status(200).send('EVENT_RECEIVED');
   }
 }
 
 /**
  * GET /api/whatsapp/config
+ * Admin endpoint — requires auth. Each tenant gets its own config.
  */
 async function getConfig(req, res) {
   try {
-    let config = await WhatsAppConfig.findOne({ singletonKey: 'default' });
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Tenant not found' });
+    }
+
+    let config = await WhatsAppConfig.findOne({ tenantId });
     if (!config) {
-      config = await WhatsAppConfig.create({ singletonKey: 'default' });
+      config = await WhatsAppConfig.create({
+        tenantId,
+        singletonKey: `default-${tenantId}`,
+      });
     }
     res.json({ success: true, config });
   } catch (err) {
@@ -169,15 +205,31 @@ async function getConfig(req, res) {
 
 /**
  * PUT /api/whatsapp/config
+ * Admin endpoint — requires auth.
  */
 async function updateConfig(req, res) {
   try {
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Tenant not found' });
+    }
+
     const updates = req.body || {};
+
     const config = await WhatsAppConfig.findOneAndUpdate(
-      { singletonKey: 'default' },
-      { $set: updates },
+      { tenantId },
+      {
+        $set: updates,
+        $setOnInsert: {
+          tenantId,
+          singletonKey: `default-${tenantId}`,
+        },
+      },
       { new: true, upsert: true }
     );
+
     res.json({ success: true, config });
   } catch (err) {
     console.error(err);
@@ -187,12 +239,22 @@ async function updateConfig(req, res) {
 
 /**
  * GET /api/whatsapp/messages
+ * Admin endpoint — requires auth. Scoped to tenant.
  */
 async function getMessages(req, res) {
   try {
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Tenant not found' });
+    }
+
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const phone = req.query.phone;
-    const query = phone ? { phone } : {};
+
+    const query = { tenantId };
+    if (phone) query.phone = phone;
 
     const messages = await WhatsAppMessage.find(query)
       .sort({ createdAt: -1 })

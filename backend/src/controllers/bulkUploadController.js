@@ -30,8 +30,6 @@ const VALID_STATUSES = ['active', 'inactive', 'suspended', 'expired'];
 // ============================================================
 // SHARED HELPERS
 // ============================================================
-
-// ✅ NEW — parse from an in-memory Buffer instead of a file on disk
 const parseCSVFromBuffer = (buffer) => {
   return new Promise((resolve, reject) => {
     const rows = [];
@@ -134,13 +132,19 @@ const normalizePhone = (phone) => {
   return p;
 };
 
-// (cleanupFile removed — no file on disk to clean up)
-
 // ============================================================
 // CUSTOMER BULK UPLOAD
 // POST /api/customers/bulk-upload
 // ============================================================
 exports.bulkUpload = async (req, res) => {
+  const tenantId = req.tenantId;
+  if (!tenantId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant not found. Please log in again.',
+    });
+  }
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -157,12 +161,12 @@ exports.bulkUpload = async (req, res) => {
       });
     }
 
-    // ✅ Parse from memory buffer
     const { headers, rows } = await parseCSVFromBuffer(req.file.buffer);
 
     console.log('📋 Customer CSV headers:', headers);
     console.log('📊 Customer CSV rows:', rows.length);
     console.log('📍 Target area:', selectedArea);
+    console.log('📍 Tenant:', tenantId);
 
     const headerCheck = validateHeaders(headers);
     if (!headerCheck.ok) {
@@ -183,8 +187,12 @@ exports.bulkUpload = async (req, res) => {
     const skipped = [];
     const errors = [];
 
+    // ✅ Only check duplicates WITHIN THIS TENANT
     const existingIds = new Set();
-    const existingDocs = await Customer.find({}, { customerId: 1 }).lean();
+    const existingDocs = await Customer.find(
+      { tenantId },
+      { customerId: 1 }
+    ).lean();
     existingDocs.forEach((d) =>
       existingIds.add(String(d.customerId).trim())
     );
@@ -246,6 +254,7 @@ exports.bulkUpload = async (req, res) => {
         const expiryDate = addOneMonth(activationDate);
 
         const doc = {
+          tenantId,   // ✅ ADDED
           customerId,
           name: String(row.name).trim(),
           phone: normalizePhone(row.phone),
@@ -269,6 +278,7 @@ exports.bulkUpload = async (req, res) => {
     }
 
     console.log(`\n📊 Customer bulk upload summary:`);
+    console.log(`   Tenant:     "${tenantId}"`);
     console.log(`   Area:       "${selectedArea}"`);
     console.log(`   Total rows: ${rows.length}`);
     console.log(`   Inserted:   ${inserted.length}`);
@@ -293,7 +303,6 @@ exports.bulkUpload = async (req, res) => {
       message: error.message || 'Server error during bulk upload',
     });
   }
-  // ✅ No finally/cleanupFile — nothing on disk
 };
 
 // ============================================================
@@ -301,6 +310,14 @@ exports.bulkUpload = async (req, res) => {
 // POST /api/partners/bulk-upload
 // ============================================================
 exports.bulkUploadPartners = async (req, res) => {
+  const tenantId = req.tenantId;
+  if (!tenantId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant not found. Please log in again.',
+    });
+  }
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -317,7 +334,6 @@ exports.bulkUploadPartners = async (req, res) => {
       });
     }
 
-    // ✅ REQUIRED partner
     const selectedPartner = String(req.body.partner || '').trim();
     if (!selectedPartner) {
       return res.status(400).json({
@@ -326,8 +342,11 @@ exports.bulkUploadPartners = async (req, res) => {
       });
     }
 
-    // Verify partner area exists
-    const areaDoc = await PartnerArea.findOne({ name: selectedArea });
+    // Verify partner area exists WITHIN THIS TENANT
+    const areaDoc = await PartnerArea.findOne({
+      name: selectedArea,
+      tenantId,
+    });
     if (!areaDoc) {
       return res.status(400).json({
         success: false,
@@ -335,13 +354,13 @@ exports.bulkUploadPartners = async (req, res) => {
       });
     }
 
-    // ✅ Parse from memory buffer
     const { headers, rows } = await parseCSVFromBuffer(req.file.buffer);
 
     console.log('📋 Partner CSV headers:', headers);
     console.log('📊 Partner CSV rows:', rows.length);
     console.log('📍 Target partner area:', selectedArea);
     console.log('📍 Target partner:', selectedPartner);
+    console.log('📍 Tenant:', tenantId);
 
     const headerCheck = validateHeaders(headers);
     if (!headerCheck.ok) {
@@ -363,12 +382,12 @@ exports.bulkUploadPartners = async (req, res) => {
     const errors = [];
     const duplicateIds = [];
 
-    // ✅ Check BOTH collections for global uniqueness
+    // ✅ Only check duplicates WITHIN THIS TENANT
     const existingIds = new Set();
 
     const [existingPartnerDocs, existingCustomerDocs] = await Promise.all([
-      Partner.find({}, { partnerId: 1 }).lean(),
-      Customer.find({}, { customerId: 1 }).lean(),
+      Partner.find({ tenantId }, { partnerId: 1 }).lean(),
+      Customer.find({ tenantId }, { customerId: 1 }).lean(),
     ]);
 
     existingPartnerDocs.forEach((d) =>
@@ -405,7 +424,6 @@ exports.bulkUploadPartners = async (req, res) => {
         const partnerId = String(row.customerId).trim();
         const partnerIdUpper = partnerId.toUpperCase();
 
-        // Duplicate check — already in DB (either collection)
         if (existingIds.has(partnerIdUpper)) {
           const conflictType = customerIdSet.has(partnerIdUpper)
             ? 'Customer'
@@ -460,14 +478,14 @@ exports.bulkUploadPartners = async (req, res) => {
 
         const expiryDate = addOneMonth(activationDate);
 
-        // ✅ doc now includes `partner`
         const doc = {
+          tenantId,   // ✅ ADDED
           partnerId,
           name: String(row.name).trim(),
           phone: normalizePhone(row.phone),
           address: String(row.address).trim(),
           area: selectedArea,
-          partner: selectedPartner,   // ✅ NEW
+          partner: selectedPartner,
           package: pkg,
           discount: Math.max(0, discount),
           monthlyFee: Math.max(0, monthlyFee),
@@ -495,6 +513,7 @@ exports.bulkUploadPartners = async (req, res) => {
     }
 
     console.log(`\n📊 Partner bulk upload summary:`);
+    console.log(`   Tenant:     "${tenantId}"`);
     console.log(`   Area:       "${selectedArea}"`);
     console.log(`   Partner:    "${selectedPartner}"`);
     console.log(`   Total rows: ${rows.length}`);
@@ -505,7 +524,7 @@ exports.bulkUploadPartners = async (req, res) => {
     res.json({
       success: true,
       area: selectedArea,
-      partner: selectedPartner,   // ✅ NEW
+      partner: selectedPartner,
       total: rows.length,
       inserted: inserted.length,
       skipped: skipped.length,
@@ -523,12 +542,10 @@ exports.bulkUploadPartners = async (req, res) => {
       message: error.message || 'Server error during partner bulk upload',
     });
   }
-  // ✅ No finally/cleanupFile — nothing on disk
 };
 
 // ============================================================
 // CUSTOMER SAMPLE CSV
-// GET /api/customers/bulk-upload/sample
 // ============================================================
 exports.downloadSample = (req, res) => {
   const formatDate = (d) => {
@@ -551,20 +568,17 @@ exports.downloadSample = (req, res) => {
     `USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`,
   ];
 
-  const sampleCSV = lines.join('\r\n');
-
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader(
     'Content-Disposition',
     'attachment; filename="customer-import-sample.csv"'
   );
 
-  res.send('\uFEFF' + sampleCSV);
+  res.send('\uFEFF' + lines.join('\r\n'));
 };
 
 // ============================================================
 // PARTNER SAMPLE CSV
-// GET /api/partners/bulk-upload/sample
 // ============================================================
 exports.downloadPartnerSample = (req, res) => {
   const formatDate = (d) => {
@@ -587,13 +601,11 @@ exports.downloadPartnerSample = (req, res) => {
     `PTR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`,
   ];
 
-  const sampleCSV = lines.join('\r\n');
-
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader(
     'Content-Disposition',
     'attachment; filename="partner-import-sample.csv"'
   );
 
-  res.send('\uFEFF' + sampleCSV);
+  res.send('\uFEFF' + lines.join('\r\n'));
 };

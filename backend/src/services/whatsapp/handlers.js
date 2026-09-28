@@ -44,9 +44,13 @@ function computeStatus(customer) {
 
 /**
  * Handle the "packages" intent.
+ * Only returns packages belonging to the resolved tenant.
  */
-async function handlePackages(to) {
-  const packages = await Package.find({ isActive: true }).sort({ sellingPrice: 1 });
+async function handlePackages(to, tenantId) {
+  const filter = { isActive: true };
+  if (tenantId) filter.tenantId = tenantId;
+
+  const packages = await Package.find(filter).sort({ sellingPrice: 1 });
   const msg = templates.packagesList(packages);
   await sendText(to, msg);
   return { intent: 'packages', reply: msg };
@@ -65,15 +69,20 @@ async function handleExpiryAskId(to) {
  * Handle the "customer_id" intent — looks up the customer and replies with expiry.
  * @param {string} to - sender phone (E.164, no '+')
  * @param {string} rawId - the message body the user sent
- * @param {object} opts - { requirePhoneMatch: boolean }
+ * @param {object} opts - { requirePhoneMatch: boolean, tenantId: ObjectId }
  */
-async function handleCustomerId(to, rawId, opts = { requirePhoneMatch: true }) {
+async function handleCustomerId(to, rawId, opts = {}) {
+  const requirePhoneMatch = opts.requirePhoneMatch !== false;
+  const tenantId = opts.tenantId || null;
+
   const id = String(rawId || '').trim().toUpperCase();
 
-  // Search by customerId (case-insensitive) — adjust if your field differs.
-  const customer = await Customer.findOne({
+  const filter = {
     customerId: { $regex: new RegExp(`^${id}$`, 'i') },
-  });
+  };
+  if (tenantId) filter.tenantId = tenantId;
+
+  const customer = await Customer.findOne(filter);
 
   if (!customer) {
     const msg = templates.customerNotFound();
@@ -82,7 +91,7 @@ async function handleCustomerId(to, rawId, opts = { requirePhoneMatch: true }) {
   }
 
   // Optional: enforce that the sender's phone matches the customer's phone.
-  if (opts.requirePhoneMatch) {
+  if (requirePhoneMatch) {
     const normalizedCustomerPhone = String(customer.phone || '').replace(/\D/g, '');
     const normalizedSender = String(to || '').replace(/\D/g, '');
 
