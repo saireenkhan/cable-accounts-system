@@ -127,24 +127,6 @@ const getCurrentMonth = (): string => {
    PAYMENT HELPERS
 ============================================================ */
 
-/**
- * Match payments with the current partner.
- *
- * Supports:
- * - payment.partner._id
- * - payment.partner.id
- * - payment.partner
- * - payment.partnerId
- * - payment.partner.name
- * - payment.partnerName
- * - payment.name
- * - partner's Mongo _id
- * - partner's partnerId
- * - partner's name
- *
- * Identifier matches take priority; name matching is only a
- * fallback for payments with NO identifier at all.
- */
 function getUserPayments(
   user: any,
   payments: any[]
@@ -203,11 +185,6 @@ function getUserPayments(
   });
 }
 
-/**
- * Determine the amount ACTUALLY RECEIVED for a single payment
- * record. `amount` is the received figure for these records;
- * alternate field names are supported as a fallback.
- */
 function getPaymentPaidAmount(p: any): number {
   const candidates = [
     p.amount,
@@ -228,10 +205,6 @@ function getPaymentPaidAmount(p: any): number {
   return 0;
 }
 
-/**
- * Get the total amount ACTUALLY PAID by this partner
- * for a particular month.
- */
 function getMonthPaidAmount(
   user: any,
   payments: any[],
@@ -252,11 +225,6 @@ function getMonthPaidAmount(
     );
 }
 
-/**
- * A month is fully paid only when:
- *   total ACTUAL payments received >= monthly fee
- * Partial payments do NOT count as paid.
- */
 function isMonthPaid(
   user: any,
   payments: any[],
@@ -445,6 +413,8 @@ function PartnersPageContent() {
   const [filter, setFilter] = useState('all');
   const [areaFilter, setAreaFilter] =
     useState<string>('');
+  const [partnerFilter, setPartnerFilter] =
+    useState<string>('');
 
   const [loading, setLoading] = useState(true);
 
@@ -464,7 +434,28 @@ function PartnersPageContent() {
 
     const area = searchParams.get('area');
     if (area) setAreaFilter(area);
+
+    const partner = searchParams.get('partner');
+    if (partner) setPartnerFilter(partner);
   }, [searchParams]);
+
+  /* ==========================================================
+     SYNC PARTNER FILTER TO URL
+  ========================================================== */
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const url = new URL(window.location.href);
+
+    if (partnerFilter) {
+      url.searchParams.set('partner', partnerFilter);
+    } else {
+      url.searchParams.delete('partner');
+    }
+
+    window.history.replaceState({}, '', url.toString());
+  }, [partnerFilter]);
 
   /* ==========================================================
      FETCH PARTNER AREAS
@@ -538,7 +529,6 @@ function PartnersPageContent() {
 
       if (!partnersRes.data.success) return;
 
-      // Store payments in state.
       setPayments(paymentList);
 
       const mappedUsers = partners.map((c: any) => {
@@ -593,6 +583,20 @@ function PartnersPageContent() {
       await fetchUsers(list);
     })();
   }, []);
+
+  /* ==========================================================
+     UNIQUE PARTNERS (for filter dropdown)
+  ========================================================== */
+
+  const uniquePartners = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        users
+          .map((u) => String(u.partner || '').trim())
+          .filter(Boolean)
+      )
+    ).sort((a, b) => a.localeCompare(b));
+  }, [users]);
 
   /* ==========================================================
      STATS
@@ -896,7 +900,17 @@ function PartnersPageContent() {
     const matchesArea =
       !areaFilter || u.area === areaFilter;
 
-    return matchesStatus && matchesSearch && matchesArea;
+    const matchesPartner =
+      !partnerFilter ||
+      String(u.partner || '').trim().toLowerCase() ===
+        String(partnerFilter).trim().toLowerCase();
+
+    return (
+      matchesStatus &&
+      matchesSearch &&
+      matchesArea &&
+      matchesPartner
+    );
   });
 
   /* ==========================================================
@@ -1041,14 +1055,32 @@ function PartnersPageContent() {
         </div>
 
         {/* ==================================================
-            SEARCH
+            SEARCH + PARTNER FILTER
         ================================================== */}
 
-        <SearchBar
-          placeholder="Search by name, Partner ID, phone or partner..."
-          value={search}
-          onChange={setSearch}
-        />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1">
+            <SearchBar
+              placeholder="Search by name, Partner ID, phone or partner..."
+              value={search}
+              onChange={setSearch}
+            />
+          </div>
+
+          <select
+            value={partnerFilter}
+            onChange={(e) => setPartnerFilter(e.target.value)}
+            className="px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 min-w-[200px]"
+          >
+            <option value="">All Partners</option>
+
+            {uniquePartners.map((partnerName) => (
+              <option key={partnerName} value={partnerName}>
+                {partnerName}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* ==================================================
             USER LIST
@@ -1089,6 +1121,16 @@ function PartnersPageContent() {
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
                 >
                   Partner Area: {areaFilter}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+
+              {partnerFilter && (
+                <button
+                  onClick={() => setPartnerFilter('')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                >
+                  Partner: {partnerFilter}
                   <X className="h-3 w-3" />
                 </button>
               )}
