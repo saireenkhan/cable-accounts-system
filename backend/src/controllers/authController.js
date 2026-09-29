@@ -23,6 +23,10 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -127,11 +131,11 @@ exports.updatePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
-    if (!currentPassword || !newPassword) {
+    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
       return res.status(400).json({ message: 'Both passwords are required' });
     }
 
-    if (String(newPassword).length < 6) {
+    if (newPassword.length < 6) {
       return res
         .status(400)
         .json({ message: 'New password must be at least 6 characters' });
@@ -185,7 +189,7 @@ exports.updateAvatar = async (req, res) => {
 exports.verifyPassword = async (req, res) => {
   try {
     const { password } = req.body;
-    if (!password) {
+    if (typeof password !== 'string' || !password) {
       return res.status(400).json({ success: false, message: 'Password required' });
     }
 
