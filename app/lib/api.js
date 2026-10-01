@@ -43,32 +43,41 @@ api.interceptors.request.use(
 // RESPONSE INTERCEPTOR
 // DEBUG VERSION
 // ============================================================
-
 api.interceptors.response.use(
   (response) => {
     return response;
   },
   (error) => {
-    const status = error.response?.status;
-    const url = error.config?.url || '';
-    const method = error.config?.method || '';
+    console.error('🔴 FULL API ERROR OBJECT:', error);
 
-    console.error('🔴 API ERROR:', {
-      status,
-      url,
-      method,
-      response: error.response?.data,
+    console.error('🔴 API ERROR DETAILS:', {
+      message: error?.message,
+      name: error?.name,
+      code: error?.code,
+
+      status: error?.response?.status,
+      statusText: error?.response?.statusText,
+
+      url: error?.config?.url,
+      method: error?.config?.method,
+
+      responseData: error?.response?.data,
+      responseHeaders: error?.response?.headers,
+
+      requestData: error?.config?.data,
+
+      isAxiosError: axios.isAxiosError(error),
     });
 
-    if (status === 401) {
+    if (error?.response?.status === 401) {
       console.error('🔴 401 REQUEST:', {
-        url,
-        method,
+        url: error?.config?.url,
+        method: error?.config?.method,
       });
 
       console.error(
         '🔴 RESPONSE:',
-        error.response?.data
+        error?.response?.data
       );
 
       console.error(
@@ -78,9 +87,7 @@ api.interceptors.response.use(
           : false
       );
 
-      // IMPORTANT:
-      // Do NOT remove the token or redirect here
-      // while debugging authentication.
+      // Do NOT remove token or redirect while debugging.
     }
 
     return Promise.reject(error);

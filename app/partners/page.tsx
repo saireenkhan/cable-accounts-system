@@ -854,26 +854,35 @@ function PartnersPageContent() {
      DELETE
   ========================================================== */
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete ${name}?`)) {
-      return;
+ const handleDelete = async (id: string, name: string) => {
+  if (
+    !confirm(
+      `Are you sure you want to delete ${name}?\n\nThis will also permanently delete all of their partner-payment records.`
+    )
+  ) {
+    return;
+  }
+
+  try {
+    const { data } = await api.delete(`/partners/${id}`);
+
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+
+    const extra =
+      data?.deletedPayments > 0
+        ? ` (${data.deletedPayments} payment${data.deletedPayments === 1 ? '' : 's'} also removed)`
+        : '';
+
+    toast.success(`${name} deleted${extra}`);
+
+    if (editingUser?.id === id) {
+      setEditingUser(null);
     }
-
-    try {
-      await api.delete(`/partners/${id}`);
-
-      setUsers((prev) => prev.filter((u) => u.id !== id));
-      toast.success(`${name} deleted`);
-
-      if (editingUser?.id === id) {
-        setEditingUser(null);
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error('Failed to delete partner');
-    }
-  };
-
+  } catch (e) {
+    console.error(e);
+    toast.error('Failed to delete partner');
+  }
+};
   /* ==========================================================
      FILTERED USERS
   ========================================================== */

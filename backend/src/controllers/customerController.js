@@ -27,8 +27,8 @@ const calculateExpiryDate = (activationDate) => {
 // GET all customers
 // ============================================================
 exports.getCustomers = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
-    const Customer = tenantScope(CustomerModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+
   try {
     const { search, status, area, limit } = req.query;
     const filter = {};
@@ -73,8 +73,8 @@ exports.getCustomers = async (req, res) => {
 // GET single customer
 // ============================================================
 exports.getCustomer = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
-    const Customer = tenantScope(CustomerModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+
   try {
     const customer = await Customer.findById(req.params.id)
       .populate('area', 'name')
@@ -105,8 +105,9 @@ exports.getCustomer = async (req, res) => {
 // CREATE customer
 // ============================================================
 exports.createCustomer = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
-    const Customer = tenantScope(CustomerModel, req);
+  const Area = tenantScope(AreaModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+
   try {
     const {
       customerId,
@@ -124,9 +125,6 @@ exports.createCustomer = async (req, res) => {
 
     console.log('📝 Creating customer with data:', req.body);
 
-    // --------------------------------------------------------
-    // Required fields
-    // --------------------------------------------------------
     if (!customerId) {
       return res.status(400).json({
         success: false,
@@ -141,9 +139,6 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------------
-    // Duplicate customer ID
-    // --------------------------------------------------------
     const existingCustomerId = await Customer.findOne({ customerId });
 
     if (existingCustomerId) {
@@ -153,9 +148,6 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------------
-    // Area
-    // --------------------------------------------------------
     let areaDoc = null;
 
     if (area) {
@@ -170,9 +162,6 @@ exports.createCustomer = async (req, res) => {
       }
     }
 
-    // --------------------------------------------------------
-    // Discount
-    // --------------------------------------------------------
     const parsedDiscount = parseFloat(discount) || 0;
 
     if (parsedDiscount < 0) {
@@ -182,9 +171,6 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------------
-    // Activation + Expiry
-    // --------------------------------------------------------
     let parsedActivationDate = null;
     let calculatedExpiryDate = null;
 
@@ -201,9 +187,6 @@ exports.createCustomer = async (req, res) => {
       calculatedExpiryDate = calculateExpiryDate(parsedActivationDate);
     }
 
-    // --------------------------------------------------------
-    // Create customer
-    // --------------------------------------------------------
     const customer = await Customer.create({
       customerId,
       name,
@@ -228,17 +211,11 @@ exports.createCustomer = async (req, res) => {
       createdBy: req.user ? req.user.id : null,
     });
 
-    // --------------------------------------------------------
-    // Populate response
-    // --------------------------------------------------------
     const populatedCustomer = await Customer.findById(customer._id)
       .populate('area', 'name')
       .populate('createdBy', 'name');
 
-    console.log(
-      '✅ Customer created:',
-      populatedCustomer.customerId
-    );
+    console.log('✅ Customer created:', populatedCustomer.customerId);
 
     res.status(201).json({
       success: true,
@@ -248,7 +225,6 @@ exports.createCustomer = async (req, res) => {
   } catch (error) {
     console.error('❌ Create customer error:', error);
 
-    // Duplicate key
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
 
@@ -258,7 +234,6 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    // Mongoose validation error
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors)
         .map((err) => err.message)
@@ -281,8 +256,9 @@ exports.createCustomer = async (req, res) => {
 // UPDATE customer
 // ============================================================
 exports.updateCustomer = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
-    const Customer = tenantScope(CustomerModel, req);
+  const Area = tenantScope(AreaModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+
   try {
     const {
       customerId,
@@ -301,9 +277,6 @@ exports.updateCustomer = async (req, res) => {
     console.log('📝 Updating customer:', req.params.id);
     console.log('📦 Update data:', req.body);
 
-    // --------------------------------------------------------
-    // Find existing customer first
-    // --------------------------------------------------------
     const existingCustomer = await Customer.findById(req.params.id);
 
     if (!existingCustomer) {
@@ -315,9 +288,6 @@ exports.updateCustomer = async (req, res) => {
 
     const update = {};
 
-    // --------------------------------------------------------
-    // Basic fields
-    // --------------------------------------------------------
     if (customerId !== undefined) {
       update.customerId = customerId;
     }
@@ -342,9 +312,6 @@ exports.updateCustomer = async (req, res) => {
       update.status = status;
     }
 
-    // --------------------------------------------------------
-    // Area
-    // --------------------------------------------------------
     if (area !== undefined) {
       if (area) {
         const areaDoc = await Area.findOne({ name: area });
@@ -362,16 +329,10 @@ exports.updateCustomer = async (req, res) => {
       }
     }
 
-    // --------------------------------------------------------
-    // Package
-    // --------------------------------------------------------
     if (pkg !== undefined) {
       update.package = pkg;
     }
 
-    // --------------------------------------------------------
-    // Discount
-    // --------------------------------------------------------
     if (discount !== undefined) {
       const parsedDiscount = parseFloat(discount);
 
@@ -385,9 +346,6 @@ exports.updateCustomer = async (req, res) => {
       update.discount = parsedDiscount;
     }
 
-    // --------------------------------------------------------
-    // Monthly fee
-    // --------------------------------------------------------
     if (monthlyFee !== undefined) {
       const parsedMonthlyFee = parseFloat(monthlyFee);
 
@@ -401,9 +359,6 @@ exports.updateCustomer = async (req, res) => {
       update.monthlyFee = parsedMonthlyFee;
     }
 
-    // --------------------------------------------------------
-    // ACTIVATION DATE + EXPIRY DATE
-    // --------------------------------------------------------
     if (activationDate !== undefined) {
       if (!activationDate) {
         update.activationDate = null;
@@ -420,24 +375,14 @@ exports.updateCustomer = async (req, res) => {
 
         update.activationDate = parsedActivationDate;
 
-        // Automatically calculate one month later
-        update.expiryDate = calculateExpiryDate(
-          parsedActivationDate
-        );
+        update.expiryDate = calculateExpiryDate(parsedActivationDate);
       }
     }
 
-    // --------------------------------------------------------
-    // Update database
-    // --------------------------------------------------------
-    const customer = await Customer.findByIdAndUpdate(
-      req.params.id,
-      update,
-      {
-        new: true,
-        runValidators: true,
-      }
-    )
+    const customer = await Customer.findByIdAndUpdate(req.params.id, update, {
+      new: true,
+      runValidators: true,
+    })
       .populate('area', 'name')
       .populate('createdBy', 'name');
 
@@ -458,9 +403,6 @@ exports.updateCustomer = async (req, res) => {
   } catch (error) {
     console.error('❌ Update customer error:', error);
 
-    // --------------------------------------------------------
-    // Duplicate customer ID
-    // --------------------------------------------------------
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -468,9 +410,6 @@ exports.updateCustomer = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------------
-    // Mongoose validation error
-    // --------------------------------------------------------
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors)
         .map((err) => err.message)
@@ -482,9 +421,6 @@ exports.updateCustomer = async (req, res) => {
       });
     }
 
-    // --------------------------------------------------------
-    // Invalid ObjectId
-    // --------------------------------------------------------
     if (error.name === 'CastError') {
       return res.status(400).json({
         success: false,
@@ -501,12 +437,15 @@ exports.updateCustomer = async (req, res) => {
 
 // ============================================================
 // DELETE customer
+// Cascade: also deletes every payment that belongs to this
+// customer so they disappear from Receive Payments.
 // ============================================================
 exports.deleteCustomer = async (req, res) => {
-    const Customer = tenantScope(CustomerModel, req);
-    const Payment = tenantScope(PaymentModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+  const Payment = tenantScope(PaymentModel, req);
+
   try {
-    const customer = await Customer.findByIdAndDelete(req.params.id);
+    const customer = await Customer.findById(req.params.id);
 
     if (!customer) {
       return res.status(404).json({
@@ -515,16 +454,43 @@ exports.deleteCustomer = async (req, res) => {
       });
     }
 
+const mongoId = customer._id;
+const businessId = customer.customerId || '';
+
+// Only match fields that are ObjectId-typed in the Payment schema.
+// `customer` is an ObjectId, so we can NEVER pass a name string here —
+// Mongoose will throw a CastError before running the query.
+const orConditions = [
+  { customer: mongoId },
+  { customerId: mongoId },
+];
+
+// If your schema also has a `customerId` string field holding the
+// business code (e.g. "USR-001"), we can safely match that as a string.
+if (businessId) {
+  orConditions.push({ customerId: businessId });
+}
+
+const deleteResult = await Payment.deleteMany({ $or: orConditions });
+
+    await Customer.findByIdAndDelete(req.params.id);
+
+    console.log(
+      `🗑️ Deleted customer "${customer.name}" (${customer.customerId}) and ${deleteResult.deletedCount} related payment(s)`
+    );
+
     res.json({
       success: true,
-      message: 'Customer deleted successfully',
+      message: `Customer deleted. ${deleteResult.deletedCount} related payment(s) also removed.`,
+      deletedPayments: deleteResult.deletedCount,
     });
   } catch (error) {
+    console.error('❌ Delete customer error:', error);
     logger.error(`Delete customer error: ${error.message}`);
 
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: error.message || 'Server error',
     });
   }
 };
@@ -533,8 +499,9 @@ exports.deleteCustomer = async (req, res) => {
 // GET dashboard stats
 // ============================================================
 exports.getDashboardStats = async (req, res) => {
-    const Customer = tenantScope(CustomerModel, req);
-    const Payment = tenantScope(PaymentModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+  const Payment = tenantScope(PaymentModel, req);
+
   try {
     const totalCustomers = await Customer.countDocuments();
 
@@ -562,15 +529,10 @@ exports.getDashboardStats = async (req, res) => {
       0
     );
 
-    const outstanding = Math.max(
-      0,
-      totalBilling - totalCollection
-    );
+    const outstanding = Math.max(0, totalBilling - totalCollection);
 
     const recoveryRate =
-      totalBilling > 0
-        ? (totalCollection / totalBilling) * 100
-        : 0;
+      totalBilling > 0 ? (totalCollection / totalBilling) * 100 : 0;
 
     const areaPaymentMap = {};
 
@@ -587,12 +549,10 @@ exports.getDashboardStats = async (req, res) => {
       });
 
     populatedPayments.forEach((p) => {
-      const areaName =
-        p.customer?.area?.name || 'Unknown';
+      const areaName = p.customer?.area?.name || 'Unknown';
 
       areaPaymentMap[areaName] =
-        (areaPaymentMap[areaName] || 0) +
-        (p.amount || 0);
+        (areaPaymentMap[areaName] || 0) + (p.amount || 0);
     });
 
     const areaWise = Object.entries(areaPaymentMap)
@@ -617,9 +577,7 @@ exports.getDashboardStats = async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error(
-      `Dashboard stats error: ${error.message}`
-    );
+    logger.error(`Dashboard stats error: ${error.message}`);
 
     res.status(500).json({
       success: false,

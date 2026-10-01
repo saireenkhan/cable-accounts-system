@@ -15,13 +15,15 @@ const {
 const upload = require('../middleware/upload');
 const { protect, authorize } = require('../middleware/auth');
 
-// ⚠️ IMPORTANT: /bulk-upload routes MUST come before /:id routes
+// ============================================================
+// IMPORTANT: /bulk-upload routes MUST come before /:id routes
 // Otherwise Express will match "bulk-upload" as an :id param
+// ============================================================
 
-// ✅ Sample CSV download (public — no auth needed so users can grab the template)
+// Sample CSV download (public — no auth needed)
 router.get('/bulk-upload/sample', downloadSample);
 
-// ✅ Bulk upload — protected, admin/manager only
+// Bulk upload — protected, admin/manager only
 router.post(
   '/bulk-upload',
   protect,
@@ -39,13 +41,13 @@ router.get('/', protect, getCustomers);
 // Get single customer
 router.get('/:id', protect, getCustomer);
 
-// Create single customer (public for testing — change to protect later)
+// Create single customer
 router.post('/', protect, createCustomer);
 
-// Update customer
+// Update customer — admin + manager
 router.put('/:id', protect, authorize('admin', 'manager'), updateCustomer);
 
-// Delete customer
-router.delete('/:id', protect, authorize('admin'), deleteCustomer);
+// Delete customer — admin + manager (cascade deletes payments)
+router.delete('/:id', protect, authorize('admin', 'manager'), deleteCustomer);
 
 module.exports = router;

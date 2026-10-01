@@ -9,7 +9,6 @@ const {
   getPartnerDashboardStats,
 } = require('../controllers/partnerController');
 
-// ✅ Import partner bulk upload from the shared controller
 const {
   bulkUploadPartners,
   downloadPartnerSample,
@@ -18,13 +17,13 @@ const {
 const upload = require('../middleware/upload');
 const { protect, authorize } = require('../middleware/auth');
 
-// ⚠️ CRITICAL ORDER — /bulk-upload and /dashboard MUST come before /:id
-// Otherwise Express treats "bulk-upload" and "dashboard" as :id values
+// ============================================================
+// CRITICAL ORDER — /bulk-upload and /dashboard MUST come
+// before /:id, otherwise Express treats them as :id values
+// ============================================================
 
-// ✅ Partner sample CSV download (public)
 router.get('/bulk-upload/sample', downloadPartnerSample);
 
-// ✅ Partner bulk upload (protected, admin/manager)
 router.post(
   '/bulk-upload',
   protect,
@@ -33,24 +32,17 @@ router.post(
   bulkUploadPartners
 );
 
-// Dashboard stats (must be BEFORE /:id)
 router.get('/dashboard/stats', protect, getPartnerDashboardStats);
 
-// List all partners
 router.get('/', protect, getPartners);
 
-// Get single partner (this MUST be last of the GETs)
 router.get('/:id', protect, getPartner);
 
-// Create single partner
-// Create single partner
-// Create single partner
 router.post('/', protect, createPartner);
 
-// Update partner
 router.put('/:id', protect, authorize('admin', 'manager'), updatePartner);
 
-// Delete partner
-router.delete('/:id', protect, authorize('admin'), deletePartner);
+// Delete partner — admin + manager (cascades to PartnerPayment)
+router.delete('/:id', protect, authorize('admin', 'manager'), deletePartner);
 
 module.exports = router;

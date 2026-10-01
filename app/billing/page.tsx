@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { DataTable } from '@/app/components/ui/DataTable';
+import { downloadReceipt } from '@/app/lib/receipt';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
 import {
@@ -1281,18 +1282,66 @@ export default function ReceivePaymentPage() {
             <DataTable
               data={filteredPayments}
               columns={columns}
-              actions={[
-                {
-                  label: 'Print',
-                  value: 'print',
-                  icon: <Printer className="h-4 w-4" />,
-                },
-              ]}
-              onAction={(item, action) => {
-                if (action === 'print') {
-                  toast.success(`Printing receipt for ${item.customer}`);
-                }
-              }}
+actions={[
+  {
+    label: 'PDF',
+    value: 'pdf',
+    icon: <Printer className="h-4 w-4" />,
+  },
+]}
+onAction={(item, action) => {
+  if (action !== 'pdf') return;
+
+  const customer = customers.find(
+    (c) => String(c._id) === String(item.customerId)
+  );
+
+  const area = resolveAreaName(customer?.area, areaLookup);
+
+  // Compute balances so the receipt shows the full picture
+  const monthlyFee = parseFloat(String(customer?.monthlyFee)) || 0;
+  const customerPayments = payments.filter(
+    (p) => String(p.customerId) === String(item.customerId) && !p.isNoPayment
+  );
+  const allocs = allocatePayments(
+    monthlyFee,
+    customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+  );
+
+  const currentAlloc = allocs.find((a) => a.month === item.month);
+  const previousBalance = allocs
+    .filter((a) => compareMonths(a.month, item.month) < 0 && !a.isPaid)
+    .reduce((sum, a) => sum + a.remaining, 0);
+  const currentBalance = currentAlloc ? currentAlloc.remaining : monthlyFee;
+  const totalBalance = previousBalance + currentBalance;
+
+  downloadReceipt({
+    title: 'Payment Receipt',
+    receiptNo: item.receipt,
+    partyLabel: 'User',
+    partyName: item.customer,
+    partyId: item.userId,
+    area,
+    phone: customer?.phone,
+    month: item.month,
+    paymentDate: item.date,
+    paymentMethod: item.method,
+    packageName:
+      typeof customer?.package === 'string'
+        ? customer.package
+        : customer?.package?.name,
+    packagePrice: item.packagePrice,
+    amount: item.amount,
+    remarks: customer?.remarks,
+    previousBalance,
+    currentBalance,
+    totalBalance,
+    remainingBalance: Math.max(0, totalBalance - (item.amount || 0)),
+    isNoPayment: item.isNoPayment,
+  });
+
+  toast.success(`Receipt downloaded for ${item.customer}`);
+}}
               accordionTitle="customer"
               accordionSubtitle="userId"
               emptyMessage="No payments found"

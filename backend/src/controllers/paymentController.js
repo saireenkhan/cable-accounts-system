@@ -2,11 +2,12 @@ const PaymentModel = require('../models/Payment');
 const CustomerModel = require('../models/Customer');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
-
+const PartnerPaymentModel = require('../models/PartnerPayment');
 // ============================================================
 // Generate unique receipt number
+// Accepts the tenant-scoped Payment model.
 // ============================================================
-const generateReceiptNo = async () => {
+const generateReceiptNo = async (Payment) => {
   try {
     const date = new Date();
     const year = date.getFullYear();
@@ -37,8 +38,8 @@ const generateReceiptNo = async () => {
 // GET all payments
 // ============================================================
 exports.getPayments = async (req, res) => {
-    const Customer = tenantScope(CustomerModel, req);
-    const Payment = tenantScope(PaymentModel, req);
+  const Payment = tenantScope(PaymentModel, req);
+
   try {
     const { customerId, month } = req.query;
     const filter = {};
@@ -49,7 +50,10 @@ exports.getPayments = async (req, res) => {
     console.log('📥 getPayments called with filter:', filter);
 
     const payments = await Payment.find(filter)
-      .populate('customer', 'name code customerId phone monthlyFee area package status')
+      .populate(
+        'customer',
+        'name code customerId phone monthlyFee area package status'
+      )
       .populate('receivedBy', 'name')
       .sort({ paymentDate: -1 });
 
@@ -69,8 +73,9 @@ exports.getPayments = async (req, res) => {
 
 // ============================================================
 // Recalculate customer status
+// Accepts the tenant-scoped Payment model.
 // ============================================================
-const recalculateCustomerStatus = async (customerDoc) => {
+const recalculateCustomerStatus = async (customerDoc, Payment) => {
   try {
     const monthlyFee = parseFloat(customerDoc.monthlyFee) || 0;
 
@@ -112,8 +117,9 @@ const recalculateCustomerStatus = async (customerDoc) => {
 // CREATE payment
 // ============================================================
 exports.createPayment = async (req, res) => {
-    const Customer = tenantScope(CustomerModel, req);
-    const Payment = tenantScope(PaymentModel, req);
+  const Customer = tenantScope(CustomerModel, req);
+  const Payment = tenantScope(PaymentModel, req);
+
   try {
     const {
       customer,
@@ -129,17 +135,17 @@ exports.createPayment = async (req, res) => {
 
     console.log('📝 Creating payment with data:', req.body);
 
-let customerDoc;
-if (typeof customer === 'object' && customer._id) {
-  customerDoc = await Customer.findById(customer._id);
-} else if (typeof customer === 'string') {
-  const looksLikeObjectId = /^[a-fA-F0-9]{24}$/.test(customer);
-  if (looksLikeObjectId) {
-    customerDoc = await Customer.findById(customer);
-  } else {
-    customerDoc = await Customer.findOne({ name: customer });
-  }
-}
+    let customerDoc;
+    if (typeof customer === 'object' && customer._id) {
+      customerDoc = await Customer.findById(customer._id);
+    } else if (typeof customer === 'string') {
+      const looksLikeObjectId = /^[a-fA-F0-9]{24}$/.test(customer);
+      if (looksLikeObjectId) {
+        customerDoc = await Customer.findById(customer);
+      } else {
+        customerDoc = await Customer.findOne({ name: customer });
+      }
+    }
 
     if (!customerDoc) {
       return res.status(404).json({
@@ -148,7 +154,12 @@ if (typeof customer === 'object' && customer._id) {
       });
     }
 
-    console.log('👤 Customer:', customerDoc.name, 'Monthly Fee:', customerDoc.monthlyFee);
+    console.log(
+      '👤 Customer:',
+      customerDoc.name,
+      'Monthly Fee:',
+      customerDoc.monthlyFee
+    );
 
     let paymentMethodValue = paymentMethod || method || 'Cash';
     if (typeof paymentMethodValue === 'string') {
@@ -162,9 +173,11 @@ if (typeof customer === 'object' && customer._id) {
     const paymentDateObj =
       paymentDate || date ? new Date(date || paymentDate) : new Date();
 
-    // ✅ If this is a "no payment" marker, create it as-is (don't merge)
+    // ----------------------------------------------------------
+    // "No payment" marker — never merged, always created fresh
+    // ----------------------------------------------------------
     if (isNoPayment) {
-      const receiptNo = await generateReceiptNo();
+      const receiptNo = await generateReceiptNo(Payment);
       const payment = await Payment.create({
         receiptNo,
         customer: customerDoc._id,
@@ -179,7 +192,10 @@ if (typeof customer === 'object' && customer._id) {
       });
 
       const populated = await Payment.findById(payment._id)
-        .populate('customer', 'name code customerId phone monthlyFee area package status')
+        .populate(
+          'customer',
+          'name code customerId phone monthlyFee area package status'
+        )
         .populate('receivedBy', 'name');
 
       return res.status(201).json({
@@ -190,7 +206,9 @@ if (typeof customer === 'object' && customer._id) {
       });
     }
 
-    // ✅ For regular payments: check if a payment already exists for this month
+    // ----------------------------------------------------------
+    // Regular payment — merge if a record for this month exists
+    // ----------------------------------------------------------
     const existingPayment = await Payment.findOne({
       customer: customerDoc._id,
       month,
@@ -198,11 +216,9 @@ if (typeof customer === 'object' && customer._id) {
     });
 
     if (existingPayment) {
-      // Calculate what would be the new total for this month
       const currentAmount = parseFloat(existingPayment.amount) || 0;
       const newTotal = currentAmount + paymentAmount;
 
-      // Prevent overpaying beyond monthly fee
       if (monthlyFee > 0 && newTotal > monthlyFee) {
         return res.status(400).json({
           success: false,
@@ -210,23 +226,26 @@ if (typeof customer === 'object' && customer._id) {
         });
       }
 
-      // ✅ Merge: add to existing amount
       existingPayment.amount = newTotal;
       existingPayment.paymentDate = paymentDateObj;
+
       if (remarks) {
-        existingPayment.remarks =
-          existingPayment.remarks
-            ? `${existingPayment.remarks}\n${remarks}`
-            : remarks;
+        existingPayment.remarks = existingPayment.remarks
+          ? `${existingPayment.remarks}\n${remarks}`
+          : remarks;
       }
+
       await existingPayment.save();
 
       console.log('✅ Payment merged. New total:', newTotal);
 
-      await recalculateCustomerStatus(customerDoc);
+      await recalculateCustomerStatus(customerDoc, Payment);
 
       const populated = await Payment.findById(existingPayment._id)
-        .populate('customer', 'name code customerId phone monthlyFee area package status')
+        .populate(
+          'customer',
+          'name code customerId phone monthlyFee area package status'
+        )
         .populate('receivedBy', 'name');
 
       return res.status(200).json({
@@ -237,8 +256,10 @@ if (typeof customer === 'object' && customer._id) {
       });
     }
 
-    // ✅ No existing payment → create new
-    const receiptNo = await generateReceiptNo();
+    // ----------------------------------------------------------
+    // No existing record → create new
+    // ----------------------------------------------------------
+    const receiptNo = await generateReceiptNo(Payment);
 
     const payment = await Payment.create({
       receiptNo,
@@ -255,10 +276,13 @@ if (typeof customer === 'object' && customer._id) {
 
     console.log('✅ Payment created:', payment.receiptNo);
 
-    await recalculateCustomerStatus(customerDoc);
+    await recalculateCustomerStatus(customerDoc, Payment);
 
     const populatedPayment = await Payment.findById(payment._id)
-      .populate('customer', 'name code customerId phone monthlyFee area package status')
+      .populate(
+        'customer',
+        'name code customerId phone monthlyFee area package status'
+      )
       .populate('receivedBy', 'name');
 
     res.status(201).json({
@@ -276,7 +300,8 @@ if (typeof customer === 'object' && customer._id) {
       if (keyPattern.customer && keyPattern.month) {
         return res.status(400).json({
           success: false,
-          message: 'This customer already has a payment recorded for this month.',
+          message:
+            'This customer already has a payment recorded for this month.',
         });
       }
       return res.status(500).json({
@@ -296,12 +321,15 @@ if (typeof customer === 'object' && customer._id) {
 // DELETE payment
 // ============================================================
 exports.deletePayment = async (req, res) => {
-    const Payment = tenantScope(PaymentModel, req);
+  const Payment = tenantScope(PaymentModel, req);
+
   try {
     const payment = await Payment.findByIdAndDelete(req.params.id);
+
     if (!payment) {
       return res.status(404).json({ message: 'Payment not found' });
     }
+
     res.json({ success: true, message: 'Payment deleted successfully' });
   } catch (error) {
     logger.error(`Delete payment error: ${error.message}`);

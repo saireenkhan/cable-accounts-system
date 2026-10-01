@@ -3,7 +3,7 @@ const PartnerAreaModel = require('../models/PartnerArea');
 const PaymentModel = require('../models/Payment');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
-
+const PartnerPaymentModel = require('../models/PartnerPayment');
 // ============================================================
 // HELPER: Calculate expiry date (one calendar month later)
 // ============================================================
@@ -412,11 +412,17 @@ exports.updatePartner = async (req, res) => {
 // ============================================================
 // DELETE partner
 // ============================================================
+// ============================================================
+// DELETE partner
+// Cascade: also deletes every partner-payment that belongs
+// to this partner so they disappear from Receive Partner Payments.
+// ============================================================
 exports.deletePartner = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const Payment = tenantScope(PaymentModel, req);
+  const Partner = tenantScope(PartnerModel, req);
+  const PartnerPayment = tenantScope(PartnerPaymentModel, req);
+
   try {
-    const partner = await Partner.findByIdAndDelete(req.params.id);
+    const partner = await Partner.findById(req.params.id);
 
     if (!partner) {
       return res.status(404).json({
@@ -425,16 +431,31 @@ exports.deletePartner = async (req, res) => {
       });
     }
 
+    // Delete every partner-payment that references this partner.
+    // `partner` is an ObjectId in the PartnerPayment schema,
+    // so we only pass the partner's _id.
+    const deleteResult = await PartnerPayment.deleteMany({
+      partner: partner._id,
+    });
+
+    await Partner.findByIdAndDelete(req.params.id);
+
+    console.log(
+      `🗑️ Deleted partner "${partner.name}" (${partner.partnerId}) and ${deleteResult.deletedCount} related payment(s)`
+    );
+
     res.json({
       success: true,
-      message: 'Partner deleted successfully',
+      message: `Partner deleted. ${deleteResult.deletedCount} related payment(s) also removed.`,
+      deletedPayments: deleteResult.deletedCount,
     });
   } catch (error) {
+    console.error('❌ Delete partner error:', error);
     logger.error(`Delete partner error: ${error.message}`);
 
     res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: error.message || 'Server error',
     });
   }
 };
