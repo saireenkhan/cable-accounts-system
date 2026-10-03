@@ -1,9 +1,13 @@
-const ISP = require('../models/ISP');
+const ISPModel = require('../models/ISP');
+const tenantScope = require('../utils/tenantScope');
+const logger = require('../utils/logger');
 
 // ============================================================
 // Get all ISPs
 // ============================================================
 const getISPs = async (req, res) => {
+  const ISP = tenantScope(ISPModel, req);
+
   try {
     const isps = await ISP.find()
       .sort({ name: 1 })
@@ -14,7 +18,7 @@ const getISPs = async (req, res) => {
       isps,
     });
   } catch (error) {
-    console.error('Error fetching ISPs:', error);
+    logger.error(`Get ISPs error: ${error.message}`);
 
     return res.status(500).json({
       success: false,
@@ -28,6 +32,8 @@ const getISPs = async (req, res) => {
 // Get single ISP
 // ============================================================
 const getISPById = async (req, res) => {
+  const ISP = tenantScope(ISPModel, req);
+
   try {
     const { id } = req.params;
 
@@ -45,7 +51,7 @@ const getISPById = async (req, res) => {
       isp,
     });
   } catch (error) {
-    console.error('Error fetching ISP:', error);
+    logger.error(`Get ISP error: ${error.message}`);
 
     return res.status(500).json({
       success: false,
@@ -59,6 +65,8 @@ const getISPById = async (req, res) => {
 // Create ISP
 // ============================================================
 const createISP = async (req, res) => {
+  const ISP = tenantScope(ISPModel, req);
+
   try {
     const name = String(req.body.name || '').trim();
 
@@ -96,7 +104,7 @@ const createISP = async (req, res) => {
       isp,
     });
   } catch (error) {
-    console.error('Error creating ISP:', error);
+    logger.error(`Create ISP error: ${error.message}`);
 
     if (error.code === 11000) {
       return res.status(409).json({
@@ -117,6 +125,8 @@ const createISP = async (req, res) => {
 // Update ISP
 // ============================================================
 const updateISP = async (req, res) => {
+  const ISP = tenantScope(ISPModel, req);
+
   try {
     const { id } = req.params;
     const name = String(req.body.name || '').trim();
@@ -170,7 +180,7 @@ const updateISP = async (req, res) => {
       isp,
     });
   } catch (error) {
-    console.error('Error updating ISP:', error);
+    logger.error(`Update ISP error: ${error.message}`);
 
     if (error.code === 11000) {
       return res.status(409).json({
@@ -191,6 +201,8 @@ const updateISP = async (req, res) => {
 // Delete ISP
 // ============================================================
 const deleteISP = async (req, res) => {
+  const ISP = tenantScope(ISPModel, req);
+
   try {
     const { id } = req.params;
 
@@ -209,7 +221,7 @@ const deleteISP = async (req, res) => {
       isp,
     });
   } catch (error) {
-    console.error('Error deleting ISP:', error);
+    logger.error(`Delete ISP error: ${error.message}`);
 
     return res.status(500).json({
       success: false,

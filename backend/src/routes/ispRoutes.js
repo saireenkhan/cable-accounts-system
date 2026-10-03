@@ -1,4 +1,5 @@
 const express = require('express');
+const router = express.Router();
 
 const {
   getISPs,
@@ -8,21 +9,17 @@ const {
   deleteISP,
 } = require('../controllers/ispController');
 
-const router = express.Router();
+// 1. Destructure 'protect' from the auth middleware object
+const { protect } = require('../middleware/auth');
 
-// GET all ISPs
+// 2. Put protect behind the router so req.tenantId gets populated
+router.use(protect);
+
+// 3. Route definitions
 router.get('/', getISPs);
-
-// GET single ISP
 router.get('/:id', getISPById);
-
-// CREATE ISP
 router.post('/', createISP);
-
-// UPDATE ISP
 router.put('/:id', updateISP);
-
-// DELETE ISP
 router.delete('/:id', deleteISP);
 
 module.exports = router;

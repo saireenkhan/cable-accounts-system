@@ -68,7 +68,7 @@ type Area = {
   expected: number;
   recoveryRate: number;
   color: AreaColor;
-  isp?: string;
+isp?: string[];
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -503,27 +503,33 @@ export default function AreasPage() {
     },
     ...(isps.length > 0
       ? [
-          {
-            name: 'isp',
-            label: 'ISP',
-            type: 'select' as const,
-            required: true,
-            searchable: true,
-            options: isps.map((isp: any) => ({
-              label: isp.name,
-              value: isp.name,
-            })),
-          },
+         {
+  name: 'isp',
+  label: 'ISP',
+  type: 'select' as const,
+  required: true,
+  searchable: true,
+  multiple: true,
+  placeholder: 'Select ISP(s)',
+  options: isps.map((isp: any) => ({
+    label: isp.name,
+    value: isp.name,
+  })),
+}
         ]
       : []),
   ];
 
-  const transformAreaData = (data: any) => ({
-    name: data.name,
-    code: data.code || '',
-    description: data.description || '',
-    isp: data.isp || '',
-  });
+const transformAreaData = (data: any) => ({
+  name: data.name,
+  code: data.code || '',
+  description: data.description || '',
+  isp: Array.isArray(data.isp)
+    ? data.isp
+    : data.isp
+    ? [data.isp]
+    : [],
+});
 
   if (loading) {
     return (
@@ -695,12 +701,21 @@ export default function AreasPage() {
                             </p>
                           )}
 
-                          {area.isp && (
-                            <p className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400">
-                              <Wifi className="h-3 w-3" />
-                              {area.isp}
-                            </p>
-                          )}
+                 {area.isp &&
+  area.isp.length > 0 && (
+    <div className="mt-1 flex flex-wrap items-center gap-1">
+      <Wifi className="h-3 w-3 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+
+      {area.isp.map((ispName) => (
+        <span
+          key={ispName}
+          className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+        >
+          {ispName}
+        </span>
+      ))}
+    </div>
+  )}
                         </div>
                       </div>
 
@@ -964,33 +979,6 @@ export default function AreasPage() {
                             <Eye className="h-4 w-4" />
                             View Details
                           </button>
-
-                          <button
-                            type="button"
-                            onClick={(event) =>
-                              handleEdit(area, event)
-                            }
-                            className="flex items-center justify-center gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-600 transition hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-900/40"
-                            aria-label={`Edit ${area.name}`}
-                          >
-                            <Edit2 className="h-4 w-4" />
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleDelete(
-                                area.id,
-                                area.name
-                              )
-                            }
-                            className="flex items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/40"
-                            aria-label={`Delete ${area.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Delete
-                          </button>
                         </div>
                       </>
                     )}
@@ -1053,7 +1041,7 @@ export default function AreasPage() {
                   code: editingArea.code || '',
                   description:
                     editingArea.description || '',
-                  isp: editingArea.isp || '',
+                  isp: editingArea.isp || [],
                 }
               : undefined
           }

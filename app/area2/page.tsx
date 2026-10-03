@@ -70,11 +70,16 @@ export default function DealerAreasPage() {
   const fetchIsps = async () => {
     try {
       const token = sessionStorage.getItem('token');
+
       if (!token) return;
 
       const { data } = await api.get('/isps');
+
       const list =
-        data.success && Array.isArray(data.isps) ? data.isps : [];
+        data.success && Array.isArray(data.isps)
+          ? data.isps
+          : [];
+
       setIsps(list);
     } catch (e) {
       console.error('Error fetching ISPs:', e);
@@ -97,8 +102,7 @@ export default function DealerAreasPage() {
           api.get('/dealers?limit=10000'),
         ]);
 
-      const dealerCounts: Record<string, number> =
-        {};
+      const dealerCounts: Record<string, number> = {};
 
       if (dealersRes.data.success) {
         dealersRes.data.dealers.forEach(
@@ -124,17 +128,26 @@ export default function DealerAreasPage() {
           areasRes.data.areas.map(
             (area: any, index: number) => ({
               id: String(area._id),
+
               name:
                 area.name || 'Unnamed Area',
-              code: area.code || '',
+
+              code:
+                area.code || '',
+
               description:
                 area.description || '',
-              isp:
-                typeof area.isp === 'object' && area.isp
-                  ? area.isp.name || ''
-                  : area.isp || '',
+
+              // Always normalize ISP into an array.
+              isp: Array.isArray(area.isp)
+                ? area.isp
+                : area.isp
+                ? [area.isp]
+                : [],
+
               dealers:
                 dealerCounts[area.name] || 0,
+
               color:
                 ([
                   'blue',
@@ -143,10 +156,13 @@ export default function DealerAreasPage() {
                   'orange',
                   'red',
                   'indigo',
-                ][index % 6] ||
-                  'blue') as AreaColor,
-              createdAt: area.createdAt,
-              updatedAt: area.updatedAt,
+                ][index % 6] || 'blue') as AreaColor,
+
+              createdAt:
+                area.createdAt,
+
+              updatedAt:
+                area.updatedAt,
             })
           );
 
@@ -175,12 +191,14 @@ export default function DealerAreasPage() {
       placeholder:
         'Enter dealer area name',
     },
+
     {
       name: 'code',
       label: 'Area Code',
       type: 'text',
       placeholder: 'e.g., DLR-001',
     },
+
     {
       name: 'description',
       label: 'Description',
@@ -188,6 +206,7 @@ export default function DealerAreasPage() {
       placeholder:
         'Optional description',
     },
+
     ...(isps.length > 0
       ? [
           {
@@ -196,21 +215,41 @@ export default function DealerAreasPage() {
             type: 'select' as const,
             required: true,
             searchable: true,
-            options: isps.map((isp: any) => ({
-              label: isp.name,
-              value: isp.name,
-            })),
+
+            // IMPORTANT:
+            // Dealer Area can belong to multiple ISPs.
+            multiple: true,
+
+            placeholder:
+              'Select ISP(s)',
+
+            options: isps.map(
+              (isp: any) => ({
+                label: isp.name,
+                value: isp.name,
+              })
+            ),
           },
         ]
       : []),
   ];
 
   const transformAreaData = (data: any) => ({
-    name: data.name?.trim() || '',
-    code: data.code?.trim() || '',
+    name:
+      data.name?.trim() || '',
+
+    code:
+      data.code?.trim() || '',
+
     description:
       data.description?.trim() || '',
-    isp: data.isp || '',
+
+    // Always send an array.
+    isp: Array.isArray(data.isp)
+      ? data.isp
+      : data.isp
+      ? [data.isp]
+      : [],
   });
 
   const handleAreaAdded = (data: any) => {
@@ -222,6 +261,7 @@ export default function DealerAreasPage() {
 
     setEditingArea(null);
     setIsModalOpen(false);
+
     fetchAreas();
   };
 
@@ -272,6 +312,7 @@ export default function DealerAreasPage() {
     event?: React.MouseEvent
   ) => {
     event?.stopPropagation();
+
     setEditingArea(area);
     setIsModalOpen(true);
   };
@@ -295,9 +336,15 @@ export default function DealerAreasPage() {
         area.code
           ?.toLowerCase()
           .includes(query) ||
-        area.isp
-          ?.toLowerCase()
-          .includes(query);
+        (
+          Array.isArray(area.isp)
+            ? area.isp
+                .join(' ')
+                .toLowerCase()
+            : String(
+                area.isp || ''
+              ).toLowerCase()
+        ).includes(query);
 
       const isActive =
         area.dealers > 0;
@@ -503,7 +550,7 @@ export default function DealerAreasPage() {
               setEditingArea(null);
               setIsModalOpen(true);
             }}
-            className="flex items-center gap-2 rounded-xl bg-[#d6b138] px-4 py-2.5 text-sm  text-white-900 "
+            className="flex items-center gap-2 rounded-xl bg-[#d6b138] px-4 py-2.5 text-sm text-white-900"
           >
             <PlusCircle className="h-4 w-4" />
             Add Dealer Area
@@ -537,8 +584,8 @@ export default function DealerAreasPage() {
                 {statusFilter === 'all'
                   ? 'All Areas'
                   : statusFilter === 'active'
-                    ? 'Active Areas'
-                    : 'Inactive Areas'}
+                  ? 'Active Areas'
+                  : 'Inactive Areas'}
               </span>
 
               <ChevronDown
@@ -556,9 +603,7 @@ export default function DealerAreasPage() {
                   type="button"
                   className="fixed inset-0 z-10 h-full w-full cursor-default"
                   onClick={() =>
-                    setIsFilterOpen(
-                      false
-                    )
+                    setIsFilterOpen(false)
                   }
                   aria-label="Close filter"
                 />
@@ -695,12 +740,18 @@ export default function DealerAreasPage() {
                               </p>
                             )}
 
-                            {area.isp && (
-                              <p className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400">
-                                <Wifi className="h-3 w-3" />
-                                {area.isp}
-                              </p>
-                            )}
+                            {Array.isArray(
+                              area.isp
+                            ) &&
+                              area.isp.length >
+                                0 && (
+                                <p className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400">
+                                  <Wifi className="h-3 w-3" />
+                                  {area.isp.join(
+                                    ', '
+                                  )}
+                                </p>
+                              )}
                           </div>
                         </div>
 
@@ -763,17 +814,21 @@ export default function DealerAreasPage() {
                       {isExpanded && (
                         <>
                           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 dark:border-gray-700">
-                            {area.isp && (
-                              <InfoBlock
-                                icon={
-                                  <Wifi className="h-4 w-4 text-blue-500" />
-                                }
-                                label="ISP"
-                                value={
-                                  area.isp
-                                }
-                              />
-                            )}
+                            {Array.isArray(
+                              area.isp
+                            ) &&
+                              area.isp.length >
+                                0 && (
+                                <InfoBlock
+                                  icon={
+                                    <Wifi className="h-4 w-4 text-blue-500" />
+                                  }
+                                  label="ISP"
+                                  value={area.isp.join(
+                                    ', '
+                                  )}
+                                />
+                              )}
 
                             <InfoBlock
                               icon={
@@ -942,8 +997,15 @@ export default function DealerAreasPage() {
                     editingArea.description ||
                     '',
                   isp:
-                    editingArea.isp ||
-                    '',
+                    Array.isArray(
+                      editingArea.isp
+                    )
+                      ? editingArea.isp
+                      : editingArea.isp
+                      ? [
+                          editingArea.isp,
+                        ]
+                      : [],
                 }
               : undefined
           }

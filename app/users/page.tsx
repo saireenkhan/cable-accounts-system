@@ -557,32 +557,47 @@ function UsersPageContent() {
     }
   };
 
-  /* ==========================================================
-     RESOLVE ISP NAME
-  ========================================================== */
+/* ==========================================================
+   RESOLVE ISP NAME
+========================================================== */
 
-  const resolveIspName = (
-    raw: any,
-    ispList: any[]
-  ): string => {
-    if (!raw) return '';
+const resolveIspName = (
+  raw: any,
+  ispList: any[]
+): string => {
+  if (!raw) return '';
 
-    if (typeof raw === 'object') {
-      return raw.name || raw.ispName || '';
-    }
+  // If raw is an array, resolve every ISP
+  // and return them comma-separated.
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) =>
+        resolveIspName(item, ispList)
+      )
+      .filter(Boolean)
+      .join(', ');
+  }
 
-    const rawStr = String(raw);
-
-    const match = ispList.find(
-      (i) =>
-        String(i._id) === rawStr ||
-        String(i.id) === rawStr ||
-        String(i.name).toLowerCase() ===
-          rawStr.toLowerCase()
+  if (typeof raw === 'object') {
+    return (
+      raw.name ||
+      raw.ispName ||
+      ''
     );
+  }
 
-    return match?.name || rawStr;
-  };
+  const rawStr = String(raw);
+
+  const match = ispList.find(
+    (i) =>
+      String(i._id) === rawStr ||
+      String(i.id) === rawStr ||
+      String(i.name).toLowerCase() ===
+        rawStr.toLowerCase()
+  );
+
+  return match?.name || rawStr;
+};
 
   /* ==========================================================
      FETCH USERS + PAYMENTS
@@ -1021,42 +1036,89 @@ function UsersPageContent() {
   ];
 
   /* ==========================================================
-     DYNAMIC AREA OPTIONS — filtered by selected ISP
-  ========================================================== */
+   DYNAMIC AREA OPTIONS — filtered by selected ISP
+========================================================== */
 
-  const resolveDynamicOptions = (
-    fieldName: string,
-    formData: Record<string, any>
-  ) => {
-    if (fieldName !== 'area') {
-      return [];
-    }
+const resolveDynamicOptions = (
+  fieldName: string,
+  formData: Record<string, any>
+) => {
+  if (fieldName !== 'area') {
+    return [];
+  }
 
-    // No ISPs configured at all -> show every area
-    if (isps.length === 0) {
-      return areas.map((a) => ({
-        label: a.name,
-        value: a.name,
-      }));
-    }
+  // ========================================================
+  // NO ISP CONFIGURED
+  // ========================================================
 
-    // ISP not selected yet -> no areas
-    if (!formData.isp) {
-      return [];
-    }
+  if (isps.length === 0) {
+    return areas.map((a) => ({
+      label: a.name,
+      value: a.name,
+    }));
+  }
 
-    // Only areas that belong to the chosen ISP
-    return areas
-      .filter(
-        (a) =>
-          resolveIspName(a.isp, isps).toLowerCase() ===
-          String(formData.isp).toLowerCase()
-      )
-      .map((a) => ({
-        label: a.name,
-        value: a.name,
-      }));
-  };
+  // ========================================================
+  // ISP NOT SELECTED
+  // ========================================================
+
+  const selectedIsp =
+    String(formData.isp || '')
+      .trim()
+      .toLowerCase();
+
+  if (!selectedIsp) {
+    return [];
+  }
+
+  // ========================================================
+  // FILTER AREAS
+  //
+  // An area can now have:
+  //
+  // isp: ["SFA Net", "StormFiber"]
+  //
+  // or old data:
+  //
+  // isp: "SFA Net"
+  //
+  // Both are supported.
+  // ========================================================
+
+  return areas
+    .filter((area) => {
+      let areaIsps: any[] = [];
+
+      if (Array.isArray(area.isp)) {
+        areaIsps = area.isp;
+      } else if (
+        area.isp !== undefined &&
+        area.isp !== null &&
+        area.isp !== ''
+      ) {
+        areaIsps = [area.isp];
+      }
+
+      return areaIsps.some((areaIsp) => {
+        const resolvedAreaIsp =
+          resolveIspName(
+            areaIsp,
+            isps
+          )
+            .trim()
+            .toLowerCase();
+
+        return (
+          resolvedAreaIsp ===
+          selectedIsp
+        );
+      });
+    })
+    .map((area) => ({
+      label: area.name,
+      value: area.name,
+    }));
+};
 
   /* ==========================================================
      TRANSFORM FORM DATA

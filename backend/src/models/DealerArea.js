@@ -8,29 +8,52 @@ const dealerAreaSchema = new mongoose.Schema(
       required: false,
       index: true,
     },
+
     name: {
       type: String,
       required: true,
       trim: true,
     },
+
     code: {
-      type: String,
-      trim: true,
-    },
-    description: {
-      type: String,
-      trim: true,
-    },
-    // ISP this area belongs to (stored as ISP name)
-    isp: {
       type: String,
       trim: true,
       default: '',
     },
+
+    description: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
+    // Multiple ISPs can belong to one dealer area.
+    // ISP names are stored as strings.
+    isp: {
+      type: [String],
+      default: [],
+      set: (value) => {
+        if (!value) return [];
+
+        if (!Array.isArray(value)) {
+          value = [value];
+        }
+
+        return [
+          ...new Set(
+            value
+              .map((item) => String(item).trim())
+              .filter(Boolean)
+          ),
+        ];
+      },
+    },
+
     dealers: {
       type: Number,
       default: 0,
     },
+
     isActive: {
       type: Boolean,
       default: true,
@@ -41,6 +64,12 @@ const dealerAreaSchema = new mongoose.Schema(
   }
 );
 
-dealerAreaSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+dealerAreaSchema.index(
+  { tenantId: 1, name: 1 },
+  { unique: true }
+);
 
-module.exports = mongoose.model('DealerArea', dealerAreaSchema);
+module.exports = mongoose.model(
+  'DealerArea',
+  dealerAreaSchema
+);

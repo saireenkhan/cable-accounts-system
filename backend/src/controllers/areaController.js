@@ -2,69 +2,152 @@ const AreaModel = require('../models/Area');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 
+const normalizeIsps = (value) => {
+  if (!value) return [];
+
+  const values = Array.isArray(value)
+    ? value
+    : [value];
+
+  return [
+    ...new Set(
+      values
+        .map((item) => String(item).trim())
+        .filter(Boolean)
+    ),
+  ];
+};
+
+// ============================================================
+// GET AREAS
+// ============================================================
+
 exports.getAreas = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
+  const Area = tenantScope(AreaModel, req);
+
   try {
     const areas = await Area.find();
-    res.json({ success: true, areas });
+
+    res.json({
+      success: true,
+      areas,
+    });
   } catch (error) {
     logger.error(`Get areas error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
 
+// ============================================================
+// CREATE AREA
+// ============================================================
+
 exports.createArea = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
+  const Area = tenantScope(AreaModel, req);
+
   try {
-    const { name, code, description, isp } = req.body;
+    const {
+      name,
+      code,
+      description,
+      isp,
+    } = req.body;
 
-    console.log('📝 Creating area with data:', req.body);
+    console.log(
+      '📝 Creating area with data:',
+      req.body
+    );
 
-    // ✅ Validate required fields
-    if (!name) {
+    // Validate required fields
+    if (!name || !String(name).trim()) {
       return res.status(400).json({
         success: false,
-        message: 'Area name is required'
+        message: 'Area name is required',
       });
     }
 
-    // ✅ Check if area already exists
-    const existingArea = await Area.findOne({ name });
+    const normalizedIsps = normalizeIsps(isp);
+
+    // ISP is required
+    if (normalizedIsps.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one ISP is required',
+      });
+    }
+
+    // Check duplicate area
+    const existingArea = await Area.findOne({
+      name: String(name).trim(),
+    });
+
     if (existingArea) {
       return res.status(400).json({
         success: false,
-        message: `Area "${name}" already exists`
+        message: `Area "${name}" already exists`,
       });
     }
 
     const area = await Area.create({
-      name: name.trim(),
-      code: code || '',
-      description: description || '',
-      isp: isp || '',
-      isActive: true
+      name: String(name).trim(),
+      code: code ? String(code).trim() : '',
+      description: description
+        ? String(description).trim()
+        : '',
+      isp: normalizedIsps,
+      isActive: true,
     });
 
-    console.log('✅ Area created successfully:', area);
+    console.log(
+      '✅ Area created successfully:',
+      area
+    );
 
     res.status(201).json({
       success: true,
       area,
-      message: 'Area created successfully'
+      message: 'Area created successfully',
     });
   } catch (error) {
-    console.error('❌ Create area error:', error);
+    console.error(
+      '❌ Create area error:',
+      error
+    );
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'An area with this name already exists',
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error'
+      message:
+        error.message || 'Server error',
     });
   }
 };
 
+// ============================================================
+// UPDATE AREA
+// ============================================================
+
 exports.updateArea = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
+  const Area = tenantScope(AreaModel, req);
+
   try {
-    const { name, code, description, isp, isActive } = req.body;
+    const {
+      name,
+      code,
+      description,
+      isp,
+      isActive,
+    } = req.body;
 
     const update = {};
 
@@ -75,6 +158,7 @@ exports.updateArea = async (req, res) => {
           message: 'Area name cannot be empty',
         });
       }
+
       update.name = String(name).trim();
     }
 
@@ -83,22 +167,38 @@ exports.updateArea = async (req, res) => {
     }
 
     if (description !== undefined) {
-      update.description = String(description).trim();
+      update.description =
+        String(description).trim();
     }
 
     if (isp !== undefined) {
-      update.isp = String(isp).trim();
+      const normalizedIsps =
+        normalizeIsps(isp);
+
+      if (normalizedIsps.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'At least one ISP is required',
+        });
+      }
+
+      update.isp = normalizedIsps;
     }
 
     if (isActive !== undefined) {
       update.isActive = Boolean(isActive);
     }
 
-    const area = await Area.findByIdAndUpdate(
-      req.params.id,
-      update,
-      { new: true, runValidators: true }
-    );
+    const area =
+      await Area.findByIdAndUpdate(
+        req.params.id,
+        update,
+        {
+          new: true,
+          runValidators: true,
+        }
+      );
 
     if (!area) {
       return res.status(404).json({
@@ -113,32 +213,58 @@ exports.updateArea = async (req, res) => {
       message: 'Area updated successfully',
     });
   } catch (error) {
-    // Handle duplicate name
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: 'An area with this name already exists',
+        message:
+          'An area with this name already exists',
       });
     }
 
-    logger.error(`Update area error: ${error.message}`);
+    logger.error(
+      `Update area error: ${error.message}`
+    );
+
     res.status(500).json({
       success: false,
-      message: error.message || 'Server error',
+      message:
+        error.message || 'Server error',
     });
   }
 };
 
+// ============================================================
+// DELETE AREA
+// ============================================================
+
 exports.deleteArea = async (req, res) => {
-    const Area = tenantScope(AreaModel, req);
+  const Area = tenantScope(AreaModel, req);
+
   try {
-    const area = await Area.findByIdAndDelete(req.params.id);
+    const area =
+      await Area.findByIdAndDelete(
+        req.params.id
+      );
+
     if (!area) {
-      return res.status(404).json({ message: 'Area not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Area not found',
+      });
     }
-    res.json({ success: true, message: 'Area deleted successfully' });
+
+    res.json({
+      success: true,
+      message: 'Area deleted successfully',
+    });
   } catch (error) {
-    logger.error(`Delete area error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    logger.error(
+      `Delete area error: ${error.message}`
+    );
+
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };

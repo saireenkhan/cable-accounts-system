@@ -1,55 +1,109 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { X, User, Search } from 'lucide-react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
+
+import {
+  X,
+  User,
+  Search,
+  Check,
+} from 'lucide-react';
+
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 import api from '@/app/lib/api';
 
-export type FieldType = 'text' | 'select' | 'textarea' | 'date' | 'number';
+export type FieldType =
+  | 'text'
+  | 'select'
+  | 'textarea'
+  | 'date'
+  | 'number';
 
 export interface Field {
   name: string;
   label: string;
   type?: FieldType;
-  options?: Array<{ label: string; value: string }>;
+
+  options?: Array<{
+    label: string;
+    value: string;
+  }>;
+
   required?: boolean;
   placeholder?: string;
+
   dependsOn?: string;
-  updateOnChange?: (value: any, formData: any, context?: any) => any;
+
+  updateOnChange?: (
+    value: any,
+    formData: any,
+    context?: any
+  ) => any;
+
   searchable?: boolean;
+
+  multiple?: boolean;
+
   readOnly?: boolean;
   defaultValue?: any;
+
   min?: number;
-  max?: number | ((formData: any, context?: any) => number);
+
+  max?:
+    | number
+    | ((formData: any, context?: any) => number);
+
   maxLength?: number;
   step?: number;
+
   editable?: boolean;
-  /**
-   * Field stays disabled until the named field has a value.
-   * The field is also cleared whenever the named field changes.
-   * If `dynamicOptions` is provided, its options are used for this field.
-   */
+
   disabledUntil?: string;
 }
 
-type Option = { label: string; value: string };
+type Option = {
+  label: string;
+  value: string;
+};
 
 interface AddUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (data: any) => void;
+
   title?: string;
   subtitle?: string;
+
   fields?: Field[];
+
   submitLabel?: string;
   cancelLabel?: string;
-  color?: 'blue' | 'green' | 'red' | 'purple' | 'indigo' | 'orange';
+
+  color?:
+    | 'blue'
+    | 'green'
+    | 'red'
+    | 'purple'
+    | 'indigo'
+    | 'orange';
+
   endpoint?: string;
+
   transformData?: (data: any) => any;
+
   context?: any;
+
   method?: 'POST' | 'PUT' | 'PATCH';
+
   initialData?: Record<string, any>;
+
   dynamicOptions?: (
     fieldName: string,
     formData: Record<string, any>
@@ -87,12 +141,23 @@ const defaultFields: Field[] = [
 ];
 
 const colorMap = {
-  blue: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800',
-  green: 'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800',
-  red: 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800',
-  purple: 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800',
-  indigo: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800',
-  orange: 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800',
+  blue:
+    'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800',
+
+  green:
+    'bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800',
+
+  red:
+    'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800',
+
+  purple:
+    'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800',
+
+  indigo:
+    'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800',
+
+  orange:
+    'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800',
 };
 
 const buttonColorMap = {
@@ -105,7 +170,7 @@ const buttonColorMap = {
 };
 
 // ======================================================
-// SEARCHABLE SELECT
+// SEARCHABLE SINGLE SELECT
 // ======================================================
 
 function SearchableSelect({
@@ -119,23 +184,37 @@ function SearchableSelect({
 }: {
   options: Option[];
   value: string;
-  onChange: (name: string, value: string) => void;
+  onChange: (
+    name: string,
+    value: string
+  ) => void;
   placeholder: string;
   label?: string;
   name: string;
   disabled?: boolean;
 }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [isOpen, setIsOpen] = useState(false);
-  const [displayValue, setDisplayValue] = useState('');
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [searchTerm, setSearchTerm] =
+    useState('');
+
+  const [isOpen, setIsOpen] =
+    useState(false);
+
+  const [displayValue, setDisplayValue] =
+    useState('');
+
+  const dropdownRef =
+    useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const selected = options.find((opt) => opt.value === value);
-    setDisplayValue(selected?.label || '');
+    const selected = options.find(
+      (opt) => opt.value === value
+    );
+
+    setDisplayValue(
+      selected?.label || ''
+    );
   }, [value, options]);
 
-  // Close dropdown if the field becomes disabled
   useEffect(() => {
     if (disabled) {
       setIsOpen(false);
@@ -144,50 +223,76 @@ function SearchableSelect({
   }, [disabled]);
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside = (
+      event: MouseEvent
+    ) => {
       if (
         dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
+        !dropdownRef.current.contains(
+          event.target as Node
+        )
       ) {
         setIsOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener(
+      'mousedown',
+      handleClickOutside
+    );
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener(
+        'mousedown',
+        handleClickOutside
+      );
     };
   }, []);
 
-  const filteredOptions = options.filter((opt) =>
-    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredOptions =
+    options.filter((opt) =>
+      opt.label
+        .toLowerCase()
+        .includes(
+          searchTerm.toLowerCase()
+        )
+    );
 
-  const handleSelect = (optValue: string, optLabel: string) => {
+  const handleSelect = (
+    optValue: string,
+    optLabel: string
+  ) => {
     setDisplayValue(optLabel);
     setIsOpen(false);
     setSearchTerm('');
+
     onChange(name, optValue);
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div
+      className="relative"
+      ref={dropdownRef}
+    >
       <div
         aria-disabled={disabled}
         className={cn(
           'w-full px-3 py-2 rounded-lg border flex items-center justify-between',
+
           disabled
             ? 'cursor-not-allowed opacity-60 bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600'
             : 'cursor-pointer bg-white dark:bg-gray-800',
+
           !disabled &&
             (isOpen
               ? 'border-blue-500 ring-2 ring-blue-500/50'
               : 'border-gray-300 dark:border-gray-600'),
+
           'text-gray-900 dark:text-white'
         )}
         onClick={() => {
           if (disabled) return;
+
           setIsOpen(!isOpen);
         }}
       >
@@ -198,7 +303,8 @@ function SearchableSelect({
               : 'text-gray-400'
           }
         >
-          {displayValue || placeholder}
+          {displayValue ||
+            placeholder}
         </span>
 
         <span className="text-gray-400 ml-2">
@@ -215,35 +321,330 @@ function SearchableSelect({
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={`Search ${label || 'options'}...`}
+                onChange={(e) =>
+                  setSearchTerm(
+                    e.target.value
+                  )
+                }
+                placeholder={`Search ${
+                  label || 'options'
+                }...`}
                 className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) =>
+                  e.stopPropagation()
+                }
               />
             </div>
           </div>
 
           <div className="overflow-y-auto max-h-48">
-            {filteredOptions.length === 0 ? (
+            {filteredOptions.length ===
+            0 ? (
               <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
-                No {label?.toLowerCase() || 'options'} found
+                No{' '}
+                {label?.toLowerCase() ||
+                  'options'}{' '}
+                found
               </div>
             ) : (
-              filteredOptions.map((opt) => (
-                <div
-                  key={opt.value}
-                  className={cn(
-                    'px-4 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
-                    value === opt.value &&
-                      'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
-                  )}
-                  onClick={() => handleSelect(opt.value, opt.label)}
-                >
-                  {opt.label}
-                </div>
-              ))
+              filteredOptions.map(
+                (opt) => (
+                  <div
+                    key={opt.value}
+                    className={cn(
+                      'px-4 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+
+                      value === opt.value &&
+                        'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                    )}
+                    onClick={() =>
+                      handleSelect(
+                        opt.value,
+                        opt.label
+                      )
+                    }
+                  >
+                    {opt.label}
+                  </div>
+                )
+              )
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ======================================================
+// SEARCHABLE MULTI SELECT
+// ======================================================
+
+function SearchableMultiSelect({
+  options,
+  value,
+  onChange,
+  placeholder,
+  label,
+  name,
+  disabled = false,
+}: {
+  options: Option[];
+  value: string[];
+  onChange: (
+    name: string,
+    value: string[]
+  ) => void;
+  placeholder: string;
+  label?: string;
+  name: string;
+  disabled?: boolean;
+}) {
+  const [searchTerm, setSearchTerm] =
+    useState('');
+
+  const [isOpen, setIsOpen] =
+    useState(false);
+
+  const dropdownRef =
+    useRef<HTMLDivElement>(null);
+
+  const selectedValues =
+    Array.isArray(value)
+      ? value
+      : [];
+
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearchTerm('');
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    const handleClickOutside = (
+      event: MouseEvent
+    ) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(
+          event.target as Node
+        )
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener(
+      'mousedown',
+      handleClickOutside
+    );
+
+    return () => {
+      document.removeEventListener(
+        'mousedown',
+        handleClickOutside
+      );
+    };
+  }, []);
+
+  const filteredOptions =
+    options.filter((opt) =>
+      opt.label
+        .toLowerCase()
+        .includes(
+          searchTerm.toLowerCase()
+        )
+    );
+
+  const toggleOption = (
+    optionValue: string
+  ) => {
+    const exists =
+      selectedValues.includes(
+        optionValue
+      );
+
+    const nextValue = exists
+      ? selectedValues.filter(
+          (item) =>
+            item !== optionValue
+        )
+      : [
+          ...selectedValues,
+          optionValue,
+        ];
+
+    onChange(
+      name,
+      [
+        ...new Set(
+          nextValue.filter(Boolean)
+        ),
+      ]
+    );
+  };
+
+  const selectedLabels =
+    options
+      .filter((option) =>
+        selectedValues.includes(
+          option.value
+        )
+      )
+      .map((option) => option.label);
+
+  return (
+    <div
+      className="relative"
+      ref={dropdownRef}
+    >
+      <div
+        aria-disabled={disabled}
+        className={cn(
+          'w-full min-h-[42px] px-3 py-2 rounded-lg border flex items-center justify-between gap-2',
+
+          disabled
+            ? 'cursor-not-allowed opacity-60 bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600'
+            : 'cursor-pointer bg-white dark:bg-gray-800',
+
+          !disabled &&
+            (isOpen
+              ? 'border-blue-500 ring-2 ring-blue-500/50'
+              : 'border-gray-300 dark:border-gray-600'),
+
+          'text-gray-900 dark:text-white'
+        )}
+        onClick={() => {
+          if (disabled) return;
+
+          setIsOpen(!isOpen);
+        }}
+      >
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+          {selectedLabels.length >
+          0 ? (
+            selectedLabels.map(
+              (item) => (
+                <span
+                  key={item}
+                  className="rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                >
+                  {item}
+                </span>
+              )
+            )
+          ) : (
+            <span className="text-gray-400">
+              {placeholder}
+            </span>
+          )}
+        </div>
+
+        <span className="flex-shrink-0 text-gray-400">
+          {isOpen ? '▲' : '▼'}
+        </span>
+      </div>
+
+      {isOpen && !disabled && (
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          <div className="border-b border-gray-200 p-2 dark:border-gray-700">
+            <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-700">
+              <Search className="h-4 w-4 text-gray-400" />
+
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) =>
+                  setSearchTerm(
+                    e.target.value
+                  )
+                }
+                placeholder={`Search ${
+                  label || 'options'
+                }...`}
+                className="flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder-gray-400 dark:text-white"
+                onClick={(e) =>
+                  e.stopPropagation()
+                }
+              />
+            </div>
+          </div>
+
+          <div className="max-h-56 overflow-y-auto">
+            {filteredOptions.length ===
+            0 ? (
+              <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                No{' '}
+                {label?.toLowerCase() ||
+                  'options'}{' '}
+                found
+              </div>
+            ) : (
+              filteredOptions.map(
+                (option) => {
+                  const selected =
+                    selectedValues.includes(
+                      option.value
+                    );
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() =>
+                        toggleOption(
+                          option.value
+                        )
+                      }
+                      className={cn(
+                        'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors',
+
+                        selected
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                          : 'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700'
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
+
+                          selected
+                            ? 'border-blue-600 bg-blue-600 text-white'
+                            : 'border-gray-300 dark:border-gray-500'
+                        )}
+                      >
+                        {selected && (
+                          <Check className="h-3 w-3" />
+                        )}
+                      </span>
+
+                      <span className="truncate">
+                        {
+                          option.label
+                        }
+                      </span>
+                    </button>
+                  );
+                }
+              )
+            )}
+          </div>
+
+          {selectedValues.length >
+            0 && (
+            <div className="border-t border-gray-200 px-3 py-2 dark:border-gray-700">
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {selectedValues.length}{' '}
+                ISP
+                {selectedValues.length !==
+                1
+                  ? 's'
+                  : ''}{' '}
+                selected
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -271,17 +672,28 @@ export function AddUserModal({
   initialData,
   dynamicOptions,
 }: AddUserModalProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState<Record<string, any>>({});
-  const [apiError, setApiError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] =
+    useState(false);
 
-  const prevIsOpenRef = useRef(isOpen);
-  const retryCountRef = useRef(0);
+  const [formData, setFormData] =
+    useState<Record<string, any>>({});
+
+  const [apiError, setApiError] =
+    useState<string | null>(null);
+
+  const prevIsOpenRef =
+    useRef(isOpen);
+
+  const retryCountRef =
+    useRef(0);
 
   const maxRetries = 3;
 
   const finalFields = useMemo(() => {
-    return fields && fields.length > 0 ? fields : defaultFields;
+    return fields &&
+      fields.length > 0
+      ? fields
+      : defaultFields;
   }, [fields]);
 
   // ======================================================
@@ -289,15 +701,44 @@ export function AddUserModal({
   // ======================================================
 
   useEffect(() => {
-    if (isOpen && !prevIsOpenRef.current) {
-      const formInit: Record<string, any> = {};
+    if (
+      isOpen &&
+      !prevIsOpenRef.current
+    ) {
+      const formInit: Record<
+        string,
+        any
+      > = {};
 
       finalFields.forEach((field) => {
         if (
           initialData &&
-          initialData[field.name] !== undefined
+          initialData[field.name] !==
+            undefined
         ) {
-          formInit[field.name] = initialData[field.name];
+          // Make sure multi-select
+          // edit values are always arrays.
+          if (field.multiple) {
+            const initialValue =
+              initialData[
+                field.name
+              ];
+
+            formInit[field.name] =
+              Array.isArray(
+                initialValue
+              )
+                ? initialValue
+                : initialValue
+                ? [initialValue]
+                : [];
+          } else {
+            formInit[field.name] =
+              initialData[
+                field.name
+              ];
+          }
+
           return;
         }
 
@@ -307,37 +748,71 @@ export function AddUserModal({
           !field.dependsOn
         ) {
           try {
-            const initialValue = field.updateOnChange(
-              null,
-              {},
-              context
-            );
+            const initialValue =
+              field.updateOnChange(
+                null,
+                {},
+                context
+              );
 
-            formInit[field.name] = initialValue ?? '';
+            formInit[field.name] =
+              field.multiple
+                ? Array.isArray(
+                    initialValue
+                  )
+                  ? initialValue
+                  : initialValue
+                  ? [initialValue]
+                  : []
+                : initialValue ??
+                  '';
           } catch (e) {
             console.error(
               `Error computing initial value for ${field.name}:`,
               e
             );
 
-            formInit[field.name] = '';
+            formInit[field.name] =
+              field.multiple
+                ? []
+                : '';
           }
 
           return;
         }
 
-        if (field.defaultValue !== undefined) {
-          formInit[field.name] = field.defaultValue;
+        if (
+          field.defaultValue !==
+          undefined
+        ) {
+          formInit[field.name] =
+            field.multiple
+              ? Array.isArray(
+                  field.defaultValue
+                )
+                ? field.defaultValue
+                : field.defaultValue
+                ? [
+                    field.defaultValue,
+                  ]
+                : []
+              : field.defaultValue;
+
           return;
         }
 
-        formInit[field.name] = '';
+        if (field.multiple) {
+          formInit[field.name] = [];
+        } else {
+          formInit[field.name] = '';
+        }
       });
 
       formInit._context = context;
 
       setFormData(formInit);
       setApiError(null);
+
       retryCountRef.current = 0;
     }
 
@@ -350,368 +825,564 @@ export function AddUserModal({
   ]);
 
   // ======================================================
-  // GET STATIC OR DYNAMIC MAX
+  // GET FIELD MAX
   // ======================================================
 
-  const getFieldMax = useCallback(
-    (
-      field: Field,
-      data: Record<string, any>
-    ): number | undefined => {
-      if (typeof field.max === 'function') {
-        try {
-          return field.max(data, context);
-        } catch (e) {
-          console.error(
-            `Error calculating max for ${field.name}:`,
-            e
-          );
+  const getFieldMax =
+    useCallback(
+      (
+        field: Field,
+        data: Record<string, any>
+      ): number | undefined => {
+        if (
+          typeof field.max ===
+          'function'
+        ) {
+          try {
+            return field.max(
+              data,
+              context
+            );
+          } catch (e) {
+            console.error(
+              `Error calculating max for ${field.name}:`,
+              e
+            );
 
-          return undefined;
+            return undefined;
+          }
         }
-      }
 
-      return field.max;
-    },
-    [context]
-  );
+        return field.max;
+      },
+      [context]
+    );
 
   // ======================================================
-  // RESOLVE OPTIONS (static or dynamic)
+  // RESOLVE OPTIONS
   // ======================================================
 
-  const getFieldOptions = useCallback(
-    (field: Field, data: Record<string, any>): Option[] => {
-      if (dynamicOptions && field.disabledUntil) {
-        try {
-          return dynamicOptions(field.name, data) || [];
-        } catch (e) {
-          console.error(
-            `Error resolving dynamic options for ${field.name}:`,
-            e
-          );
-          return [];
+  const getFieldOptions =
+    useCallback(
+      (
+        field: Field,
+        data: Record<string, any>
+      ): Option[] => {
+        if (
+          dynamicOptions &&
+          field.disabledUntil
+        ) {
+          try {
+            return (
+              dynamicOptions(
+                field.name,
+                data
+              ) || []
+            );
+          } catch (e) {
+            console.error(
+              `Error resolving dynamic options for ${field.name}:`,
+              e
+            );
+
+            return [];
+          }
         }
-      }
 
-      return field.options || [];
-    },
-    [dynamicOptions]
-  );
+        return field.options || [];
+      },
+      [dynamicOptions]
+    );
 
   // ======================================================
-  // IS FIELD DISABLED BECAUSE ITS PARENT IS EMPTY
+  // LOCKED BY PARENT
   // ======================================================
 
-  const isLockedByParent = useCallback(
-    (field: Field, data: Record<string, any>): boolean => {
-      if (!field.disabledUntil) return false;
-      return !data[field.disabledUntil];
-    },
-    []
-  );
+  const isLockedByParent =
+    useCallback(
+      (
+        field: Field,
+        data: Record<string, any>
+      ): boolean => {
+        if (!field.disabledUntil) {
+          return false;
+        }
+
+        return !data[
+          field.disabledUntil
+        ];
+      },
+      []
+    );
 
   // ======================================================
   // UPDATE DEPENDENT FIELDS
   // ======================================================
 
-  const updateDependentFields = useCallback(
-    (name: string, value: any) => {
-      const previousValue = formData[name];
+  const updateDependentFields =
+    useCallback(
+      (
+        name: string,
+        value: any
+      ) => {
+        const previousValue =
+          formData[name];
 
-      const newFormData = {
-        ...formData,
-        [name]: value,
-      };
-
-      // --------------------------------------------------
-      // CLEAR FIELDS THAT ARE LOCKED BEHIND THIS FIELD
-      // (runs only on user-driven changes, so edit-mode
-      //  initial values are never wiped)
-      // --------------------------------------------------
-
-       if (previousValue !== value) {
-        // Clear every field locked behind this one, and everything
-        // locked behind those (e.g. ISP -> Area -> Dealer ID)
-        const clearLockedFields = (parent: string) => {
-          finalFields.forEach((field) => {
-            if (field.disabledUntil === parent) {
-              newFormData[field.name] = '';
-              clearLockedFields(field.name);
-            }
-          });
+        const newFormData = {
+          ...formData,
+          [name]: value,
         };
 
-        clearLockedFields(name);
-      }
-
-      // --------------------------------------------------
-      // PASS 1
-      // --------------------------------------------------
-
-      finalFields.forEach((field) => {
         if (
-          field.dependsOn === name &&
-          field.updateOnChange
+          previousValue !== value
         ) {
-          try {
-            const newValue = field.updateOnChange(
-              value,
-              newFormData,
-              context
-            );
+          const clearLockedFields =
+            (parent: string) => {
+              finalFields.forEach(
+                (field) => {
+                  if (
+                    field.disabledUntil ===
+                    parent
+                  ) {
+                    newFormData[
+                      field.name
+                    ] = field.multiple
+                      ? []
+                      : '';
+
+                    clearLockedFields(
+                      field.name
+                    );
+                  }
+                }
+              );
+            };
+
+          clearLockedFields(name);
+        }
+
+        // PASS 1
+        finalFields.forEach(
+          (field) => {
+            if (
+              field.dependsOn ===
+                name &&
+              field.updateOnChange
+            ) {
+              try {
+                const newValue =
+                  field.updateOnChange(
+                    value,
+                    newFormData,
+                    context
+                  );
+
+                if (
+                  newValue !==
+                    undefined &&
+                  newValue !== null
+                ) {
+                  newFormData[
+                    field.name
+                  ] = field.multiple
+                    ? Array.isArray(
+                        newValue
+                      )
+                      ? newValue
+                      : [
+                          newValue,
+                        ]
+                    : newValue;
+                }
+              } catch (e) {
+                console.error(
+                  `Error updating ${field.name}:`,
+                  e
+                );
+              }
+            }
+          }
+        );
+
+        // PASS 2
+        finalFields.forEach(
+          (field) => {
+            if (
+              field.dependsOn &&
+              field.updateOnChange
+            ) {
+              try {
+                const newValue =
+                  field.updateOnChange(
+                    newFormData[
+                      field.dependsOn
+                    ],
+                    newFormData,
+                    context
+                  );
+
+                if (
+                  newValue !==
+                    undefined &&
+                  newValue !== null
+                ) {
+                  newFormData[
+                    field.name
+                  ] = field.multiple
+                    ? Array.isArray(
+                        newValue
+                      )
+                      ? newValue
+                      : [
+                          newValue,
+                        ]
+                    : newValue;
+                }
+              } catch (e) {
+                console.error(
+                  `Error cascading ${field.name}:`,
+                  e
+                );
+              }
+            }
+          }
+        );
+
+        // NUMBER MAX
+        finalFields.forEach(
+          (field) => {
+            if (
+              field.type !==
+              'number'
+            ) {
+              return;
+            }
+
+            const maxValue =
+              getFieldMax(
+                field,
+                newFormData
+              );
+
+            const currentValue =
+              newFormData[
+                field.name
+              ];
 
             if (
-              newValue !== undefined &&
-              newValue !== null
+              maxValue !==
+                undefined &&
+              currentValue !==
+                '' &&
+              currentValue !==
+                undefined &&
+              currentValue !== null
             ) {
-              newFormData[field.name] = newValue;
+              const numericValue =
+                parseFloat(
+                  String(
+                    currentValue
+                  )
+                );
+
+              if (
+                !Number.isNaN(
+                  numericValue
+                ) &&
+                numericValue >
+                  maxValue
+              ) {
+                newFormData[
+                  field.name
+                ] = maxValue;
+              }
             }
-          } catch (e) {
-            console.error(
-              `Error updating ${field.name}:`,
-              e
-            );
           }
-        }
-      });
+        );
 
-      // --------------------------------------------------
-      // PASS 2
-      // --------------------------------------------------
+        return newFormData;
+      },
+      [
+        formData,
+        finalFields,
+        context,
+        getFieldMax,
+      ]
+    );
 
-      finalFields.forEach((field) => {
+  // ======================================================
+  // NORMAL INPUT CHANGE
+  // ======================================================
+
+  const handleChange =
+    useCallback(
+      (
+        e: React.ChangeEvent<
+          HTMLInputElement |
+            HTMLSelectElement |
+            HTMLTextAreaElement
+        >
+      ) => {
+        const {
+          name,
+          value,
+        } = e.target;
+
+        const changedField =
+          finalFields.find(
+            (field) =>
+              field.name === name
+          );
+
+        let newValue = value;
+
         if (
-          field.dependsOn &&
-          field.updateOnChange
+          changedField?.type ===
+            'number' &&
+          value !== ''
         ) {
-          try {
-            const newValue = field.updateOnChange(
-              newFormData[field.dependsOn],
-              newFormData,
-              context
+          const maxValue =
+            getFieldMax(
+              changedField,
+              {
+                ...formData,
+                [name]: value,
+              }
             );
 
-            if (
-              newValue !== undefined &&
-              newValue !== null
-            ) {
-              newFormData[field.name] = newValue;
-            }
-          } catch (e) {
-            console.error(
-              `Error cascading ${field.name}:`,
-              e
-            );
+          if (
+            maxValue !==
+              undefined &&
+            parseFloat(value) >
+              maxValue
+          ) {
+            newValue =
+              String(maxValue);
           }
         }
-      });
 
-      // --------------------------------------------------
-      // ENFORCE MAX FOR NUMBER FIELDS
-      // --------------------------------------------------
+        const newFormData =
+          updateDependentFields(
+            name,
+            newValue
+          );
 
-      finalFields.forEach((field) => {
-        if (field.type !== 'number') {
-          return;
-        }
-
-        const maxValue = getFieldMax(
-          field,
+        setFormData(
           newFormData
         );
 
-        const currentValue =
-          newFormData[field.name];
+        setApiError(null);
 
-        if (
-          maxValue !== undefined &&
-          currentValue !== '' &&
-          currentValue !== undefined &&
-          currentValue !== null
-        ) {
-          const numericValue = parseFloat(
-            String(currentValue)
+        retryCountRef.current = 0;
+      },
+      [
+        updateDependentFields,
+        finalFields,
+        formData,
+        getFieldMax,
+      ]
+    );
+
+  // ======================================================
+  // SINGLE SELECT CHANGE
+  // ======================================================
+
+  const handleSelectChange =
+    useCallback(
+      (
+        name: string,
+        value: string
+      ) => {
+        const newFormData =
+          updateDependentFields(
+            name,
+            value
           );
 
-          if (
-            !Number.isNaN(numericValue) &&
-            numericValue > maxValue
-          ) {
-            newFormData[field.name] = maxValue;
-          }
-        }
-      });
-
-      return newFormData;
-    },
-    [
-      formData,
-      finalFields,
-      context,
-      getFieldMax,
-    ]
-  );
-
-  // ======================================================
-  // HANDLE NORMAL INPUT CHANGES
-  // ======================================================
-
-  const handleChange = useCallback(
-    (
-      e: React.ChangeEvent<
-        HTMLInputElement |
-        HTMLSelectElement |
-        HTMLTextAreaElement
-      >
-    ) => {
-      const { name, value } = e.target;
-
-      const changedField = finalFields.find(
-        (field) => field.name === name
-      );
-
-      let newValue = value;
-
-      // --------------------------------------------------
-      // PREVENT NUMBER FROM EXCEEDING MAX
-      // --------------------------------------------------
-
-      if (
-        changedField?.type === 'number' &&
-        value !== ''
-      ) {
-        const maxValue = getFieldMax(
-          changedField,
-          {
-            ...formData,
-            [name]: value,
-          }
+        setFormData(
+          newFormData
         );
 
-        if (
-          maxValue !== undefined &&
-          parseFloat(value) > maxValue
-        ) {
-          newValue = String(maxValue);
-        }
-      }
+        setApiError(null);
 
-      const newFormData =
-        updateDependentFields(
-          name,
-          newValue
-        );
-
-      setFormData(newFormData);
-      setApiError(null);
-      retryCountRef.current = 0;
-    },
-    [
-      updateDependentFields,
-      finalFields,
-      formData,
-      getFieldMax,
-    ]
-  );
+        retryCountRef.current = 0;
+      },
+      [updateDependentFields]
+    );
 
   // ======================================================
-  // HANDLE SEARCHABLE SELECT
+  // MULTI SELECT CHANGE
   // ======================================================
 
-  const handleSelectChange = useCallback(
-    (
-      name: string,
-      value: string
-    ) => {
-      const newFormData =
-        updateDependentFields(
-          name,
-          value
+  const handleMultiSelectChange =
+    useCallback(
+      (
+        name: string,
+        value: string[]
+      ) => {
+        const normalizedValue = [
+          ...new Set(
+            (Array.isArray(value)
+              ? value
+              : []
+            )
+              .map((item) =>
+                String(item).trim()
+              )
+              .filter(Boolean)
+          ),
+        ];
+
+        const newFormData =
+          updateDependentFields(
+            name,
+            normalizedValue
+          );
+
+        setFormData(
+          newFormData
         );
 
-      setFormData(newFormData);
-      setApiError(null);
-      retryCountRef.current = 0;
-    },
-    [updateDependentFields]
-  );
+        setApiError(null);
+
+        retryCountRef.current = 0;
+      },
+      [updateDependentFields]
+    );
 
   // ======================================================
   // DUPLICATE RECEIPT CHECK
   // ======================================================
 
-  const isDuplicateReceiptError = (
-    error: any
-  ): boolean => {
-    const errorMessage =
-      error?.response?.data?.message ||
-      error?.message ||
-      '';
+  const isDuplicateReceiptError =
+    (error: any): boolean => {
+      const errorMessage =
+        error?.response?.data
+          ?.message ||
+        error?.message ||
+        '';
 
-    return (
-      errorMessage.includes(
-        'E11000 duplicate key error'
-      ) &&
-      errorMessage.includes('receiptNo')
-    );
-  };
+      return (
+        String(errorMessage).includes(
+          'E11000 duplicate key error'
+        ) &&
+        String(errorMessage).includes(
+          'receiptNo'
+        )
+      );
+    };
 
   // ======================================================
   // SUBMIT WITH RETRY
   // ======================================================
 
-  const submitWithRetry = async (
-    payload: any
-  ): Promise<any> => {
-    try {
-      const response =
-        method === 'PUT'
-          ? await api.put(
-              endpoint,
-              payload
-            )
-          : method === 'PATCH'
-          ? await api.patch(
-              endpoint,
-              payload
-            )
-          : await api.post(
-              endpoint,
-              payload
-            );
-
-      retryCountRef.current = 0;
-
-      return response;
-    } catch (error: any) {
-      if (
-        isDuplicateReceiptError(error) &&
-        retryCountRef.current < maxRetries
-      ) {
-        retryCountRef.current += 1;
-
-        const currentRetry =
-          retryCountRef.current;
-
-        toast.loading(
-          `Retrying... (Attempt ${currentRetry}/${maxRetries})`,
+  const submitWithRetry =
+    async (
+      payload: any
+    ): Promise<any> => {
+      try {
+        console.log(
+          '📤 AddUserModal API REQUEST:',
           {
-            duration: 2000,
+            method,
+            endpoint,
+            payload,
           }
         );
 
-        await new Promise(
-          (resolve) =>
-            setTimeout(resolve, 2000)
+        const response =
+          method === 'PUT'
+            ? await api.put(
+                endpoint,
+                payload
+              )
+            : method ===
+              'PATCH'
+            ? await api.patch(
+                endpoint,
+                payload
+              )
+            : await api.post(
+                endpoint,
+                payload
+              );
+
+        console.log(
+          '✅ AddUserModal API RESPONSE:',
+          {
+            status:
+              response.status,
+            data:
+              response.data,
+          }
         );
 
-        return submitWithRetry(payload);
-      }
+        retryCountRef.current = 0;
 
-      throw error;
-    }
-  };
+        return response;
+      } catch (error: any) {
+        console.error(
+          '❌ AddUserModal API ERROR:',
+          {
+            status:
+              error?.response
+                ?.status,
+
+            responseData:
+              error?.response
+                ?.data,
+
+            responseHeaders:
+              error?.response
+                ?.headers,
+
+            message:
+              error?.message,
+
+            method,
+
+            endpoint,
+
+            payload,
+          }
+        );
+
+        if (
+          isDuplicateReceiptError(
+            error
+          ) &&
+          retryCountRef.current <
+            maxRetries
+        ) {
+          retryCountRef.current +=
+            1;
+
+          const currentRetry =
+            retryCountRef.current;
+
+          toast.loading(
+            `Retrying... (Attempt ${currentRetry}/${maxRetries})`,
+            {
+              duration: 2000,
+            }
+          );
+
+          await new Promise(
+            (resolve) =>
+              setTimeout(
+                resolve,
+                2000
+              )
+          );
+
+          return submitWithRetry(
+            payload
+          );
+        }
+
+        throw error;
+      }
+    };
 
   // ======================================================
   // HANDLE SUBMIT
@@ -724,15 +1395,40 @@ export function AddUserModal({
 
     const missingFields =
       finalFields.filter(
-        (f) =>
-          f.required &&
-          !formData[f.name]
+        (f) => {
+          if (!f.required) {
+            return false;
+          }
+
+          const value =
+            formData[f.name];
+
+          if (f.multiple) {
+            return (
+              !Array.isArray(
+                value
+              ) ||
+              value.length === 0
+            );
+          }
+
+          return (
+            value === undefined ||
+            value === null ||
+            String(value).trim() === ''
+          );
+        }
       );
 
-    if (missingFields.length > 0) {
+    if (
+      missingFields.length >
+      0
+    ) {
       setApiError(
         `Please fill in: ${missingFields
-          .map((f) => f.label)
+          .map(
+            (f) => f.label
+          )
           .join(', ')}`
       );
 
@@ -744,95 +1440,168 @@ export function AddUserModal({
     retryCountRef.current = 0;
 
     try {
-      let payload = {
+      let payload: Record<
+        string,
+        any
+      > = {
         ...formData,
       };
 
       delete payload._context;
 
-      // --------------------------------------------------
-      // NUMBER CONVERSIONS
-      // --------------------------------------------------
-
-      if (
-        payload.amount !== undefined &&
-        payload.amount !== ''
-      ) {
-        payload.amount =
-          parseFloat(payload.amount) || 0;
-      }
-
-      if (
-        payload.monthlyFee !== undefined &&
-        payload.monthlyFee !== ''
-      ) {
-        payload.monthlyFee =
-          parseFloat(payload.monthlyFee) || 0;
-      }
-
-      if (
-        payload.sellingPrice !== undefined &&
-        payload.sellingPrice !== ''
-      ) {
-        payload.sellingPrice =
-          parseFloat(payload.sellingPrice) || 0;
-      }
-
-      if (
-        payload.purchasePrice !== undefined &&
-        payload.purchasePrice !== ''
-      ) {
-        payload.purchasePrice =
-          parseFloat(payload.purchasePrice) || 0;
-      }
-
-      if (
-        payload.openingBalance !== undefined &&
-        payload.openingBalance !== ''
-      ) {
-        payload.openingBalance =
-          parseFloat(payload.openingBalance) || 0;
-      }
-
-      if (
-        payload.discount !== undefined &&
-        payload.discount !== ''
-      ) {
-        payload.discount =
-          parseFloat(payload.discount) || 0;
-      }
-
-      // --------------------------------------------------
-      // FINAL MAX VALIDATION BEFORE TRANSFORM
-      // --------------------------------------------------
+      // ======================================================
+      // NORMALIZE MULTI-SELECT FIELDS
+      // ======================================================
 
       for (const field of finalFields) {
-        if (field.type !== 'number') {
+        if (!field.multiple) {
           continue;
         }
 
-        const maxValue = getFieldMax(
-          field,
-          payload
-        );
-
-        const currentValue =
+        const value =
           payload[field.name];
 
         if (
-          maxValue !== undefined &&
-          currentValue !== undefined &&
-          currentValue !== null &&
+          value === undefined ||
+          value === null
+        ) {
+          payload[field.name] = [];
+          continue;
+        }
+
+        if (!Array.isArray(value)) {
+          payload[field.name] = [
+            String(value).trim(),
+          ];
+          continue;
+        }
+
+        payload[field.name] = [
+          ...new Set(
+            value
+              .map((item: any) =>
+                String(item).trim()
+              )
+              .filter(Boolean)
+          ),
+        ];
+      }
+
+      // ======================================================
+      // NUMBER CONVERSIONS
+      // ======================================================
+
+      if (
+        payload.amount !==
+          undefined &&
+        payload.amount !== ''
+      ) {
+        payload.amount =
+          parseFloat(
+            payload.amount
+          ) || 0;
+      }
+
+      if (
+        payload.monthlyFee !==
+          undefined &&
+        payload.monthlyFee !== ''
+      ) {
+        payload.monthlyFee =
+          parseFloat(
+            payload.monthlyFee
+          ) || 0;
+      }
+
+      if (
+        payload.sellingPrice !==
+          undefined &&
+        payload.sellingPrice !== ''
+      ) {
+        payload.sellingPrice =
+          parseFloat(
+            payload.sellingPrice
+          ) || 0;
+      }
+
+      if (
+        payload.purchasePrice !==
+          undefined &&
+        payload.purchasePrice !== ''
+      ) {
+        payload.purchasePrice =
+          parseFloat(
+            payload.purchasePrice
+          ) || 0;
+      }
+
+      if (
+        payload.openingBalance !==
+          undefined &&
+        payload.openingBalance !== ''
+      ) {
+        payload.openingBalance =
+          parseFloat(
+            payload.openingBalance
+          ) || 0;
+      }
+
+      if (
+        payload.discount !==
+          undefined &&
+        payload.discount !== ''
+      ) {
+        payload.discount =
+          parseFloat(
+            payload.discount
+          ) || 0;
+      }
+
+      // ======================================================
+      // FINAL MAX VALIDATION
+      // ======================================================
+
+      for (const field of finalFields) {
+        if (
+          field.type !==
+          'number'
+        ) {
+          continue;
+        }
+
+        const maxValue =
+          getFieldMax(
+            field,
+            payload
+          );
+
+        const currentValue =
+          payload[
+            field.name
+          ];
+
+        if (
+          maxValue !==
+            undefined &&
+          currentValue !==
+            undefined &&
+          currentValue !==
+            null &&
           currentValue !== ''
         ) {
           const numericValue =
             parseFloat(
-              String(currentValue)
+              String(
+                currentValue
+              )
             );
 
           if (
-            !Number.isNaN(numericValue) &&
-            numericValue > maxValue
+            !Number.isNaN(
+              numericValue
+            ) &&
+            numericValue >
+              maxValue
           ) {
             throw new Error(
               `${field.label} cannot exceed ${maxValue}.`
@@ -841,34 +1610,99 @@ export function AddUserModal({
         }
       }
 
-      // --------------------------------------------------
-      // TRANSFORM DATA
-      // --------------------------------------------------
+      // ======================================================
+      // TRANSFORM
+      // ======================================================
 
       if (transformData) {
-        payload = transformData(payload);
+        payload =
+          transformData(
+            payload
+          );
+
+        // Protect multi-select
+        // fields after transformData.
+        for (const field of finalFields) {
+          if (!field.multiple) {
+            continue;
+          }
+
+          const value =
+            payload[field.name];
+
+          if (
+            value === undefined ||
+            value === null
+          ) {
+            payload[field.name] = [];
+          } else if (
+            !Array.isArray(value)
+          ) {
+            payload[field.name] = [
+              String(value).trim(),
+            ];
+          } else {
+            payload[field.name] = [
+              ...new Set(
+                value
+                  .map((item: any) =>
+                    String(item).trim()
+                  )
+                  .filter(Boolean)
+              ),
+            ];
+          }
+        }
       }
 
-      // --------------------------------------------------
-      // API REQUEST
-      // --------------------------------------------------
+      // ======================================================
+      // FINAL REQUEST LOG
+      // ======================================================
+
+      console.log(
+        '🚀 FINAL PAYLOAD:',
+        {
+          endpoint,
+          method,
+          payload,
+        }
+      );
+
+      // ======================================================
+      // API
+      // ======================================================
 
       const response =
-        await submitWithRetry(payload);
+        await submitWithRetry(
+          payload
+        );
 
-      if (response.data.success) {
+      if (
+        response.data?.success
+      ) {
         const result =
-          response.data.customer ||
-          response.data.purchase ||
-          response.data.dealer ||
-          response.data.staff ||
-          response.data.area ||
-          response.data.package ||
-          response.data.payment ||
-          response.data.data ||
+          response.data
+            .customer ||
+          response.data
+            .purchase ||
+          response.data
+            .dealer ||
+          response.data
+            .staff ||
+          response.data
+            .area ||
+          response.data
+            .package ||
+          response.data
+            .payment ||
+          response.data
+            .data ||
           response.data;
 
-        onSuccess?.(result);
+        onSuccess?.(
+          result
+        );
+
         onClose();
 
         toast.success(
@@ -877,10 +1711,13 @@ export function AddUserModal({
             : 'Record added successfully!'
         );
       } else {
-        setApiError(
-          response.data.message ||
-            'Failed to add record'
-        );
+        const message =
+          response.data
+            ?.message ||
+          'Failed to add record';
+
+        setApiError(message);
+        toast.error(message);
       }
     } catch (error: any) {
       console.error(
@@ -892,37 +1729,61 @@ export function AddUserModal({
         'Failed to add record';
 
       if (
-        isDuplicateReceiptError(error)
+        isDuplicateReceiptError(
+          error
+        )
       ) {
         message =
           'Duplicate receipt number. Please try again with a different date or contact support.';
       } else if (
-        error.response?.data?.message
+        error?.response?.data
+          ?.message
       ) {
         message =
-          error.response.data.message;
+          error.response.data
+            .message;
       } else if (
-        error.response?.data?.errors
+        error?.response?.data
+          ?.errors
       ) {
-        const errors = Object.values(
-          error.response.data.errors
-        ).join(', ');
+        const errors =
+          Object.values(
+            error.response
+              .data.errors
+          )
+            .map((item: any) =>
+              typeof item ===
+              'string'
+                ? item
+                : item?.message ||
+                  JSON.stringify(
+                    item
+                  )
+            )
+            .join(', ');
 
-        message = errors;
+        message =
+          errors ||
+          'Validation failed';
       } else if (
-        typeof error.response?.data ===
+        typeof error
+          ?.response?.data ===
         'string'
       ) {
         message =
           error.response.data;
-      } else if (error.response) {
+      } else if (
+        error?.response
+      ) {
         message = `Server error: ${error.response.status}`;
-      } else if (error.request) {
+      } else if (
+        error?.request
+      ) {
         message =
           'No response from server. Please check if backend is running.';
       } else {
         message =
-          error.message ||
+          error?.message ||
           'Failed to add record';
       }
 
@@ -943,17 +1804,14 @@ export function AddUserModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Overlay */}
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      {/* Modal */}
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
-        {/* ==================================================
-            HEADER
-        ================================================== */}
+
+        {/* HEADER */}
 
         <div
           className={cn(
@@ -987,179 +1845,293 @@ export function AddUserModal({
           </button>
         </div>
 
-        {/* ==================================================
-            FORM
-        ================================================== */}
+        {/* FORM */}
 
         <form
           onSubmit={handleSubmit}
           className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)]"
         >
-          {/* API ERROR */}
           {apiError && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
               <span className="text-lg mt-0.5">
                 ⚠️
               </span>
 
-              <span>{apiError}</span>
+              <span>
+                {apiError}
+              </span>
             </div>
           )}
 
-          {/* RETRY MESSAGE */}
-          {retryCountRef.current > 0 && (
+          {retryCountRef.current >
+            0 && (
             <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm flex items-start gap-2">
               <span className="text-lg mt-0.5">
                 🔄
               </span>
 
               <span>
-                Retrying due to duplicate
-                receipt... (Attempt{' '}
-                {retryCountRef.current}/
-                {maxRetries})
+                Retrying due to
+                duplicate receipt...
+                (Attempt{' '}
+                {
+                  retryCountRef.current
+                }
+                /{maxRetries})
               </span>
             </div>
           )}
 
-          {/* FIELDS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {finalFields.map((field) => {
-              if (field.name === '_context') {
-                return null;
-              }
-
-              const dependsOnField =
-                field.dependsOn;
-
-              const isDependent =
-                dependsOnField !== undefined &&
-                formData[
-                  dependsOnField
-                ] !== undefined;
-
-              let fieldValue =
-                formData[field.name] ?? '';
-
-              // ------------------------------------------------
-              // COMPUTED DEPENDENT VALUE
-              // ------------------------------------------------
-
-              if (
-                isDependent &&
-                field.updateOnChange &&
-                dependsOnField &&
-                !field.editable
-              ) {
-                try {
-                  const calculatedValue =
-                    field.updateOnChange(
-                      formData[
-                        dependsOnField
-                      ],
-                      formData,
-                      context
-                    );
-
-                  if (
-                    calculatedValue !==
-                      undefined &&
-                    calculatedValue !== null
-                  ) {
-                    fieldValue =
-                      calculatedValue;
-                  }
-                } catch (e) {
-                  console.error(
-                    `Error calculating ${field.name}:`,
-                    e
-                  );
+            {finalFields.map(
+              (field) => {
+                if (
+                  field.name ===
+                  '_context'
+                ) {
+                  return null;
                 }
-              }
 
-              const isReadOnly =
-                Boolean(
-                  field.readOnly ||
-                    (!!field.dependsOn &&
-                      !field.editable)
-                );
+                const dependsOnField =
+                  field.dependsOn;
 
-              const lockedByParent =
-                isLockedByParent(
-                  field,
-                  formData
-                );
+                const isDependent =
+                  dependsOnField !==
+                    undefined &&
+                  formData[
+                    dependsOnField
+                  ] !== undefined;
 
-              const isDisabled =
-                isReadOnly || lockedByParent;
+                let fieldValue =
+                  formData[
+                    field.name
+                  ] ?? '';
 
-              const fieldOptions =
-                getFieldOptions(
-                  field,
-                  formData
-                );
+                if (
+                  isDependent &&
+                  field.updateOnChange &&
+                  dependsOnField &&
+                  !field.editable
+                ) {
+                  try {
+                    const calculatedValue =
+                      field.updateOnChange(
+                        formData[
+                          dependsOnField
+                        ],
+                        formData,
+                        context
+                      );
 
-              const fieldMax =
-                getFieldMax(
-                  field,
-                  formData
-                );
-
-              return (
-                <div
-                  key={field.name}
-                  className={
-                    field.type === 'textarea'
-                      ? 'md:col-span-2'
-                      : ''
+                    if (
+                      calculatedValue !==
+                        undefined &&
+                      calculatedValue !==
+                        null
+                    ) {
+                      fieldValue =
+                        field.multiple
+                          ? Array.isArray(
+                              calculatedValue
+                            )
+                            ? calculatedValue
+                            : [
+                                calculatedValue,
+                              ]
+                          : calculatedValue;
+                    }
+                  } catch (e) {
+                    console.error(
+                      `Error calculating ${field.name}:`,
+                      e
+                    );
                   }
-                >
-                  {/* LABEL */}
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    {field.label}{' '}
-                    {field.required && '*'}
-                  </label>
+                }
 
-                  {/* ==================================================
-                      SELECT
-                  ================================================== */}
+                const isReadOnly =
+                  Boolean(
+                    field.readOnly ||
+                      (!!field.dependsOn &&
+                        !field.editable)
+                  );
 
-                  {field.type ===
-                  'select' ? (
-                    field.searchable ? (
-                      <SearchableSelect
-                        options={
-                          fieldOptions
-                        }
-                        value={
-                          formData[
+                const lockedByParent =
+                  isLockedByParent(
+                    field,
+                    formData
+                  );
+
+                const isDisabled =
+                  isReadOnly ||
+                  lockedByParent;
+
+                const fieldOptions =
+                  getFieldOptions(
+                    field,
+                    formData
+                  );
+
+                const fieldMax =
+                  getFieldMax(
+                    field,
+                    formData
+                  );
+
+                return (
+                  <div
+                    key={
+                      field.name
+                    }
+                    className={
+                      field.type ===
+                      'textarea'
+                        ? 'md:col-span-2'
+                        : ''
+                    }
+                  >
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      {
+                        field.label
+                      }{' '}
+                      {field.required &&
+                        '*'}
+                    </label>
+
+                    {/* SELECT */}
+
+                    {field.type ===
+                    'select' ? (
+                      field.multiple ? (
+                        <SearchableMultiSelect
+                          options={
+                            fieldOptions
+                          }
+                          value={
+                            Array.isArray(
+                              formData[
+                                field.name
+                              ]
+                            )
+                              ? formData[
+                                  field.name
+                                ]
+                              : []
+                          }
+                          onChange={
+                            handleMultiSelectChange
+                          }
+                          placeholder={
+                            field.placeholder ||
+                            `Select ${field.label}`
+                          }
+                          label={
+                            field.label
+                          }
+                          name={
                             field.name
-                          ] || ''
-                        }
-                        onChange={
-                          handleSelectChange
-                        }
-                        placeholder={
-                          field.placeholder ||
-                          `Select ${field.label}`
-                        }
-                        label={
-                          field.label
-                        }
+                          }
+                          disabled={
+                            isDisabled
+                          }
+                        />
+                      ) : field.searchable ? (
+                        <SearchableSelect
+                          options={
+                            fieldOptions
+                          }
+                          value={
+                            typeof formData[
+                              field.name
+                            ] ===
+                            'string'
+                              ? formData[
+                                  field.name
+                                ]
+                              : ''
+                          }
+                          onChange={
+                            handleSelectChange
+                          }
+                          placeholder={
+                            field.placeholder ||
+                            `Select ${field.label}`
+                          }
+                          label={
+                            field.label
+                          }
+                          name={
+                            field.name
+                          }
+                          disabled={
+                            isDisabled
+                          }
+                        />
+                      ) : (
+                        <select
+                          name={
+                            field.name
+                          }
+                          value={
+                            typeof formData[
+                              field.name
+                            ] ===
+                            'string'
+                              ? formData[
+                                  field.name
+                                ]
+                              : ''
+                          }
+                          onChange={
+                            handleChange
+                          }
+                          required={
+                            field.required
+                          }
+                          disabled={
+                            isDisabled
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          <option value="">
+                            {field.placeholder ||
+                              `Select ${field.label}`}
+                          </option>
+
+                          {fieldOptions.map(
+                            (
+                              opt
+                            ) => (
+                              <option
+                                key={
+                                  opt.value
+                                }
+                                value={
+                                  opt.value
+                                }
+                              >
+                                {
+                                  opt.label
+                                }
+                              </option>
+                            )
+                          )}
+                        </select>
+                      )
+                    ) : field.type ===
+                      'textarea' ? (
+                      <textarea
                         name={
                           field.name
                         }
-                        disabled={
-                          lockedByParent
-                        }
-                      />
-                    ) : (
-                      <select
-                        name={field.name}
                         value={
-                          formData[
+                          typeof formData[
                             field.name
-                          ] || ''
+                          ] ===
+                          'string'
+                            ? formData[
+                                field.name
+                              ]
+                            : ''
                         }
                         onChange={
                           handleChange
@@ -1167,119 +2139,78 @@ export function AddUserModal({
                         required={
                           field.required
                         }
-                        disabled={
-                          isDisabled
+                        rows={3}
+                        placeholder={
+                          field.placeholder
                         }
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        <option value="">
-                          {field.placeholder ||
-                            `Select ${field.label}`}
-                        </option>
+                        readOnly={
+                          isReadOnly
+                        }
+                        className={cn(
+                          'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none',
 
-                        {fieldOptions.map(
-                          (opt) => (
-                            <option
-                              key={
-                                opt.value
-                              }
-                              value={
-                                opt.value
-                              }
-                            >
-                              {
-                                opt.label
-                              }
-                            </option>
-                          )
+                          isReadOnly &&
+                            'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed'
                         )}
-                      </select>
-                    )
-                  ) : /* ==================================================
-                       TEXTAREA
-                     ================================================== */
-                  field.type ===
-                    'textarea' ? (
-                    <textarea
-                      name={field.name}
-                      value={
-                        formData[
+                      />
+                    ) : (
+                      <input
+                        type={
+                          field.type ||
+                          'text'
+                        }
+                        name={
                           field.name
-                        ] || ''
-                      }
-                      onChange={
-                        handleChange
-                      }
-                      required={
-                        field.required
-                      }
-                      rows={3}
-                      placeholder={
-                        field.placeholder
-                      }
-                      readOnly={
-                        isReadOnly
-                      }
-                      className={cn(
-                        'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none',
-                        isReadOnly &&
-                          'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed'
-                      )}
-                    />
-                  ) : /* ==================================================
-                       INPUT
-                     ================================================== */
-                  (
-                    <input
-                      type={
-                        field.type ||
-                        'text'
-                      }
-                      name={field.name}
-                      value={
-                        fieldValue
-                      }
-                      onChange={
-                        handleChange
-                      }
-                      required={
-                        field.required
-                      }
-                      placeholder={
-                        field.placeholder
-                      }
-                      readOnly={
-                        isReadOnly
-                      }
-                      disabled={
-                        lockedByParent
-                      }
-                      min={
-                        field.min
-                      }
-                      max={
-                        fieldMax
-                      }
-                      maxLength={field.maxLength}
-                      step={
-                        field.step
-                      }
-                      className={cn(
-                        'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none',
-                        (isReadOnly || lockedByParent) &&
-                          'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed',
-                        lockedByParent && 'opacity-60'
-                      )}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                        }
+                        value={
+                          fieldValue
+                        }
+                        onChange={
+                          handleChange
+                        }
+                        required={
+                          field.required
+                        }
+                        placeholder={
+                          field.placeholder
+                        }
+                        readOnly={
+                          isReadOnly
+                        }
+                        disabled={
+                          lockedByParent
+                        }
+                        min={
+                          field.min
+                        }
+                        max={
+                          fieldMax
+                        }
+                        maxLength={
+                          field.maxLength
+                        }
+                        step={
+                          field.step
+                        }
+                        className={cn(
+                          'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none',
+
+                          (isReadOnly ||
+                            lockedByParent) &&
+                            'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed',
+
+                          lockedByParent &&
+                            'opacity-60'
+                        )}
+                      />
+                    )}
+                  </div>
+                );
+              }
+            )}
           </div>
 
-          {/* ==================================================
-              ACTIONS
-          ================================================== */}
+          {/* ACTIONS */}
 
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button

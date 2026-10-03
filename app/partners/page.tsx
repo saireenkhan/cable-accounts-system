@@ -533,32 +533,55 @@ function PartnersPageContent() {
     }
   };
 
-  /* ==========================================================
-     RESOLVE ISP NAME
-  ========================================================== */
+const resolveIspName = (
+  raw: any,
+  ispList: any[]
+): string => {
+  if (!raw) return '';
 
-  const resolveIspName = (
-    raw: any,
-    ispList: any[]
-  ): string => {
-    if (!raw) return '';
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) =>
+        resolveIspName(
+          item,
+          ispList
+        )
+      )
+      .filter(Boolean)
+      .join(', ');
+  }
 
-    if (typeof raw === 'object') {
-      return raw.name || raw.ispName || '';
-    }
+  if (
+    typeof raw === 'object'
+  ) {
+    return (
+      raw.name ||
+      raw.ispName ||
+      ''
+    );
+  }
 
-    const rawStr = String(raw);
+  const rawStr =
+    String(raw);
 
-    const match = ispList.find(
+  const match =
+    ispList.find(
       (i) =>
-        String(i._id) === rawStr ||
-        String(i.id) === rawStr ||
-        String(i.name).toLowerCase() ===
+        String(i._id) ===
+          rawStr ||
+        String(i.id) ===
+          rawStr ||
+        String(
+          i.name
+        ).toLowerCase() ===
           rawStr.toLowerCase()
     );
 
-    return match?.name || rawStr;
-  };
+  return (
+    match?.name ||
+    rawStr
+  );
+};
 
   /* ==========================================================
      FETCH PARTNERS + PAYMENTS
@@ -883,41 +906,107 @@ function PartnersPageContent() {
   /* ==========================================================
      DYNAMIC AREA OPTIONS — filtered by selected ISP
   ========================================================== */
+const resolveDynamicOptions = (
+  fieldName: string,
+  formData: Record<string, any>
+) => {
+  if (fieldName !== 'area') {
+    return [];
+  }
 
-  const resolveDynamicOptions = (
-    fieldName: string,
-    formData: Record<string, any>
-  ) => {
-    if (fieldName !== 'area') {
-      return [];
-    }
+  /* ----------------------------------------------------------
+     No ISPs configured
+  ---------------------------------------------------------- */
 
-    // No ISPs configured at all -> show every area
-    if (isps.length === 0) {
-      return areas.map((a) => ({
-        label: a.name,
-        value: a.name,
-      }));
-    }
+  if (isps.length === 0) {
+    return areas.map(
+      (area) => ({
+        label: area.name,
+        value: area.name,
+      })
+    );
+  }
 
-    // ISP not selected yet -> no areas
-    if (!formData.isp) {
-      return [];
-    }
+  /* ----------------------------------------------------------
+     ISP not selected yet
+  ---------------------------------------------------------- */
 
-    // Only areas that belong to the chosen ISP
-    return areas
-      .filter(
-        (a) =>
-          resolveIspName(a.isp, isps).toLowerCase() ===
-          String(formData.isp).toLowerCase()
-      )
-      .map((a) => ({
-        label: a.name,
-        value: a.name,
-      }));
-  };
+  const selectedIsp =
+    String(
+      formData.isp || ''
+    )
+      .trim()
+      .toLowerCase();
 
+  if (!selectedIsp) {
+    return [];
+  }
+
+  /* ----------------------------------------------------------
+     FILTER AREAS
+
+     Area may contain:
+
+     isp: ["SFA Net", "StormFiber"]
+
+     Customer/Partner contains:
+
+     isp: "SFA Net"
+
+     Therefore use SOME().
+  ---------------------------------------------------------- */
+
+  return areas
+    .filter((area) => {
+      let areaIsps: any[] =
+        [];
+
+      if (
+        Array.isArray(
+          area.isp
+        )
+      ) {
+        areaIsps =
+          area.isp;
+      } else if (
+        area.isp !==
+          undefined &&
+        area.isp !==
+          null &&
+        area.isp !== ''
+      ) {
+        // Legacy database record
+        areaIsps = [
+          area.isp,
+        ];
+      }
+
+      return areaIsps.some(
+        (areaIsp) => {
+          const resolved =
+            resolveIspName(
+              areaIsp,
+              isps
+            )
+              .trim()
+              .toLowerCase();
+
+          return (
+            resolved ===
+            selectedIsp
+          );
+        }
+      );
+    })
+    .map(
+      (area) => ({
+        label:
+          area.name,
+        value:
+          area.name,
+      })
+    );
+};
   /* ==========================================================
      TRANSFORM FORM DATA
   ========================================================== */

@@ -8,25 +8,46 @@ const partnerAreaSchema = new mongoose.Schema(
       required: false,
       index: true,
     },
+
     name: {
       type: String,
       required: true,
       trim: true,
     },
+
     code: {
       type: String,
       trim: true,
     },
+
     description: {
       type: String,
       trim: true,
     },
-    // ISP this area belongs to (stored as ISP name)
+
+    // One partner area can belong to multiple ISPs.
+    // ISP names are stored as strings.
     isp: {
-      type: String,
-      trim: true,
-      default: '',
+      type: [String],
+      default: [],
+
+      set: (value) => {
+        if (!value) return [];
+
+        const values = Array.isArray(value)
+          ? value
+          : [value];
+
+        return [
+          ...new Set(
+            values
+              .map((item) => String(item).trim())
+              .filter(Boolean)
+          ),
+        ];
+      },
     },
+
     isActive: {
       type: Boolean,
       default: true,
@@ -37,6 +58,12 @@ const partnerAreaSchema = new mongoose.Schema(
   }
 );
 
-partnerAreaSchema.index({ tenantId: 1, name: 1 }, { unique: true });
+partnerAreaSchema.index(
+  { tenantId: 1, name: 1 },
+  { unique: true }
+);
 
-module.exports = mongoose.model('PartnerArea', partnerAreaSchema);
+module.exports = mongoose.model(
+  'PartnerArea',
+  partnerAreaSchema
+);
