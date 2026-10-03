@@ -1,7 +1,5 @@
-
 'use client';
-
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Layout from '@/app/components/ui/Layout';
 import { SearchBar } from '@/app/components/ui/SearchBar';
@@ -879,9 +877,9 @@ function DetailRow({
 }
 
 // ============================================================
-// MAIN PAGE
+// MAIN PAGE CONTENT
 // ============================================================
-export default function RecoveryNotificationsPage() {
+function RecoveryNotificationsPageContent() {
   const searchParams =
     useSearchParams();
 
@@ -2934,3 +2932,21 @@ function MiniField({
   );
 }
 
+// ============================================================
+// EXPORT (Suspense boundary required for useSearchParams)
+// ============================================================
+export default function RecoveryNotificationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <Layout>
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#d6b138]" />
+          </div>
+        </Layout>
+      }
+    >
+      <RecoveryNotificationsPageContent />
+    </Suspense>
+  );
+}

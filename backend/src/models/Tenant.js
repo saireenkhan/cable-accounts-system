@@ -12,4 +12,4 @@ const tenantSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('Tenant', tenantSchema);
-// node src/scripts/create-tenant.js "Fast Net" "zeeshan@fastnet.com" "fasnet@22667"
+// node src/scripts/create-tenant.js "SFA Net" "SFA@net.com" "SFA@123"
