@@ -2,12 +2,12 @@ const mongoose = require('mongoose');
 
 const customerSchema = new mongoose.Schema(
   {
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: false,
+      index: true,
+    },
     customerId: {
       type: String,
       trim: true,
@@ -40,6 +40,15 @@ const customerSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
+
+    // ✅ NEW — ISP as a plain name string, matching how the form
+    // sends it (options value = isp.name).
+    isp: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+
     package: {
       type: String,
     },
@@ -66,7 +75,6 @@ const customerSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
 
 customerSchema.index({ tenantId: 1, customerId: 1 }, { unique: true });
 

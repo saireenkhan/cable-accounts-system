@@ -116,6 +116,7 @@ exports.createCustomer = async (req, res) => {
       cnic,
       address,
       area,
+         isp,
       package: pkg,
       discount,
       monthlyFee,
@@ -195,7 +196,7 @@ exports.createCustomer = async (req, res) => {
       address,
 
       area: areaDoc ? areaDoc._id : null,
-
+       isp: isp || '',    
       package: pkg,
 
       discount: parsedDiscount,
@@ -267,6 +268,7 @@ exports.updateCustomer = async (req, res) => {
       cnic,
       address,
       area,
+      isp, 
       package: pkg,
       discount,
       monthlyFee,
@@ -328,7 +330,9 @@ exports.updateCustomer = async (req, res) => {
         update.area = null;
       }
     }
-
+if (isp !== undefined) {     // ✅ add this
+  update.isp = isp || '';
+}
     if (pkg !== undefined) {
       update.package = pkg;
     }

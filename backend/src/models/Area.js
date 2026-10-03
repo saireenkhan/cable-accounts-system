@@ -20,6 +20,11 @@ const areaSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  isp: {
+    type: String,
+    trim: true,
+    default: '',
+  },
   isActive: {
     type: Boolean,
     default: true,

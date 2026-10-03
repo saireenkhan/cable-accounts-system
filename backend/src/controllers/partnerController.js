@@ -4,6 +4,7 @@ const PaymentModel = require('../models/Payment');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 const PartnerPaymentModel = require('../models/PartnerPayment');
+
 // ============================================================
 // HELPER: Calculate expiry date (one calendar month later)
 // ============================================================
@@ -20,13 +21,37 @@ const calculateExpiryDate = (activationDate) => {
 };
 
 // ============================================================
+// HELPER: Area must exist, and (if both have an ISP) belong to it.
+// Returns an error message string, or null when valid.
+// ============================================================
+const validateAreaForIsp = async (PartnerArea, area, isp) => {
+  if (!area) return null;
+
+  const areaDoc = await PartnerArea.findOne({ name: area });
+
+  if (!areaDoc) {
+    return `Partner area "${area}" not found. Please create it first.`;
+  }
+
+  if (
+    isp &&
+    areaDoc.isp &&
+    String(areaDoc.isp).trim().toLowerCase() !==
+      String(isp).trim().toLowerCase()
+  ) {
+    return `Partner area "${area}" does not belong to ISP "${isp}".`;
+  }
+
+  return null;
+};
+
+// ============================================================
 // GET all partners
 // ============================================================
 exports.getPartners = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const Partner = tenantScope(PartnerModel, req);
   try {
-    const { search, status, area, limit } = req.query;
+    const { search, status, area, isp, limit } = req.query;
     const filter = {};
 
     if (search) {
@@ -34,12 +59,13 @@ exports.getPartners = async (req, res) => {
         { name: { $regex: search, $options: 'i' } },
         { partnerId: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
-        { partner: { $regex: search, $options: 'i' } },   // ✅ search by partner too
+        { partner: { $regex: search, $options: 'i' } },
       ];
     }
 
     if (status) filter.status = status;
     if (area) filter.area = area;
+    if (isp) filter.isp = isp;
 
     let query = Partner.find(filter)
       .populate('createdBy', 'name')
@@ -69,8 +95,7 @@ exports.getPartners = async (req, res) => {
 // GET single partner
 // ============================================================
 exports.getPartner = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const Partner = tenantScope(PartnerModel, req);
   try {
     const partner = await Partner.findById(req.params.id).populate(
       'createdBy',
@@ -102,8 +127,8 @@ exports.getPartner = async (req, res) => {
 // CREATE partner
 // ============================================================
 exports.createPartner = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const Partner = tenantScope(PartnerModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const {
       partnerId,
@@ -112,7 +137,8 @@ exports.createPartner = async (req, res) => {
       cnic,
       address,
       area,
-      partner,          // ✅ NEW — partner selection
+      isp,
+      partner,
       package: pkg,
       discount,
       monthlyFee,
@@ -147,16 +173,14 @@ exports.createPartner = async (req, res) => {
       });
     }
 
-    // ✅ Area: verify against PartnerArea
-    if (area) {
-      const areaDoc = await PartnerArea.findOne({ name: area });
+    // Area: must exist and match the chosen ISP
+    const areaError = await validateAreaForIsp(PartnerArea, area, isp);
 
-      if (!areaDoc) {
-        return res.status(400).json({
-          success: false,
-          message: `Partner area "${area}" not found. Please create it first.`,
-        });
-      }
+    if (areaError) {
+      return res.status(400).json({
+        success: false,
+        message: areaError,
+      });
     }
 
     // Discount
@@ -186,7 +210,6 @@ exports.createPartner = async (req, res) => {
       calculatedExpiryDate = calculateExpiryDate(parsedActivationDate);
     }
 
-    // ✅ Create partner — including partner field
     const partnerDoc = await Partner.create({
       partnerId,
       name,
@@ -194,7 +217,8 @@ exports.createPartner = async (req, res) => {
       cnic: cnic || '',
       address,
       area: area || '',
-      partner: partner || '',       // ✅ NEW — save partner
+      isp: isp ? String(isp).trim() : '',
+      partner: partner || '',
       package: pkg,
       discount: parsedDiscount,
       monthlyFee: parseFloat(monthlyFee) || 0,
@@ -210,7 +234,6 @@ exports.createPartner = async (req, res) => {
     );
 
     console.log('✅ Partner created:', populatedPartner.partnerId);
-    console.log('✅ Partner field saved:', populatedPartner.partner);   // ✅ debug
 
     res.status(201).json({
       success: true,
@@ -251,8 +274,8 @@ exports.createPartner = async (req, res) => {
 // UPDATE partner
 // ============================================================
 exports.updatePartner = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const Partner = tenantScope(PartnerModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const {
       partnerId,
@@ -261,7 +284,8 @@ exports.updatePartner = async (req, res) => {
       cnic,
       address,
       area,
-      partner,          // ✅ NEW
+      isp,
+      partner,
       package: pkg,
       discount,
       monthlyFee,
@@ -270,7 +294,7 @@ exports.updatePartner = async (req, res) => {
     } = req.body;
 
     console.log('📝 Updating partner:', req.params.id);
-    console.log('📦 Update data:', req.body);   // ✅ debug
+    console.log('📦 Update data:', req.body);
 
     const existingPartner = await Partner.findById(req.params.id);
 
@@ -289,17 +313,25 @@ exports.updatePartner = async (req, res) => {
     if (cnic !== undefined) update.cnic = cnic;
     if (address !== undefined) update.address = address;
     if (status !== undefined) update.status = status;
-    if (partner !== undefined) update.partner = partner;   // ✅ NEW
+    if (partner !== undefined) update.partner = partner;
+    if (isp !== undefined) update.isp = String(isp || '').trim();
 
-    // Area — verify it exists in PartnerArea
+    // Area — must exist and match the (new or existing) ISP
     if (area !== undefined) {
       if (area) {
-        const areaDoc = await PartnerArea.findOne({ name: area });
+        const effectiveIsp =
+          isp !== undefined ? isp : existingPartner.isp;
 
-        if (!areaDoc) {
+        const areaError = await validateAreaForIsp(
+          PartnerArea,
+          area,
+          effectiveIsp
+        );
+
+        if (areaError) {
           return res.status(400).json({
             success: false,
-            message: `Partner area "${area}" not found`,
+            message: areaError,
           });
         }
 
@@ -367,7 +399,6 @@ exports.updatePartner = async (req, res) => {
     ).populate('createdBy', 'name');
 
     console.log('✅ Partner updated:', partnerDoc.partnerId);
-    console.log('✅ Partner field after update:', partnerDoc.partner);   // ✅ debug
 
     res.json({
       success: true,
@@ -411,9 +442,6 @@ exports.updatePartner = async (req, res) => {
 
 // ============================================================
 // DELETE partner
-// ============================================================
-// ============================================================
-// DELETE partner
 // Cascade: also deletes every partner-payment that belongs
 // to this partner so they disappear from Receive Partner Payments.
 // ============================================================
@@ -431,9 +459,6 @@ exports.deletePartner = async (req, res) => {
       });
     }
 
-    // Delete every partner-payment that references this partner.
-    // `partner` is an ObjectId in the PartnerPayment schema,
-    // so we only pass the partner's _id.
     const deleteResult = await PartnerPayment.deleteMany({
       partner: partner._id,
     });
@@ -464,8 +489,8 @@ exports.deletePartner = async (req, res) => {
 // GET dashboard stats
 // ============================================================
 exports.getPartnerDashboardStats = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const Payment = tenantScope(PaymentModel, req);
+  const Partner = tenantScope(PartnerModel, req);
+  const Payment = tenantScope(PaymentModel, req);
   try {
     const totalPartners = await Partner.countDocuments();
     const activePartners = await Partner.countDocuments({ status: 'active' });

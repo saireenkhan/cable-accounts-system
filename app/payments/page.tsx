@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef ,useMemo} from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { downloadReceipt } from '@/app/lib/receipt';
 import { DataTable } from '@/app/components/ui/DataTable';
@@ -25,6 +25,7 @@ import {
   XCircle,
   Search,
   TrendingUp,
+  Wifi,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -55,11 +56,7 @@ const compareMonths = (a: string, b: string) => {
 };
 
 // ============================================================
-// ✅ Resolve a partner's area to its display name
-// Handles:
-//   - partner.area is a populated object { _id, name }
-//   - partner.area is a string name "Mateen Heaven 5H"
-//   - partner.area is an ObjectId string "6aa54e..."
+// Resolve a partner's area to its display name
 // ============================================================
 function resolveAreaName(
   partnerArea: any,
@@ -67,27 +64,48 @@ function resolveAreaName(
 ): string {
   if (!partnerArea) return 'No Area';
 
-  // If it's an object with name
   if (typeof partnerArea === 'object' && partnerArea.name) {
     return partnerArea.name;
   }
 
   const asString = String(partnerArea).trim();
 
-  // If the string looks like a valid area name in our lookup, use it
   if (areaLookup[asString]) return areaLookup[asString];
 
-  // If the string is an area name (not an ObjectId), return as-is
-  // ObjectId = 24 hex chars
   const isObjectId = /^[a-fA-F0-9]{24}$/.test(asString);
   if (!isObjectId) return asString;
 
-  // It's an ObjectId with no lookup match
   return 'Unknown Area';
 }
 
 // ============================================================
-// ✅ CORE: allocate the ENTIRE payment pool oldest-first
+// Resolve a partner's ISP to a display name
+// ============================================================
+function resolveIspName(partnerIsp: any): string {
+  if (!partnerIsp) return '';
+
+  if (typeof partnerIsp === 'object') {
+    return partnerIsp.name || partnerIsp.ispName || '';
+  }
+
+  return String(partnerIsp).trim();
+}
+
+// ============================================================
+// Resolve the master "partner" name stored on a partner record
+// ============================================================
+function resolvePartnerName(raw: any): string {
+  if (!raw) return '';
+
+  if (typeof raw === 'object' && raw.name) {
+    return String(raw.name).trim();
+  }
+
+  return String(raw).trim();
+}
+
+// ============================================================
+// CORE: allocate the ENTIRE payment pool oldest-first
 // ============================================================
 interface MonthAllocation {
   month: string;
@@ -162,6 +180,13 @@ function SearchableSelect({
     const selected = options.find((opt) => opt.value === value);
     setDisplayValue(selected?.label || '');
   }, [value, options]);
+
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearchTerm('');
+    }
+  }, [disabled]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -263,6 +288,7 @@ function ReceivePartnerPaymentModal({
   payments,
   packages,
   areas,
+  isps,
   areaLookup,
   fetchData,
 }: {
@@ -273,9 +299,11 @@ function ReceivePartnerPaymentModal({
   payments: any[];
   packages: any[];
   areas: any[];
+  isps: any[];
   areaLookup: Record<string, string>;
   fetchData: () => void;
 }) {
+  const [selectedIsp, setSelectedIsp] = useState('');
   const [selectedPartner, setSelectedPartner] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
@@ -289,40 +317,49 @@ function ReceivePartnerPaymentModal({
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
 
-  // ============================================================
-  // ✅ Build a unique list of partner names from the customers
-  //    (each customer has a `partner` field — the partner they
-  //    are assigned to).
-  // ============================================================
+  // Only show the ISP step if ISPs exist
+  const showIspFilter = isps.length > 0;
+
+  // ISP options come from the /isps endpoint
+  const ispOptions = useMemo(
+    () =>
+      isps
+        .map((isp: any) => ({
+          label: isp.name || String(isp._id),
+          value: isp.name || String(isp._id),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [isps]
+  );
+
+  // Partners limited to the chosen ISP (when the ISP step is active)
+  const ispScopedCustomers = useMemo(() => {
+    if (!showIspFilter) return customers;
+    if (!selectedIsp) return [];
+    return customers.filter(
+      (c: any) => resolveIspName(c.isp) === selectedIsp
+    );
+  }, [customers, showIspFilter, selectedIsp]);
+
+  // Unique master-partner names within the chosen ISP
   const partnerOptions = useMemo(() => {
     const names = new Set<string>();
-    customers.forEach((c: any) => {
-      const p =
-        typeof c.partner === 'object' && c.partner?.name
-          ? c.partner.name
-          : c.partner;
-      if (p && String(p).trim()) names.add(String(p).trim());
+    ispScopedCustomers.forEach((c: any) => {
+      const name = resolvePartnerName(c.partner);
+      if (name) names.add(name);
     });
     return Array.from(names)
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ label: name, value: name }));
-  }, [customers]);
+  }, [ispScopedCustomers]);
 
-  // ============================================================
-  // ✅ Areas that belong to the selected partner.
-  //    Derived from the customers assigned to that partner.
-  // ============================================================
+  // Areas that belong to the selected partner (within the chosen ISP)
   const partnerAreaOptions = useMemo(() => {
     if (!selectedPartner) return [];
 
     const areaNames = new Set<string>();
-    customers.forEach((c: any) => {
-      const partnerName =
-        typeof c.partner === 'object' && c.partner?.name
-          ? c.partner.name
-          : c.partner;
-
-      if (String(partnerName || '').trim() !== selectedPartner) return;
+    ispScopedCustomers.forEach((c: any) => {
+      if (resolvePartnerName(c.partner) !== selectedPartner) return;
 
       const resolved = resolveAreaName(c.area, areaLookup);
       if (resolved && resolved !== 'Unknown Area' && resolved !== 'No Area') {
@@ -333,26 +370,17 @@ function ReceivePartnerPaymentModal({
     return Array.from(areaNames)
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ label: name, value: name }));
-  }, [selectedPartner, customers, areaLookup]);
+  }, [selectedPartner, ispScopedCustomers, areaLookup]);
 
-  // ============================================================
-  // ✅ Users filtered by BOTH partner AND area
-  // ============================================================
+  // Users filtered by ISP, partner AND area
   const filteredCustomers = useMemo(() => {
     if (!selectedPartner || !selectedArea) return [];
 
-    return customers.filter((c: any) => {
-      const partnerName =
-        typeof c.partner === 'object' && c.partner?.name
-          ? c.partner.name
-          : c.partner;
-
-      if (String(partnerName || '').trim() !== selectedPartner) return false;
-
-      const resolved = resolveAreaName(c.area, areaLookup);
-      return resolved === selectedArea;
+    return ispScopedCustomers.filter((c: any) => {
+      if (resolvePartnerName(c.partner) !== selectedPartner) return false;
+      return resolveAreaName(c.area, areaLookup) === selectedArea;
     });
-  }, [selectedPartner, selectedArea, customers, areaLookup]);
+  }, [selectedPartner, selectedArea, ispScopedCustomers, areaLookup]);
 
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.partnerId || c.code || 'N/A';
@@ -365,15 +393,14 @@ function ReceivePartnerPaymentModal({
   const currentYear = new Date().getFullYear();
   const monthOptions = MONTHS.map((month) => `${month} ${currentYear}`);
 
-  // ============================================================
   // Reset form when modal opens
-  // ============================================================
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
       const defaultMonth = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       setSelectedMonth(defaultMonth);
       setPaymentDate(now.toISOString().split('T')[0]);
+      setSelectedIsp('');
       setSelectedPartner('');
       setSelectedArea('');
       setSelectedCustomerId('');
@@ -385,18 +412,20 @@ function ReceivePartnerPaymentModal({
     }
   }, [isOpen]);
 
-  // ============================================================
   // When a user is selected, compute their payment summary
-  // ============================================================
   useEffect(() => {
     if (selectedCustomerId) {
-      const customer = customers.find((c) => c._id === selectedCustomerId);
+      const customer = customers.find(
+        (c) => String(c._id) === String(selectedCustomerId)
+      );
       setCustomerDetails(customer || null);
 
       if (customer) {
+        // Formatted payments carry the partner's _id in `customerId`
         const customerPayments = payments.filter(
           (p) =>
-            (p.partner?._id === customer._id ||
+            (String(p.customerId) === String(customer._id) ||
+              p.partner?._id === customer._id ||
               p.partner === customer._id ||
               p.partnerId === customer._id) &&
             !p.isNoPayment
@@ -415,9 +444,17 @@ function ReceivePartnerPaymentModal({
     }
   }, [selectedCustomerId, customers, payments]);
 
-  // ============================================================
+  // Reset downstream selections when ISP changes
+  useEffect(() => {
+    if (!showIspFilter) return;
+    setSelectedPartner('');
+    setSelectedArea('');
+    setSelectedCustomerId('');
+    setCustomerDetails(null);
+    setMonthlySummary([]);
+  }, [selectedIsp, showIspFilter]);
+
   // Reset downstream selections when partner changes
-  // ============================================================
   useEffect(() => {
     setSelectedArea('');
     setSelectedCustomerId('');
@@ -425,9 +462,7 @@ function ReceivePartnerPaymentModal({
     setMonthlySummary([]);
   }, [selectedPartner]);
 
-  // ============================================================
   // Reset user when area changes
-  // ============================================================
   useEffect(() => {
     setSelectedCustomerId('');
     setCustomerDetails(null);
@@ -476,7 +511,8 @@ function ReceivePartnerPaymentModal({
   const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
 
   const handleSubmit = async () => {
-    if (!selectedPartner) return toast.error('Please select a partner first');
+    if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
+    if (!selectedPartner) return toast.error('Please select a partner');
     if (!selectedArea) return toast.error('Please select an area');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
@@ -492,7 +528,9 @@ function ReceivePartnerPaymentModal({
 
     setIsSubmitting(true);
     try {
-      const customerObj = customers.find((c) => c._id === selectedCustomerId);
+      const customerObj = customers.find(
+        (c) => String(c._id) === String(selectedCustomerId)
+      );
       if (!customerObj) {
         toast.error('Partner not found');
         setIsSubmitting(false);
@@ -529,14 +567,17 @@ function ReceivePartnerPaymentModal({
   };
 
   const handleNoPayment = async () => {
-    if (!selectedPartner) return toast.error('Please select a partner first');
+    if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
+    if (!selectedPartner) return toast.error('Please select a partner');
     if (!selectedArea) return toast.error('Please select an area');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
 
     setIsSubmittingNoPayment(true);
     try {
-      const customerObj = customers.find((c) => c._id === selectedCustomerId);
+      const customerObj = customers.find(
+        (c) => String(c._id) === String(selectedCustomerId)
+      );
       if (!customerObj) {
         toast.error('Partner not found');
         setIsSubmittingNoPayment(false);
@@ -573,6 +614,8 @@ function ReceivePartnerPaymentModal({
 
   if (!isOpen) return null;
 
+  const ispMissing = showIspFilter && !selectedIsp;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
@@ -585,7 +628,9 @@ function ReceivePartnerPaymentModal({
               Receive Partner Payment
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Select partner, then area, then user to record payment
+              {showIspFilter
+                ? 'Select ISP, then partner, then area, then user to record payment'
+                : 'Select partner, then area, then user to record payment'}
             </p>
           </div>
           <button
@@ -628,7 +673,24 @@ function ReceivePartnerPaymentModal({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
-              {/* ✅ 1. PARTNER (new first step) */}
+              {/* 1. ISP (only if ISPs exist) */}
+              {showIspFilter && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <Wifi className="h-4 w-4 inline mr-1" />
+                    ISP *
+                  </label>
+                  <SearchableSelect
+                    options={ispOptions}
+                    value={selectedIsp}
+                    onChange={setSelectedIsp}
+                    placeholder="Search & Select ISP"
+                    label="ISP"
+                  />
+                </div>
+              )}
+
+              {/* 2. PARTNER (filtered by ISP) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <User className="h-4 w-4 inline mr-1" />
@@ -638,12 +700,19 @@ function ReceivePartnerPaymentModal({
                   options={partnerOptions}
                   value={selectedPartner}
                   onChange={setSelectedPartner}
-                  placeholder="Search & Select Partner"
+                  placeholder={
+                    ispMissing
+                      ? 'Select ISP first'
+                      : partnerOptions.length > 0
+                        ? 'Search & Select Partner'
+                        : 'No partners found'
+                  }
                   label="Partner"
+                  disabled={ispMissing || partnerOptions.length === 0}
                 />
               </div>
 
-              {/* ✅ 2. AREA (filtered by partner) */}
+              {/* 3. AREA (filtered by ISP + partner) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <MapPin className="h-4 w-4 inline mr-1" />
@@ -654,18 +723,24 @@ function ReceivePartnerPaymentModal({
                   value={selectedArea}
                   onChange={setSelectedArea}
                   placeholder={
-                    selectedPartner
-                      ? partnerAreaOptions.length > 0
-                        ? 'Search & Select Area'
-                        : 'No areas found for this partner'
-                      : 'Select partner first'
+                    ispMissing
+                      ? 'Select ISP first'
+                      : selectedPartner
+                        ? partnerAreaOptions.length > 0
+                          ? 'Search & Select Area'
+                          : 'No areas found for this partner'
+                        : 'Select partner first'
                   }
                   label="Area"
-                  disabled={!selectedPartner || partnerAreaOptions.length === 0}
+                  disabled={
+                    ispMissing ||
+                    !selectedPartner ||
+                    partnerAreaOptions.length === 0
+                  }
                 />
               </div>
 
-              {/* ✅ 3. USER (filtered by partner + area) */}
+              {/* 4. USER (filtered by ISP + partner + area) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <User className="h-4 w-4 inline mr-1" />
@@ -676,16 +751,23 @@ function ReceivePartnerPaymentModal({
                   value={selectedCustomerId}
                   onChange={setSelectedCustomerId}
                   placeholder={
-                    !selectedPartner
-                      ? 'Select partner first'
-                      : !selectedArea
-                        ? 'Select area first'
-                        : userOptions.length > 0
-                          ? 'Select User ID'
-                          : 'No users found'
+                    ispMissing
+                      ? 'Select ISP first'
+                      : !selectedPartner
+                        ? 'Select partner first'
+                        : !selectedArea
+                          ? 'Select area first'
+                          : userOptions.length > 0
+                            ? 'Select User ID'
+                            : 'No users found'
                   }
                   label="User ID"
-                  disabled={!selectedPartner || !selectedArea || userOptions.length === 0}
+                  disabled={
+                    ispMissing ||
+                    !selectedPartner ||
+                    !selectedArea ||
+                    userOptions.length === 0
+                  }
                 />
               </div>
 
@@ -891,7 +973,8 @@ function ReceivePartnerPaymentModal({
                 isSubmittingNoPayment ||
                 !selectedCustomerId ||
                 !selectedArea ||
-                !selectedPartner
+                !selectedPartner ||
+                ispMissing
               }
               className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-red-500/25"
             >
@@ -916,6 +999,7 @@ function ReceivePartnerPaymentModal({
                 !selectedCustomerId ||
                 !selectedArea ||
                 !selectedPartner ||
+                ispMissing ||
                 !receiveAmount ||
                 isDuplicateMonth
               }
@@ -950,6 +1034,7 @@ export default function ReceivePartnerPaymentPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [isps, setIsps] = useState<any[]>([]);
   const [areaLookup, setAreaLookup] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -965,14 +1050,16 @@ export default function ReceivePartnerPaymentPage() {
         return;
       }
 
-      const [paymentsRes, customersRes, packagesRes, areasRes] = await Promise.all([
-        api.get('/partner-payments'),
-        api.get('/partners?limit=1000'),
-        api.get('/packages'),
-        api.get('/partner-areas'),
-      ]);
+      const [paymentsRes, customersRes, packagesRes, areasRes, ispsRes] =
+        await Promise.all([
+          api.get('/partner-payments'),
+          api.get('/partners?limit=1000'),
+          api.get('/packages'),
+          api.get('/partner-areas'),
+          api.get('/isps'),
+        ]);
 
-      // ✅ Build area lookup map: { "6aa54e..." -> "Mateen Heaven 5H", "Mateen Heaven 5H" -> "Mateen Heaven 5H" }
+      // Area lookup map: id -> name, name -> name
       const lookup: Record<string, string> = {};
       if (areasRes.data.success) {
         const areaList = areasRes.data.areas || [];
@@ -986,10 +1073,28 @@ export default function ReceivePartnerPaymentPage() {
       }
       setAreaLookup(lookup);
 
+      // ISPs: decide whether the ISP step shows up
+      if (ispsRes.data.success && Array.isArray(ispsRes.data.isps)) {
+        setIsps(ispsRes.data.isps);
+      } else {
+        setIsps([]);
+      }
+
       if (paymentsRes.data.success) {
         const partnerIdMap: Record<string, string> = {};
+        const partnerIspMap: Record<string, string> = {};
+        // ✅ FIX 1a: name -> _id map
+        const partnerObjectIdByName: Record<string, string> = {};
+
         (customersRes.data.partners || []).forEach((p: any) => {
           partnerIdMap[p.name] = p.partnerId || p.code || 'N/A';
+          if (p._id) {
+            partnerIspMap[String(p._id)] = resolveIspName(p.isp);
+          }
+          // ✅ FIX 1a
+          if (p.name && p._id) {
+            partnerObjectIdByName[p.name] = String(p._id);
+          }
         });
 
         const formattedPayments = paymentsRes.data.payments.map((payment: any) => {
@@ -1000,12 +1105,24 @@ export default function ReceivePartnerPaymentPage() {
             payment.partner?.code ||
             'N/A';
 
+          const resolvedIsp =
+            resolveIspName(payment.partner?.isp) ||
+            partnerIspMap[String(payment.partner?._id || '')] ||
+            '';
+
           return {
             id: payment._id,
             receipt: payment.receiptNo || 'N/A',
             userId: displayUserId,
             customer: partnerName,
-            customerId: payment.partner?._id || '',
+            // ✅ FIX 1b: fall back to name -> _id map
+            customerId:
+              payment.partner?._id ||
+              partnerObjectIdByName[
+                typeof payment.partner === 'string' ? payment.partner : ''
+              ] ||
+              '',
+            isp: resolvedIsp,
             month: payment.month || 'N/A',
             date: payment.paymentDate
               ? new Date(payment.paymentDate).toLocaleDateString('en-PK', {
@@ -1201,13 +1318,31 @@ export default function ReceivePartnerPaymentPage() {
       payment.userId?.toLowerCase().includes(query) ||
       payment.customer?.toLowerCase().includes(query) ||
       payment.receipt?.toLowerCase().includes(query) ||
-      payment.month?.toLowerCase().includes(query)
+      payment.month?.toLowerCase().includes(query) ||
+      payment.isp?.toLowerCase().includes(query)
     );
   });
 
   const columns = [
     { key: 'userId', header: 'User ID' },
-    { key: 'customer', header: 'User' },
+    {
+      key: 'customer',
+      header: 'User',
+      render: (item: any) => (
+        <div className="flex flex-col">
+          <span className="font-medium text-gray-900 dark:text-white">
+            {item.customer}
+          </span>
+
+          {item.isp && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <Wifi className="h-3 w-3 text-blue-500" />
+              ISP: {item.isp}
+            </span>
+          )}
+        </div>
+      ),
+    },
     { key: 'month', header: 'Month' },
     { key: 'date', header: 'Recieve Date' },
     { key: 'method', header: 'Method' },
@@ -1270,7 +1405,9 @@ export default function ReceivePartnerPaymentPage() {
               Receive Partner Payments
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Select area, then partner ID to record payment
+              {isps.length > 0
+                ? 'Select ISP, then partner, area and user to record payment'
+                : 'Select partner, then area and user to record payment'}
             </p>
           </div>
           <button
@@ -1370,7 +1507,7 @@ export default function ReceivePartnerPaymentPage() {
         </div>
 
         <SearchBar
-          placeholder="Search by partner ID, partner or month..."
+          placeholder="Search by partner ID, partner, ISP or month..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
@@ -1388,65 +1525,77 @@ export default function ReceivePartnerPaymentPage() {
             <DataTable
               data={filteredPayments}
               columns={columns}
-actions={[
-  {
-    label: 'PDF',
-    value: 'pdf',
-    icon: <Printer className="h-4 w-4" />,
-  },
-]}
-onAction={(item, action) => {
-  if (action !== 'pdf') return;
+              actions={[
+                {
+                  label: 'PDF',
+                  value: 'pdf',
+                  icon: <Printer className="h-4 w-4" />,
+                },
+              ]}
+              onAction={(item, action) => {
+                if (action !== 'pdf') return;
 
-  const partner = customers.find(
-    (c) => String(c._id) === String(item.customerId)
-  );
+                const partner = customers.find(
+                  (c) => String(c._id) === String(item.customerId)
+                );
 
-  const area = resolveAreaName(partner?.area, areaLookup);
+                const area = resolveAreaName(partner?.area, areaLookup);
 
-  const monthlyFee = parseFloat(String(partner?.monthlyFee)) || 0;
-  const partnerPayments = payments.filter(
-    (p) => String(p.customerId) === String(item.customerId) && !p.isNoPayment
-  );
-  const allocs = allocatePayments(
-    monthlyFee,
-    partnerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
-  );
+                const monthlyFee = parseFloat(String(partner?.monthlyFee)) || 0;
+                const partnerPayments = payments.filter(
+                  (p) =>
+                    String(p.customerId) === String(item.customerId) &&
+                    !p.isNoPayment
+                );
+                const allocs = allocatePayments(
+                  monthlyFee,
+                  partnerPayments.map((p: any) => ({
+                    month: p.month,
+                    amount: p.amount,
+                  }))
+                );
 
-  const currentAlloc = allocs.find((a) => a.month === item.month);
-  const previousBalance = allocs
-    .filter((a) => compareMonths(a.month, item.month) < 0 && !a.isPaid)
-    .reduce((sum, a) => sum + a.remaining, 0);
-  const currentBalance = currentAlloc ? currentAlloc.remaining : monthlyFee;
-  const totalBalance = previousBalance + currentBalance;
+                const currentAlloc = allocs.find((a) => a.month === item.month);
+                const previousBalance = allocs
+                  .filter(
+                    (a) => compareMonths(a.month, item.month) < 0 && !a.isPaid
+                  )
+                  .reduce((sum, a) => sum + a.remaining, 0);
+                const currentBalance = currentAlloc
+                  ? currentAlloc.remaining
+                  : monthlyFee;
+                const totalBalance = previousBalance + currentBalance;
 
-  downloadReceipt({
-    title: 'Partner Payment Receipt',
-    receiptNo: item.receipt,
-    partyLabel: 'Partner',
-    partyName: item.customer,
-    partyId: item.userId,
-    area,
-    phone: partner?.phone,
-    month: item.month,
-    paymentDate: item.date,
-    paymentMethod: item.method,
-    packageName:
-      typeof partner?.package === 'string'
-        ? partner.package
-        : partner?.package?.name,
-    packagePrice: item.packagePrice,
-    amount: item.amount,
-    remarks: partner?.remarks,
-    previousBalance,
-    currentBalance,
-    totalBalance,
-    remainingBalance: Math.max(0, totalBalance - (item.amount || 0)),
-    isNoPayment: item.isNoPayment,
-  });
+                downloadReceipt({
+                  title: 'Partner Payment Receipt',
+                  receiptNo: item.receipt,
+                  partyLabel: 'Partner',
+                  partyName: item.customer,
+                  partyId: item.userId,
+                  area,
+                  phone: partner?.phone,
+                  month: item.month,
+                  paymentDate: item.date,
+                  paymentMethod: item.method,
+                  packageName:
+                    typeof partner?.package === 'string'
+                      ? partner.package
+                      : partner?.package?.name,
+                  packagePrice: item.packagePrice,
+                  amount: item.amount,
+                  remarks: partner?.remarks,
+                  previousBalance,
+                  currentBalance,
+                  totalBalance,
+                  remainingBalance: Math.max(
+                    0,
+                    totalBalance - (item.amount || 0)
+                  ),
+                  isNoPayment: item.isNoPayment,
+                });
 
-  toast.success(`Receipt downloaded for ${item.customer}`);
-}}
+                toast.success(`Receipt downloaded for ${item.customer}`);
+              }}
               accordionTitle="customer"
               accordionSubtitle="userId"
               emptyMessage="No partner payments found"
@@ -1464,6 +1613,7 @@ onAction={(item, action) => {
           payments={payments}
           packages={packages}
           areas={areas}
+          isps={isps}
           areaLookup={areaLookup}
           fetchData={fetchAllData}
         />

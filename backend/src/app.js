@@ -11,7 +11,7 @@ const logger = require('./utils/logger');
 // ============================================================
 // IMPORT ROUTES
 // ============================================================
-
+const ispRoutes = require('./routes/ispRoutes');
 const authRoutes = require('./routes/authRoutes');
 const customerRoutes = require('./routes/customerRoutes');
 const billRoutes = require('./routes/billRoutes');
@@ -191,7 +191,7 @@ app.use('/api/installation', installationRoutes);
 app.use('/api/expenses', expenseRoutes);
 
 app.use('/api/reports', reportRoutes);
-
+app.use('/api/isps', ispRoutes);
 app.use(
   '/api/dealer-areas',
   dealerAreaRoutes

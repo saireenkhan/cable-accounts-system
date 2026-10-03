@@ -3,12 +3,21 @@ const DealerModel = require('../models/Dealer');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 
+// Fields populated on every payment response
+const DEALER_POPULATE = {
+  path: 'dealer',
+  select: 'name dealerId cellNo commission isp area currentBalance',
+  populate: {
+    path: 'area',
+    select: 'name',
+  },
+};
+
 // ============================================================
 // GET all dealer payments
 // ============================================================
 exports.getDealerPayments = async (req, res) => {
-    const Dealer = tenantScope(DealerModel, req);
-    const DealerPayment = tenantScope(DealerPaymentModel, req);
+  const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const { dealerId, month, paymentType } = req.query;
     const filter = {};
@@ -18,21 +27,14 @@ exports.getDealerPayments = async (req, res) => {
     if (paymentType) filter.paymentType = paymentType;
 
     const payments = await DealerPayment.find(filter)
-      .populate({
-        path: 'dealer',
-        select: 'name dealerId cellNo commission area currentBalance',
-        populate: {
-          path: 'area',
-          select: 'name',
-        },
-      })
+      .populate(DEALER_POPULATE)
       .populate('receivedBy', 'name')
       .sort({ paymentDate: -1 });
 
     res.json({ success: true, payments });
   } catch (error) {
     logger.error(`Get dealer payments error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -40,8 +42,8 @@ exports.getDealerPayments = async (req, res) => {
 // CREATE dealer payment
 // ============================================================
 exports.createDealerPayment = async (req, res) => {
-    const Dealer = tenantScope(DealerModel, req);
-    const DealerPayment = tenantScope(DealerPaymentModel, req);
+  const Dealer = tenantScope(DealerModel, req);
+  const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const {
       dealerId,
@@ -73,12 +75,19 @@ exports.createDealerPayment = async (req, res) => {
       });
     }
 
-    // ✅ Find dealer by name or ID
-    let dealerDoc;
+    // Find the dealer by dealer code first (unique), then by ObjectId,
+    // then by name as a last resort for older callers.
+    let dealerDoc = null;
+
     if (typeof dealerId === 'string') {
-      dealerDoc = await Dealer.findOne({ name: dealerId });
+      dealerDoc = await Dealer.findOne({ dealerId });
+
+      if (!dealerDoc && /^[a-f\d]{24}$/i.test(dealerId)) {
+        dealerDoc = await Dealer.findById(dealerId);
+      }
+
       if (!dealerDoc) {
-        dealerDoc = await Dealer.findOne({ dealerId });
+        dealerDoc = await Dealer.findOne({ name: dealerId });
       }
     } else {
       dealerDoc = await Dealer.findById(dealerId);
@@ -91,15 +100,13 @@ exports.createDealerPayment = async (req, res) => {
       });
     }
 
-    // ✅ Handle payment method
+    // Payment method
     let methodValue = paymentMethod || 'cash';
     if (typeof methodValue === 'string') {
       methodValue = methodValue.toLowerCase().replace(/ /g, '_');
     }
 
-    // ============================================================
-    // ✅ CALCULATE COMMISSION (only for receive_payment)
-    // ============================================================
+    // Commission (only for receive_payment)
     let commissionAmount = 0;
     let commissionRate = '';
 
@@ -112,11 +119,12 @@ exports.createDealerPayment = async (req, res) => {
       );
     }
 
-    // ✅ Create payment
+    const parsedAmount = parseFloat(amount) || 0;
+
     const payment = await DealerPayment.create({
       receiptNo,
       dealer: dealerDoc._id,
-      amount: parseFloat(amount) || 0,
+      amount: parsedAmount,
       month:
         month ||
         `${new Date().toLocaleString('default', { month: 'long' })} ${new Date().getFullYear()}`,
@@ -132,21 +140,12 @@ exports.createDealerPayment = async (req, res) => {
       remarks: remarks || '',
     });
 
-    // ✅ Update dealer current balance
-    dealerDoc.currentBalance =
-      (dealerDoc.currentBalance || 0) - parseFloat(amount);
+    // Update dealer current balance
+    dealerDoc.currentBalance = (dealerDoc.currentBalance || 0) - parsedAmount;
     await dealerDoc.save();
 
-    // ✅ Populate the payment for the response
     const populatedPayment = await DealerPayment.findById(payment._id)
-      .populate({
-        path: 'dealer',
-        select: 'name dealerId cellNo commission area currentBalance',
-        populate: {
-          path: 'area',
-          select: 'name',
-        },
-      })
+      .populate(DEALER_POPULATE)
       .populate('receivedBy', 'name');
 
     console.log('✅ Dealer payment created:', populatedPayment.receiptNo);
@@ -170,15 +169,18 @@ exports.createDealerPayment = async (req, res) => {
 // DELETE dealer payment
 // ============================================================
 exports.deleteDealerPayment = async (req, res) => {
-    const DealerPayment = tenantScope(DealerPaymentModel, req);
+  const DealerPayment = tenantScope(DealerPaymentModel, req);
   try {
     const payment = await DealerPayment.findByIdAndDelete(req.params.id);
     if (!payment) {
-      return res.status(404).json({ message: 'Payment not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found',
+      });
     }
     res.json({ success: true, message: 'Payment deleted successfully' });
   } catch (error) {
     logger.error(`Delete dealer payment error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

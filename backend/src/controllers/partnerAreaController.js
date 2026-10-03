@@ -2,11 +2,16 @@ const PartnerAreaModel = require('../models/PartnerArea');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 
-// ✅ Get all partner areas
+// Get all partner areas
 exports.getPartnerAreas = async (req, res) => {
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
-    const areas = await PartnerArea.find().sort({ createdAt: -1 });
+    const filter = {};
+
+    // Optional: /partner-areas?isp=Nayatel
+    if (req.query.isp) filter.isp = req.query.isp;
+
+    const areas = await PartnerArea.find(filter).sort({ createdAt: -1 });
     res.json({ success: true, areas });
   } catch (error) {
     logger.error(`Get partner areas error: ${error.message}`);
@@ -14,9 +19,9 @@ exports.getPartnerAreas = async (req, res) => {
   }
 };
 
-// ✅ Get single partner area by ID
+// Get single partner area by ID
 exports.getPartnerArea = async (req, res) => {
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const area = await PartnerArea.findById(req.params.id);
     if (!area) {
@@ -32,11 +37,11 @@ exports.getPartnerArea = async (req, res) => {
   }
 };
 
-// ✅ Create partner area
+// Create partner area
 exports.createPartnerArea = async (req, res) => {
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
-    const { name, code, description } = req.body;
+    const { name, code, description, isp } = req.body;
 
     console.log('📝 Creating partner area with data:', req.body);
 
@@ -61,6 +66,7 @@ exports.createPartnerArea = async (req, res) => {
       name: String(name).trim(),
       code: code ? String(code).trim() : '',
       description: description ? String(description).trim() : '',
+      isp: isp ? String(isp).trim() : '',
       isActive: true,
     });
 
@@ -73,6 +79,14 @@ exports.createPartnerArea = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Create partner area error:', error);
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'A partner area with this name already exists',
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message || 'Server error',
@@ -80,11 +94,11 @@ exports.createPartnerArea = async (req, res) => {
   }
 };
 
-// ✅ Update partner area
+// Update partner area
 exports.updatePartnerArea = async (req, res) => {
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
-    const { name, code, description, isActive } = req.body;
+    const { name, code, description, isp, isActive } = req.body;
 
     const update = {};
 
@@ -101,6 +115,7 @@ exports.updatePartnerArea = async (req, res) => {
     if (code !== undefined) update.code = String(code).trim();
     if (description !== undefined)
       update.description = String(description).trim();
+    if (isp !== undefined) update.isp = String(isp || '').trim();
     if (isActive !== undefined) update.isActive = Boolean(isActive);
 
     const area = await PartnerArea.findByIdAndUpdate(req.params.id, update, {
@@ -136,9 +151,9 @@ exports.updatePartnerArea = async (req, res) => {
   }
 };
 
-// ✅ Delete partner area
+// Delete partner area
 exports.deletePartnerArea = async (req, res) => {
-    const PartnerArea = tenantScope(PartnerAreaModel, req);
+  const PartnerArea = tenantScope(PartnerAreaModel, req);
   try {
     const area = await PartnerArea.findByIdAndDelete(req.params.id);
     if (!area) {

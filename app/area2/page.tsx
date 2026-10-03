@@ -18,7 +18,7 @@ import {
   ChevronUp,
   Check,
   SlidersHorizontal,
-  MoreHorizontal,
+  Wifi,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -60,10 +60,27 @@ export default function DealerAreasPage() {
     useState<any>(null);
   const [expandedId, setExpandedId] =
     useState<string | null>(null);
+  const [isps, setIsps] = useState<any[]>([]);
 
   useEffect(() => {
     fetchAreas();
+    fetchIsps();
   }, []);
+
+  const fetchIsps = async () => {
+    try {
+      const token = sessionStorage.getItem('token');
+      if (!token) return;
+
+      const { data } = await api.get('/isps');
+      const list =
+        data.success && Array.isArray(data.isps) ? data.isps : [];
+      setIsps(list);
+    } catch (e) {
+      console.error('Error fetching ISPs:', e);
+      setIsps([]);
+    }
+  };
 
   const fetchAreas = async () => {
     try {
@@ -112,6 +129,10 @@ export default function DealerAreasPage() {
               code: area.code || '',
               description:
                 area.description || '',
+              isp:
+                typeof area.isp === 'object' && area.isp
+                  ? area.isp.name || ''
+                  : area.isp || '',
               dealers:
                 dealerCounts[area.name] || 0,
               color:
@@ -145,14 +166,6 @@ export default function DealerAreasPage() {
     }
   };
 
-  const totalAreas = areas.length;
-
-  const totalDealers = areas.reduce(
-    (sum, area) =>
-      sum + (area.dealers || 0),
-    0
-  );
-
   const areaFields: Field[] = [
     {
       name: 'name',
@@ -175,6 +188,21 @@ export default function DealerAreasPage() {
       placeholder:
         'Optional description',
     },
+    ...(isps.length > 0
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map((isp: any) => ({
+              label: isp.name,
+              value: isp.name,
+            })),
+          },
+        ]
+      : []),
   ];
 
   const transformAreaData = (data: any) => ({
@@ -182,6 +210,7 @@ export default function DealerAreasPage() {
     code: data.code?.trim() || '',
     description:
       data.description?.trim() || '',
+    isp: data.isp || '',
   });
 
   const handleAreaAdded = (data: any) => {
@@ -264,6 +293,9 @@ export default function DealerAreasPage() {
           .toLowerCase()
           .includes(query) ||
         area.code
+          ?.toLowerCase()
+          .includes(query) ||
+        area.isp
           ?.toLowerCase()
           .includes(query);
 
@@ -662,6 +694,13 @@ export default function DealerAreasPage() {
                                 }
                               </p>
                             )}
+
+                            {area.isp && (
+                              <p className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400">
+                                <Wifi className="h-3 w-3" />
+                                {area.isp}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -724,6 +763,18 @@ export default function DealerAreasPage() {
                       {isExpanded && (
                         <>
                           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-gray-100 pt-4 dark:border-gray-700">
+                            {area.isp && (
+                              <InfoBlock
+                                icon={
+                                  <Wifi className="h-4 w-4 text-blue-500" />
+                                }
+                                label="ISP"
+                                value={
+                                  area.isp
+                                }
+                              />
+                            )}
+
                             <InfoBlock
                               icon={
                                 <Truck className="h-4 w-4 text-amber-500" />
@@ -889,6 +940,9 @@ export default function DealerAreasPage() {
                     '',
                   description:
                     editingArea.description ||
+                    '',
+                  isp:
+                    editingArea.isp ||
                     '',
                 }
               : undefined

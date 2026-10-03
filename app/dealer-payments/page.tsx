@@ -17,9 +17,37 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  Wifi,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
+
+// ============================================================
+// Resolve an ISP to a display name
+// ============================================================
+function resolveIspName(raw: any): string {
+  if (!raw) return '';
+
+  if (typeof raw === 'object') {
+    return raw.name || raw.ispName || '';
+  }
+
+  return String(raw).trim();
+}
+
+// ============================================================
+// Resolve a dealer's area to a display name
+// ============================================================
+function getDealerAreaName(dealer: any): string {
+  const area = dealer?.area;
+  if (!area) return '';
+  if (typeof area === 'object') return area.name || '';
+  return String(area).trim();
+}
+
+// Payments are grouped per dealer by their dealer code
+// (falls back to the name when a code is missing)
+const dealerKey = (p: any) => p.dealerId || p.dealer;
 
 export default function DealerPaymentsPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -28,6 +56,7 @@ export default function DealerPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<any[]>([]);
   const [dealers, setDealers] = useState<any[]>([]);
+  const [isps, setIsps] = useState<any[]>([]);
 
   useEffect(() => {
     fetchAllData();
@@ -42,10 +71,17 @@ export default function DealerPaymentsPage() {
         return;
       }
 
-      const [paymentsRes, dealersRes] = await Promise.all([
+      const [paymentsRes, dealersRes, ispsRes] = await Promise.all([
         api.get('/dealer-payments'),
         api.get('/dealers?limit=1000'),
+        api.get('/isps').catch(() => ({ data: { success: false } })),
       ]);
+
+      if (ispsRes.data.success && Array.isArray(ispsRes.data.isps)) {
+        setIsps(ispsRes.data.isps);
+      } else {
+        setIsps([]);
+      }
 
       if (paymentsRes.data.success) {
         const formattedPayments = paymentsRes.data.payments.map((payment: any) => ({
@@ -54,6 +90,7 @@ export default function DealerPaymentsPage() {
           dealer: payment.dealer?.name || 'Unknown',
           dealerId: payment.dealer?.dealerId || '',
           dealerCommission: payment.dealer?.commission || '0%',
+          isp: resolveIspName(payment.dealer?.isp),
           area: payment.dealer?.area?.name || 'N/A',
           month: payment.month || 'N/A',
           date: payment.paymentDate
@@ -90,11 +127,14 @@ export default function DealerPaymentsPage() {
   };
 
   // ============ COMMON ============
-  const uniqueAreas: string[] = Array.from(
+  const showIspFilter = isps.length > 0;
+
+  // Every dealer area (used when there are no ISPs configured)
+  const allAreas: string[] = Array.from(
     new Set<string>(
       dealers
-        .map((d: any) => d.area?.name || d.area)
-        .filter((a: any): a is string => Boolean(a))
+        .map((d: any) => getDealerAreaName(d))
+        .filter((a: string) => Boolean(a))
     )
   ).sort();
 
@@ -115,6 +155,106 @@ export default function DealerPaymentsPage() {
     label: `${m} ${new Date().getFullYear()}`,
     value: `${m} ${new Date().getFullYear()}`,
   }));
+
+  // ============================================================
+  // DYNAMIC OPTIONS — ISP -> Area -> Dealer ID
+  // ============================================================
+  const resolveDynamicOptions = (
+    fieldName: string,
+    formData: Record<string, any>
+  ) => {
+    const selectedIsp = String(formData.isp || '').toLowerCase();
+
+    const matchesIsp = (dealer: any) =>
+      !showIspFilter ||
+      resolveIspName(dealer.isp).toLowerCase() === selectedIsp;
+
+    if (fieldName === 'area') {
+      // ISP not selected yet -> no areas
+      if (showIspFilter && !formData.isp) return [];
+
+      const names = new Set<string>();
+      dealers.forEach((d: any) => {
+        if (!matchesIsp(d)) return;
+        const areaName = getDealerAreaName(d);
+        if (areaName) names.add(areaName);
+      });
+
+      return Array.from(names)
+        .sort()
+        .map((a) => ({ label: a, value: a }));
+    }
+
+    if (fieldName === 'dealerId') {
+      // Area not selected yet -> no dealers
+      if (!formData.area) return [];
+
+      return dealers
+        .filter(
+          (d: any) => matchesIsp(d) && getDealerAreaName(d) === formData.area
+        )
+        .map((d: any) => ({
+          label: `${d.dealerId} - ${d.name}`,
+          value: d.dealerId,
+        }));
+    }
+
+    return [];
+  };
+
+  // ============================================================
+  // SHARED LOCATION FIELDS (ISP -> Area -> Dealer ID -> Dealer Name)
+  // ============================================================
+  const locationFields: Field[] = [
+    ...(showIspFilter
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map((isp: any) => ({
+              label: isp.name,
+              value: isp.name,
+            })),
+          },
+        ]
+      : []),
+    {
+      name: 'area',
+      label: 'Area',
+      type: 'select',
+      required: true,
+      searchable: true,
+      placeholder: showIspFilter ? 'Select ISP first' : 'Select Area',
+      disabledUntil: showIspFilter ? 'isp' : undefined,
+      options: allAreas.map((a) => ({ label: a, value: a })),
+    },
+    {
+      name: 'dealerId',
+      label: 'Dealer ID',
+      type: 'select',
+      required: true,
+      searchable: true,
+      placeholder: 'Select area first',
+      disabledUntil: 'area',
+      options: [],
+    },
+    {
+      name: 'dealerName',
+      label: 'Dealer Name',
+      type: 'text',
+      readOnly: true,
+      placeholder: 'Auto-filled from Dealer ID',
+      dependsOn: 'dealerId',
+      updateOnChange: (dealerId: string, _fd: any, context: any) => {
+        const list = context?.dealers || dealers;
+        const dealer = list.find((d: any) => d.dealerId === dealerId);
+        return dealer?.name || '';
+      },
+    },
+  ];
 
   // ✅ Unique receipt generator for Receive Payment
   const generateReceiveReceiptNo = () => {
@@ -140,38 +280,7 @@ export default function DealerPaymentsPage() {
   // ADD PAYMENT FIELDS
   // ============================================================
   const addPaymentFields: Field[] = [
-    {
-      name: 'area',
-      label: 'Area',
-      type: 'select',
-      required: true,
-      searchable: true,
-      options: uniqueAreas.map((a: any) => ({ label: a, value: a })),
-    },
-    {
-      name: 'dealerId',
-      label: 'Dealer ID',
-      type: 'select',
-      required: true,
-      searchable: true,
-      options: dealers.map((d: any) => ({
-        label: `${d.dealerId} - ${d.name}`,
-        value: d.dealerId,
-      })),
-    },
-    {
-      name: 'dealerName',
-      label: 'Dealer Name',
-      type: 'text',
-      readOnly: true,
-      placeholder: 'Auto-filled from Dealer ID',
-      dependsOn: 'dealerId',
-      updateOnChange: (dealerId: string, _fd: any, context: any) => {
-        const list = context?.dealers || dealers;
-        const dealer = list.find((d: any) => d.dealerId === dealerId);
-        return dealer?.name || '';
-      },
-    },
+    ...locationFields,
     {
       name: 'month',
       label: 'Billing Month',
@@ -222,38 +331,7 @@ export default function DealerPaymentsPage() {
   // RECEIVE PAYMENT FIELDS
   // ============================================================
   const receivePaymentFields: Field[] = [
-    {
-      name: 'area',
-      label: 'Area',
-      type: 'select',
-      required: true,
-      searchable: true,
-      options: uniqueAreas.map((a: any) => ({ label: a, value: a })),
-    },
-    {
-      name: 'dealerId',
-      label: 'Dealer ID',
-      type: 'select',
-      required: true,
-      searchable: true,
-      options: dealers.map((d: any) => ({
-        label: `${d.dealerId} - ${d.name}`,
-        value: d.dealerId,
-      })),
-    },
-    {
-      name: 'dealerName',
-      label: 'Dealer Name',
-      type: 'text',
-      readOnly: true,
-      placeholder: 'Auto-filled from Dealer ID',
-      dependsOn: 'dealerId',
-      updateOnChange: (dealerId: string, _fd: any, context: any) => {
-        const list = context?.dealers || dealers;
-        const dealer = list.find((d: any) => d.dealerId === dealerId);
-        return dealer?.name || '';
-      },
-    },
+    ...locationFields,
     {
       name: 'month',
       label: 'Billing Month',
@@ -270,16 +348,16 @@ export default function DealerPaymentsPage() {
       placeholder: 'Auto-calculated',
       dependsOn: 'month',
       updateOnChange: (_month: string, formData: any, context: any) => {
-        const dealerName = formData?.dealerName;
+        const dealerCode = formData?.dealerId;
         const month = formData?.month;
-        if (!dealerName || !month) return '0';
+        if (!dealerCode || !month) return '0';
 
         const allPayments = context?.payments || [];
 
         const billing = allPayments
           .filter(
             (p: any) =>
-              p.dealer === dealerName &&
+              p.dealerId === dealerCode &&
               p.month === month &&
               p.paymentType === 'add_payment'
           )
@@ -288,7 +366,7 @@ export default function DealerPaymentsPage() {
         const received = allPayments
           .filter(
             (p: any) =>
-              p.dealer === dealerName &&
+              p.dealerId === dealerCode &&
               p.month === month &&
               p.paymentType === 'receive_payment'
           )
@@ -297,22 +375,22 @@ export default function DealerPaymentsPage() {
         return Math.max(0, billing - received).toLocaleString();
       },
     },
-    // ✅ Previous Balance = unpaid from OTHER months (excludes the currently selected month)
+    // ✅ Previous Balance = unpaid from OTHER months
     {
       name: 'previousBalance',
       label: 'Previous Balance (Rs.)',
       type: 'text',
       readOnly: true,
       placeholder: 'Auto-calculated',
-      dependsOn: 'month', // ✅ changed from 'dealerName'
+      dependsOn: 'month',
       updateOnChange: (_v: any, formData: any, context: any) => {
-        const dealerName = formData?.dealerName;
+        const dealerCode = formData?.dealerId;
         const month = formData?.month;
-        if (!dealerName || !month) return '0';
+        if (!dealerCode || !month) return '0';
 
         const allPayments = context?.payments || [];
         const dealerPayments = allPayments.filter(
-          (p: any) => p.dealer === dealerName
+          (p: any) => p.dealerId === dealerCode
         );
 
         const allMonths: string[] = Array.from(
@@ -321,7 +399,7 @@ export default function DealerPaymentsPage() {
 
         let prevBalance = 0;
         allMonths.forEach((m: string) => {
-          // ✅ Skip the currently selected month — its balance goes in "Billing Amount"
+          // Skip the selected month — its balance goes in "Billing Amount"
           if (m === month) return;
 
           const billing = dealerPayments
@@ -430,8 +508,10 @@ export default function DealerPaymentsPage() {
   ];
 
   // ============ TRANSFORMERS ============
+  // The dealer CODE (e.g. DLR-001) is sent, not the name, so two
+  // dealers with the same name under different ISPs can't be mixed up.
   const transformAddPayment = (data: any) => ({
-    dealerId: data.dealerName,
+    dealerId: data.dealerId,
     amount: parseFloat(data.amount) || 0,
     month: data.month,
     paymentMethod: data.paymentMethod,
@@ -442,7 +522,7 @@ export default function DealerPaymentsPage() {
   });
 
   const transformReceivePayment = (data: any) => ({
-    dealerId: data.dealerName,
+    dealerId: data.dealerId,
     amount: parseFloat(data.receiveAmount) || 0,
     month: data.month,
     paymentMethod: data.paymentMethod,
@@ -467,7 +547,7 @@ export default function DealerPaymentsPage() {
     const billing = payments
       .filter(
         (x) =>
-          x.dealer === p.dealer &&
+          dealerKey(x) === dealerKey(p) &&
           x.month === p.month &&
           x.paymentType === 'add_payment'
       )
@@ -476,7 +556,7 @@ export default function DealerPaymentsPage() {
     const received = payments
       .filter(
         (x) =>
-          x.dealer === p.dealer &&
+          dealerKey(x) === dealerKey(p) &&
           x.month === p.month &&
           x.paymentType === 'receive_payment'
       )
@@ -497,16 +577,53 @@ export default function DealerPaymentsPage() {
     return (
       payment.dealer?.toLowerCase().includes(q) ||
       payment.area?.toLowerCase().includes(q) ||
-      payment.receipt?.toLowerCase().includes(q)
+      payment.receipt?.toLowerCase().includes(q) ||
+      payment.isp?.toLowerCase().includes(q)
     );
   });
 
   const addPayments = filteredPayments.filter(
     (p) => p.paymentType === 'add_payment'
   );
-  const receivePayments = filteredPayments.filter(
-    (p) => p.paymentType === 'receive_payment'
-  );
+
+  // One row per dealer + month: payments in the same month are merged
+  const groupedReceive = computedPayments
+    .filter((p) => p.paymentType === 'receive_payment')
+    .reduce((groups: Record<string, any>, p) => {
+      const key = `${dealerKey(p)}|${p.month}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          ...p,
+          id: key,
+          receipts: [p.receipt],
+          receipt: p.receipt,
+          paymentCount: 1,
+          amount: p.amount || 0,
+          commission: p.commission || 0,
+        };
+      } else {
+        const g = groups[key];
+        g.receipts.push(p.receipt);
+        g.receipt = g.receipts.join(', ');
+        g.paymentCount += 1;
+        g.amount += p.amount || 0;
+        g.commission += p.commission || 0;
+      }
+
+      return groups;
+    }, {});
+
+  // Search is applied after grouping so totals never go partial
+  const receivePayments = Object.values(groupedReceive).filter((g: any) => {
+    const q = searchQuery.toLowerCase();
+    return (
+      g.dealer?.toLowerCase().includes(q) ||
+      g.area?.toLowerCase().includes(q) ||
+      g.isp?.toLowerCase().includes(q) ||
+      g.receipt?.toLowerCase().includes(q)
+    );
+  });
 
   // ============ STATS ============
   const totalDealers = dealers.length;
@@ -557,22 +674,30 @@ export default function DealerPaymentsPage() {
   };
 
   // ============ TABLE COLUMNS ============
+  const dealerColumn = {
+    key: 'dealer',
+    header: 'Dealer',
+    render: (item: any) => (
+      <div>
+        <div className="font-medium text-gray-900 dark:text-white">
+          {item.dealer}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          {item.dealerId}
+        </div>
+        {item.isp && (
+          <div className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <Wifi className="h-3 w-3 text-blue-500" />
+            ISP: {item.isp}
+          </div>
+        )}
+      </div>
+    ),
+  };
+
   const addColumns = [
     { key: 'receipt', header: 'Receipt' },
-    {
-      key: 'dealer',
-      header: 'Dealer',
-      render: (item: any) => (
-        <div>
-          <div className="font-medium text-gray-900 dark:text-white">
-            {item.dealer}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {item.dealerId}
-          </div>
-        </div>
-      ),
-    },
+    dealerColumn,
     { key: 'area', header: 'Area' },
     { key: 'month', header: 'Month' },
     { key: 'date', header: 'Date' },
@@ -590,21 +715,18 @@ export default function DealerPaymentsPage() {
 
   // ✅ Receive columns: "Received" shows THIS ROW's amount
   const receiveColumns = [
-    { key: 'receipt', header: 'Receipt' },
     {
-      key: 'dealer',
-      header: 'Dealer',
+      key: 'receipt',
+      header: 'Receipt',
       render: (item: any) => (
-        <div>
-          <div className="font-medium text-gray-900 dark:text-white">
-            {item.dealer}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {item.dealerId}
-          </div>
+        <div className="flex flex-col">
+          {(item.receipts || [item.receipt]).map((r: string) => (
+            <span key={r}>{r}</span>
+          ))}
         </div>
       ),
     },
+    dealerColumn,
     { key: 'area', header: 'Area' },
     { key: 'month', header: 'Month' },
     {
@@ -612,14 +734,20 @@ export default function DealerPaymentsPage() {
       header: 'Billing',
       render: (item: any) => `Rs. ${(item.billing || 0).toLocaleString()}`,
     },
-    // ✅ Show THIS row's own received amount
     {
       key: 'amount',
       header: 'Received',
       render: (item: any) => (
-        <span className="font-semibold text-green-600">
-          Rs. {(item.amount || 0).toLocaleString()}
-        </span>
+        <div>
+          <span className="font-semibold text-green-600">
+            Rs. {(item.amount || 0).toLocaleString()}
+          </span>
+          {item.paymentCount > 1 && (
+            <div className="text-xs text-gray-500">
+              {item.paymentCount} payments
+            </div>
+          )}
+        </div>
       ),
     },
     {
@@ -739,7 +867,7 @@ export default function DealerPaymentsPage() {
             </button>
             <button
               onClick={() => setIsReceiveModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#b8942e]text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/25"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#b8942e] text-white rounded-lg text-sm font-medium transition-colors shadow-lg shadow-cyan-500/25"
             >
               <PlusCircle className="h-4 w-4" />
               Receive Payment
@@ -814,7 +942,7 @@ export default function DealerPaymentsPage() {
         </div>
 
         <SearchBar
-          placeholder="Search dealer, area or receipt..."
+          placeholder="Search dealer, area, ISP or receipt..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
@@ -889,13 +1017,18 @@ export default function DealerPaymentsPage() {
           onClose={() => setIsAddModalOpen(false)}
           onSuccess={handlePaymentAdded}
           title="Add Payment to Dealer"
-          subtitle="Record payment made to dealer"
+          subtitle={
+            showIspFilter
+              ? 'Select ISP, then area, then dealer to record payment made to dealer'
+              : 'Record payment made to dealer'
+          }
           fields={addPaymentFields}
           submitLabel="Save Record"
           color="purple"
           endpoint="/dealer-payments"
           transformData={transformAddPayment}
           context={{ dealers }}
+          dynamicOptions={resolveDynamicOptions}
         />
 
         {/* RECEIVE PAYMENT MODAL */}
@@ -904,13 +1037,18 @@ export default function DealerPaymentsPage() {
           onClose={() => setIsReceiveModalOpen(false)}
           onSuccess={handlePaymentAdded}
           title="Receive Payment from Dealer"
-          subtitle="Record payment received from dealer"
+          subtitle={
+            showIspFilter
+              ? 'Select ISP, then area, then dealer to record payment received'
+              : 'Record payment received from dealer'
+          }
           fields={receivePaymentFields}
           submitLabel="Save Record"
           color="green"
           endpoint="/dealer-payments"
           transformData={transformReceivePayment}
           context={{ dealers, payments }}
+          dynamicOptions={resolveDynamicOptions}
         />
       </div>
     </Layout>

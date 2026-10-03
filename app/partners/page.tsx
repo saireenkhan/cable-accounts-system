@@ -7,6 +7,7 @@ import {
   UserPlus,
   Edit,
   Trash2,
+  Wifi,
   Eye,
   UserCheck,
   UserX,
@@ -423,6 +424,7 @@ function PartnersPageContent() {
   const [areas, setAreas] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [partnerList, setPartnerList] = useState<any[]>([]);
+  const [isps, setIsps] = useState<any[]>([]);
 
   /* ==========================================================
      URL FILTERS
@@ -456,6 +458,29 @@ function PartnersPageContent() {
 
     window.history.replaceState({}, '', url.toString());
   }, [partnerFilter]);
+
+  /* ==========================================================
+     FETCH ISPS
+  ========================================================== */
+
+  const fetchISPs = async () => {
+    try {
+      if (!sessionStorage.getItem('token')) return [];
+
+      const { data } = await api.get('/isps');
+
+      const list =
+        data.success && Array.isArray(data.isps)
+          ? data.isps
+          : [];
+
+      setIsps(list);
+      return list;
+    } catch (e) {
+      console.error('Error fetching ISPs:', e);
+      return [];
+    }
+  };
 
   /* ==========================================================
      FETCH PARTNER AREAS
@@ -509,10 +534,40 @@ function PartnersPageContent() {
   };
 
   /* ==========================================================
+     RESOLVE ISP NAME
+  ========================================================== */
+
+  const resolveIspName = (
+    raw: any,
+    ispList: any[]
+  ): string => {
+    if (!raw) return '';
+
+    if (typeof raw === 'object') {
+      return raw.name || raw.ispName || '';
+    }
+
+    const rawStr = String(raw);
+
+    const match = ispList.find(
+      (i) =>
+        String(i._id) === rawStr ||
+        String(i.id) === rawStr ||
+        String(i.name).toLowerCase() ===
+          rawStr.toLowerCase()
+    );
+
+    return match?.name || rawStr;
+  };
+
+  /* ==========================================================
      FETCH PARTNERS + PAYMENTS
   ========================================================== */
 
-  const fetchUsers = async (areaList = areas) => {
+  const fetchUsers = async (
+    areaList = areas,
+    ispList = isps
+  ) => {
     try {
       if (!sessionStorage.getItem('token')) {
         setLoading(false);
@@ -544,6 +599,7 @@ function PartnersPageContent() {
           phone: c.phone || '',
           address: c.address || '',
           area: areaName(c.area, areaList),
+          isp: resolveIspName(c.isp, ispList),
           package: c.package || '',
           packagePrice: Number(c.packagePrice || 0),
           discount: Number(c.discount || 0),
@@ -577,10 +633,11 @@ function PartnersPageContent() {
 
   useEffect(() => {
     (async () => {
-      const list = await fetchAreas();
+      const areaList = await fetchAreas();
+      const ispList = await fetchISPs();
       await fetchPackages();
       await fetchPartnerList();
-      await fetchUsers(list);
+      await fetchUsers(areaList, ispList);
     })();
   }, []);
 
@@ -649,6 +706,18 @@ function PartnersPageContent() {
 
   /* ==========================================================
      USER FORM FIELDS
+     --------------------------------------------------------
+     Field order:
+       1. customerId
+       2. name
+       3. phone
+       4. address
+       5. ISP         (only if isps have loaded)
+       6. Area        (disabled until ISP is chosen,
+                       options filtered by selected ISP)
+       7. partner
+       8. package
+       ...rest
   ========================================================== */
 
   const userFields: Field[] = [
@@ -681,12 +750,30 @@ function PartnersPageContent() {
       required: true,
       placeholder: 'House #, Street',
     },
+    ...(isps.length > 0
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map((isp) => ({
+              label: isp.name,
+              value: isp.name,
+            })),
+          },
+        ]
+      : []),
     {
       name: 'area',
       label: 'Area',
       type: 'select',
       required: true,
       searchable: true,
+      placeholder:
+        isps.length > 0 ? 'Select ISP first' : 'Select Area',
+      disabledUntil: isps.length > 0 ? 'isp' : undefined,
       options: areas.map((a) => ({
         label: a.name,
         value: a.name,
@@ -794,6 +881,44 @@ function PartnersPageContent() {
   ];
 
   /* ==========================================================
+     DYNAMIC AREA OPTIONS — filtered by selected ISP
+  ========================================================== */
+
+  const resolveDynamicOptions = (
+    fieldName: string,
+    formData: Record<string, any>
+  ) => {
+    if (fieldName !== 'area') {
+      return [];
+    }
+
+    // No ISPs configured at all -> show every area
+    if (isps.length === 0) {
+      return areas.map((a) => ({
+        label: a.name,
+        value: a.name,
+      }));
+    }
+
+    // ISP not selected yet -> no areas
+    if (!formData.isp) {
+      return [];
+    }
+
+    // Only areas that belong to the chosen ISP
+    return areas
+      .filter(
+        (a) =>
+          resolveIspName(a.isp, isps).toLowerCase() ===
+          String(formData.isp).toLowerCase()
+      )
+      .map((a) => ({
+        label: a.name,
+        value: a.name,
+      }));
+  };
+
+  /* ==========================================================
      TRANSFORM FORM DATA
   ========================================================== */
 
@@ -824,6 +949,7 @@ function PartnersPageContent() {
       phone: data.phone,
       address: data.address,
       area: areaName(data.area, areas),
+      isp: data.isp || '',
       partner: data.partner,
       package: data.package,
       activationDate: activation,
@@ -847,42 +973,48 @@ function PartnersPageContent() {
 
     setEditingUser(null);
     setModal(false);
-    fetchUsers(areas);
+    fetchUsers(areas, isps);
   };
 
   /* ==========================================================
      DELETE
   ========================================================== */
 
- const handleDelete = async (id: string, name: string) => {
-  if (
-    !confirm(
-      `Are you sure you want to delete ${name}?\n\nThis will also permanently delete all of their partner-payment records.`
-    )
-  ) {
-    return;
-  }
-
-  try {
-    const { data } = await api.delete(`/partners/${id}`);
-
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-
-    const extra =
-      data?.deletedPayments > 0
-        ? ` (${data.deletedPayments} payment${data.deletedPayments === 1 ? '' : 's'} also removed)`
-        : '';
-
-    toast.success(`${name} deleted${extra}`);
-
-    if (editingUser?.id === id) {
-      setEditingUser(null);
+  const handleDelete = async (id: string, name: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete ${name}?\n\nThis will also permanently delete all of their partner-payment records.`
+      )
+    ) {
+      return;
     }
-  } catch (e) {
-    console.error(e);
-    toast.error('Failed to delete partner');
-  }
-};
+
+    try {
+      const { data } = await api.delete(`/partners/${id}`);
+
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+
+      const extra =
+        data?.deletedPayments > 0
+          ? ` (${data.deletedPayments} payment${data.deletedPayments === 1 ? '' : 's'} also removed)`
+          : '';
+
+      toast.success(`${name} deleted${extra}`);
+
+      if (editingUser?.id === id) {
+        setEditingUser(null);
+      }
+
+      if (viewingUser?.id === id) {
+        setView(false);
+        setViewingUser(null);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to delete partner');
+    }
+  };
+
   /* ==========================================================
      FILTERED USERS
   ========================================================== */
@@ -941,6 +1073,13 @@ function PartnersPageContent() {
             <CalendarDays className="h-3 w-3 text-blue-500" />
             Activated: {displayDate(u.activationDate)}
           </span>
+
+          {u.isp && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <Wifi className="h-3 w-3 text-blue-500" />
+              ISP: {u.isp}
+            </span>
+          )}
         </div>
       ),
     },
@@ -1001,7 +1140,7 @@ function PartnersPageContent() {
               setEditingUser(null);
               setModal(true);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm "
+            className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
             Add Partner
@@ -1224,6 +1363,7 @@ function PartnersPageContent() {
                   phone: editingUser.phone,
                   address: editingUser.address,
                   area: areaName(editingUser.area, areas),
+                  isp: editingUser.isp || '',
                   partner: editingUser.partner || '',
                   package: editingUser.package,
                   activationDate: dateInput(
@@ -1238,6 +1378,7 @@ function PartnersPageContent() {
           }
           transformData={transformUserData}
           context={{ packages, areas, partnerList }}
+          dynamicOptions={resolveDynamicOptions}
         />
 
         {/* ==================================================
@@ -1332,6 +1473,14 @@ function PartnersPageContent() {
                     label="Area"
                     value={areaName(viewingUser.area, areas)}
                   />
+
+                  {viewingUser.isp && (
+                    <ViewField
+                      icon={<Wifi className="h-4 w-4" />}
+                      label="ISP"
+                      value={viewingUser.isp}
+                    />
+                  )}
 
                   <ViewField
                     icon={<Handshake className="h-4 w-4" />}

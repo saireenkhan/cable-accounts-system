@@ -3,10 +3,15 @@ const PartnerModel = require('../models/Partner');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 
+// Fields populated on every payment response
+const PARTNER_POPULATE_FIELDS =
+  'name code partnerId phone monthlyFee area isp package status';
+
 // ============================================================
 // Generate unique receipt number
+// (takes the tenant-scoped model so the lookup actually runs)
 // ============================================================
-const generateReceiptNo = async () => {
+const generateReceiptNo = async (PartnerPayment) => {
   try {
     const date = new Date();
     const year = date.getFullYear();
@@ -28,6 +33,7 @@ const generateReceiptNo = async () => {
 
     return `PRC-${dateStr}-${String(sequence).padStart(3, '0')}`;
   } catch (error) {
+    console.error('❌ generateReceiptNo error:', error.message);
     const dateStr = `${Date.now()}`.slice(-10);
     return `PRC-${dateStr}-${String(Math.floor(Math.random() * 900) + 100)}`;
   }
@@ -37,8 +43,7 @@ const generateReceiptNo = async () => {
 // GET all partner payments
 // ============================================================
 exports.getPartnerPayments = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const PartnerPayment = tenantScope(PartnerPaymentModel, req);
+  const PartnerPayment = tenantScope(PartnerPaymentModel, req);
   try {
     const { partnerId, month } = req.query;
     const filter = {};
@@ -49,7 +54,7 @@ exports.getPartnerPayments = async (req, res) => {
     console.log('📥 getPartnerPayments called with filter:', filter);
 
     const payments = await PartnerPayment.find(filter)
-      .populate('partner', 'name code partnerId phone monthlyFee area package status')
+      .populate('partner', PARTNER_POPULATE_FIELDS)
       .populate('receivedBy', 'name')
       .sort({ paymentDate: -1 });
 
@@ -69,8 +74,9 @@ exports.getPartnerPayments = async (req, res) => {
 
 // ============================================================
 // Recalculate partner status
+// (takes the tenant-scoped model so the lookup actually runs)
 // ============================================================
-const recalculatePartnerStatus = async (partnerDoc) => {
+const recalculatePartnerStatus = async (PartnerPayment, partnerDoc) => {
   try {
     const monthlyFee = parseFloat(partnerDoc.monthlyFee) || 0;
 
@@ -110,10 +116,16 @@ const recalculatePartnerStatus = async (partnerDoc) => {
 
 // ============================================================
 // CREATE partner payment
+// Matches the exact logic of normal Customer Payments:
+// - No-payment creates a fresh record
+// - First regular payment creates a record
+// - Additional payment for same partner + month is MERGED
+// - Overpayment is rejected
 // ============================================================
 exports.createPartnerPayment = async (req, res) => {
-    const Partner = tenantScope(PartnerModel, req);
-    const PartnerPayment = tenantScope(PartnerPaymentModel, req);
+  const Partner = tenantScope(PartnerModel, req);
+  const PartnerPayment = tenantScope(PartnerPaymentModel, req);
+
   try {
     const {
       partner,
@@ -129,77 +141,197 @@ exports.createPartnerPayment = async (req, res) => {
 
     console.log('📝 Creating partner payment with data:', req.body);
 
+    // ----------------------------------------------------------
+    // Find partner
+    // ----------------------------------------------------------
     let partnerDoc;
-    if (typeof partner === 'object' && partner._id) {
+
+    if (typeof partner === 'object' && partner?._id) {
       partnerDoc = await Partner.findById(partner._id);
     } else if (typeof partner === 'string') {
-      partnerDoc = await Partner.findOne({ name: partner });
+      const looksLikeObjectId = /^[a-fA-F0-9]{24}$/.test(partner);
+
+      if (looksLikeObjectId) {
+        partnerDoc = await Partner.findById(partner);
+      } else {
+        partnerDoc = await Partner.findOne({ name: partner });
+      }
     }
 
     if (!partnerDoc) {
       return res.status(404).json({
         success: false,
-        message: `Partner not found`,
+        message: 'Partner not found',
       });
     }
 
-    console.log('👤 Partner:', partnerDoc.name, 'Monthly Fee:', partnerDoc.monthlyFee);
+    console.log(
+      '👤 Partner:',
+      partnerDoc.name,
+      'Monthly Fee:',
+      partnerDoc.monthlyFee
+    );
 
-    // ✅ Prevent duplicate payment for same partner + same month
-    if (!isNoPayment) {
-      const existingPayment = await PartnerPayment.findOne({
-        partner: partnerDoc._id,
-        month: month,
-        isNoPayment: false,
-      });
-
-      if (existingPayment) {
-        return res.status(400).json({
-          success: false,
-          message: `${partnerDoc.name} has already paid for ${month}. Duplicate entries are not allowed.`,
-        });
-      }
-    }
+    // ----------------------------------------------------------
+    // Payment values
+    // ----------------------------------------------------------
+    const paymentAmount = parseFloat(amount) || 0;
+    const monthlyFee = parseFloat(partnerDoc.monthlyFee) || 0;
 
     let paymentMethodValue = paymentMethod || method || 'Cash';
+
     if (typeof paymentMethodValue === 'string') {
-      paymentMethodValue = paymentMethodValue.toLowerCase().replace(/ /g, '_');
+      paymentMethodValue = paymentMethodValue
+        .toLowerCase()
+        .replace(/ /g, '_');
     } else {
       paymentMethodValue = 'cash';
     }
 
-    const receiptNo = await generateReceiptNo();
-    const paymentAmount = parseFloat(amount) || 0;
-    const monthlyFee = parseFloat(partnerDoc.monthlyFee) || 0;
+    const paymentDateObj =
+      paymentDate || date
+        ? new Date(date || paymentDate)
+        : new Date();
+
+    // ----------------------------------------------------------
+    // NO PAYMENT
+    // Always create a fresh record
+    // ----------------------------------------------------------
+    if (isNoPayment) {
+      const receiptNo = await generateReceiptNo(PartnerPayment);
+
+      const payment = await PartnerPayment.create({
+        receiptNo,
+        partner: partnerDoc._id,
+        month,
+        amount: 0,
+        packagePrice: monthlyFee,
+        paymentDate: paymentDateObj,
+        paymentMethod: paymentMethodValue,
+        receivedBy: req.user ? req.user.id : null,
+        remarks: remarks || 'No payment received',
+        isNoPayment: true,
+      });
+
+      const populated = await PartnerPayment.findById(payment._id)
+        .populate('partner', PARTNER_POPULATE_FIELDS)
+        .populate('receivedBy', 'name');
+
+      return res.status(201).json({
+        success: true,
+        payment: populated,
+        partner: partnerDoc,
+        message: 'No payment recorded',
+      });
+    }
+
+    // ----------------------------------------------------------
+    // REGULAR PAYMENT
+    // Merge if a record for this partner + month already exists
+    // ----------------------------------------------------------
+    const existingPayment = await PartnerPayment.findOne({
+      partner: partnerDoc._id,
+      month,
+      isNoPayment: false,
+    });
+
+    // ----------------------------------------------------------
+    // Existing payment found → MERGE
+    // ----------------------------------------------------------
+    if (existingPayment) {
+      const currentAmount = parseFloat(existingPayment.amount) || 0;
+      const newTotal = currentAmount + paymentAmount;
+
+      // Prevent overpayment
+      if (monthlyFee > 0 && newTotal > monthlyFee) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `Overpayment not allowed. ${partnerDoc.name} has already paid ` +
+            `Rs. ${currentAmount.toLocaleString()} for ${month}. ` +
+            `Remaining balance is only Rs. ` +
+            `${(monthlyFee - currentAmount).toLocaleString()}.`,
+        });
+      }
+
+      // Merge amount into existing record
+      existingPayment.amount = newTotal;
+
+      // Match Customer Payment behavior:
+      // update payment date to latest payment date
+      existingPayment.paymentDate = paymentDateObj;
+
+      // Append remarks instead of replacing old remarks
+      if (remarks) {
+        existingPayment.remarks = existingPayment.remarks
+          ? `${existingPayment.remarks}\n${remarks}`
+          : remarks;
+      }
+
+      await existingPayment.save();
+
+      console.log('✅ Partner payment merged. New total:', newTotal);
+
+      // Recalculate partner status
+      await recalculatePartnerStatus(
+        PartnerPayment,
+        partnerDoc
+      );
+
+      const populated = await PartnerPayment.findById(
+        existingPayment._id
+      )
+        .populate('partner', PARTNER_POPULATE_FIELDS)
+        .populate('receivedBy', 'name');
+
+      return res.status(200).json({
+        success: true,
+        payment: populated,
+        partner: partnerDoc,
+        message:
+          `Additional payment of Rs. ${paymentAmount.toLocaleString()} ` +
+          `recorded. Total for ${month}: ` +
+          `Rs. ${newTotal.toLocaleString()}`,
+      });
+    }
+
+    // ----------------------------------------------------------
+    // NO EXISTING RECORD → CREATE NEW
+    // ----------------------------------------------------------
+    const receiptNo = await generateReceiptNo(PartnerPayment);
 
     const payment = await PartnerPayment.create({
       receiptNo,
       partner: partnerDoc._id,
-      month: month,
+      month,
       amount: paymentAmount,
       packagePrice: monthlyFee,
-      paymentDate: paymentDate || date ? new Date(date || paymentDate) : new Date(),
+      paymentDate: paymentDateObj,
       paymentMethod: paymentMethodValue,
       receivedBy: req.user ? req.user.id : null,
       remarks: remarks || '',
-      isNoPayment: isNoPayment || false,
+      isNoPayment: false,
     });
 
     console.log('✅ Partner payment created:', payment.receiptNo);
 
-    if (!isNoPayment && paymentAmount > 0) {
-      await recalculatePartnerStatus(partnerDoc);
-    }
+    // Recalculate partner status
+    await recalculatePartnerStatus(
+      PartnerPayment,
+      partnerDoc
+    );
 
-    const populatedPayment = await PartnerPayment.findById(payment._id)
-      .populate('partner', 'name code partnerId phone monthlyFee area package status')
+    const populatedPayment = await PartnerPayment.findById(
+      payment._id
+    )
+      .populate('partner', PARTNER_POPULATE_FIELDS)
       .populate('receivedBy', 'name');
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       payment: populatedPayment,
       partner: partnerDoc,
-      message: isNoPayment ? 'No payment recorded' : 'Payment recorded successfully',
+      message: 'Payment recorded successfully',
     });
   } catch (error) {
     console.error('❌ Create partner payment error:', error);
@@ -207,19 +339,22 @@ exports.createPartnerPayment = async (req, res) => {
 
     if (error.code === 11000) {
       const keyPattern = error.keyPattern || {};
+
       if (keyPattern.partner && keyPattern.month) {
         return res.status(400).json({
           success: false,
-          message: 'This partner already has a payment recorded for this month.',
+          message:
+            'This partner already has a payment recorded for this month.',
         });
       }
+
       return res.status(500).json({
         success: false,
         message: 'Duplicate receipt number. Please try again.',
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message || 'Server error',
     });
@@ -230,7 +365,7 @@ exports.createPartnerPayment = async (req, res) => {
 // DELETE partner payment
 // ============================================================
 exports.deletePartnerPayment = async (req, res) => {
-    const PartnerPayment = tenantScope(PartnerPaymentModel, req);
+  const PartnerPayment = tenantScope(PartnerPaymentModel, req);
   try {
     const payment = await PartnerPayment.findByIdAndDelete(req.params.id);
     if (!payment) {

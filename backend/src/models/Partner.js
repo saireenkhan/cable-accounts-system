@@ -2,12 +2,12 @@ const mongoose = require('mongoose');
 
 const partnerSchema = new mongoose.Schema(
   {
-  tenantId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Tenant',
-    required: false,
-    index: true,
-  },
+    tenantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Tenant',
+      required: false,
+      index: true,
+    },
     partnerId: {
       type: String,
       trim: true,
@@ -35,8 +35,14 @@ const partnerSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    // ✅ Area stored as string (matches PartnerArea.name for easy counting)
+    // Area stored as string (matches PartnerArea.name for easy counting)
     area: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    // ISP stored as string (matches ISP name)
+    isp: {
       type: String,
       trim: true,
       default: '',
@@ -53,7 +59,7 @@ const partnerSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
-        partner: {
+    partner: {
       type: String,
       trim: true,
       default: '',
@@ -72,7 +78,6 @@ const partnerSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
-
 
 partnerSchema.index({ tenantId: 1, partnerId: 1 }, { unique: true });
 

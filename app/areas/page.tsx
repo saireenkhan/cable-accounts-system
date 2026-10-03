@@ -29,6 +29,7 @@ import {
   Wrench,
   Edit2,
   Trash2,
+  Wifi,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -67,6 +68,7 @@ type Area = {
   expected: number;
   recoveryRate: number;
   color: AreaColor;
+  isp?: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -87,6 +89,7 @@ export default function AreasPage() {
   const [areas, setAreas] = useState<Area[]>([]);
   const [editingArea, setEditingArea] = useState<Area | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isps, setIsps] = useState<any[]>([]);
 
   const router = useRouter();
 
@@ -96,7 +99,20 @@ export default function AreasPage() {
 
   useEffect(() => {
     fetchAreas();
+    fetchIsps();
   }, []);
+
+  const fetchIsps = async () => {
+    try {
+      const { data } = await api.get('/isps');
+      const list =
+        data.success && Array.isArray(data.isps) ? data.isps : [];
+      setIsps(list);
+    } catch (e) {
+      console.error('Error fetching ISPs:', e);
+      setIsps([]);
+    }
+  };
 
   const fetchAreas = async () => {
     try {
@@ -275,6 +291,8 @@ export default function AreasPage() {
               collected,
               expected: stats.expected,
               recoveryRate,
+
+              isp: area.isp || '',
 
               color: ([
                 'blue',
@@ -483,12 +501,28 @@ export default function AreasPage() {
       type: 'textarea',
       placeholder: 'Optional description',
     },
+    ...(isps.length > 0
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map((isp: any) => ({
+              label: isp.name,
+              value: isp.name,
+            })),
+          },
+        ]
+      : []),
   ];
 
   const transformAreaData = (data: any) => ({
     name: data.name,
     code: data.code || '',
     description: data.description || '',
+    isp: data.isp || '',
   });
 
   if (loading) {
@@ -660,6 +694,13 @@ export default function AreasPage() {
                               {area.code}
                             </p>
                           )}
+
+                          {area.isp && (
+                            <p className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400">
+                              <Wifi className="h-3 w-3" />
+                              {area.isp}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -696,7 +737,7 @@ export default function AreasPage() {
                       </div>
                     </div>
 
-                    {/* ✅ CUSTOMER COUNT ROW — with collapsed edit/delete icons */}
+                    {/* CUSTOMER COUNT ROW */}
                     <div className="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
@@ -1012,6 +1053,7 @@ export default function AreasPage() {
                   code: editingArea.code || '',
                   description:
                     editingArea.description || '',
+                  isp: editingArea.isp || '',
                 }
               : undefined
           }

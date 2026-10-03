@@ -14,9 +14,9 @@ import {
   Home,
   CheckCircle,
   XCircle,
-  Building2,
   CreditCard,
   Percent,
+  Wifi,
 } from 'lucide-react';
 import Layout from '@/app/components/ui/Layout';
 import { AddUserModal, Field } from '@/app/components/modals/AddUserModal';
@@ -43,6 +43,20 @@ const colorClasses: Record<string, string> = {
     'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/30 border-orange-500 ring-orange-500/30',
   red: 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-500 ring-red-500/30',
 };
+
+/* ============================================================
+   RESOLVE ISP NAME
+============================================================ */
+
+function resolveIspName(raw: any): string {
+  if (!raw) return '';
+
+  if (typeof raw === 'object') {
+    return raw.name || raw.ispName || '';
+  }
+
+  return String(raw).trim();
+}
 
 /* ============================================================
    VIEW FIELD
@@ -106,10 +120,32 @@ function DealersPageContent() {
   const [loading, setLoading] = useState(true);
   const [dealers, setDealers] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [isps, setIsps] = useState<any[]>([]);
 
   const viewingDealer = viewingDealerId
     ? dealers.find((d) => d.id === viewingDealerId) || null
     : null;
+
+  /* ==========================================================
+     FETCH ISPS
+  ========================================================== */
+
+  const fetchISPs = async () => {
+    try {
+      if (!sessionStorage.getItem('token')) return [];
+
+      const { data } = await api.get('/isps');
+
+      const list =
+        data.success && Array.isArray(data.isps) ? data.isps : [];
+
+      setIsps(list);
+      return list;
+    } catch (e) {
+      console.error('Error fetching ISPs:', e);
+      return [];
+    }
+  };
 
   /* ==========================================================
      FETCH AREAS
@@ -160,6 +196,7 @@ function DealersPageContent() {
           dealerId: dealer.dealerId || 'N/A',
           name: dealer.name || 'Unknown',
           cellNo: dealer.cellNo || '',
+          isp: resolveIspName(dealer.isp),
           area:
             dealer.area && typeof dealer.area === 'object'
               ? dealer.area.name || ''
@@ -197,6 +234,7 @@ function DealersPageContent() {
   useEffect(() => {
     (async () => {
       await fetchAreas();
+      await fetchISPs();
       await fetchDealers();
     })();
   }, []);
@@ -225,6 +263,15 @@ function DealersPageContent() {
 
   /* ==========================================================
      DEALER FORM FIELDS
+     --------------------------------------------------------
+     Field order:
+       1. dealerId
+       2. name
+       3. cellNo
+       4. ISP    (only if ISPs exist)
+       5. Area   (disabled until ISP is chosen,
+                  options filtered by selected ISP)
+       ...rest
   ========================================================== */
 
   const dealerFields: Field[] = [
@@ -250,12 +297,30 @@ function DealersPageContent() {
       required: true,
       placeholder: '0330-1234567',
     },
+    ...(isps.length > 0
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map((isp: any) => ({
+              label: isp.name,
+              value: isp.name,
+            })),
+          },
+        ]
+      : []),
     {
       name: 'area',
       label: 'Area',
       type: 'select',
       required: true,
       searchable: true,
+      placeholder:
+        isps.length > 0 ? 'Select ISP first' : 'Select Area',
+      disabledUntil: isps.length > 0 ? 'isp' : undefined,
       options:
         areas.length > 0
           ? areas.map((area: any) => ({
@@ -316,6 +381,44 @@ function DealersPageContent() {
   ];
 
   /* ==========================================================
+     DYNAMIC AREA OPTIONS — filtered by selected ISP
+  ========================================================== */
+
+  const resolveDynamicOptions = (
+    fieldName: string,
+    formData: Record<string, any>
+  ) => {
+    if (fieldName !== 'area') {
+      return [];
+    }
+
+    // No ISPs configured at all -> show every area
+    if (isps.length === 0) {
+      return areas.map((a: any) => ({
+        label: a.name,
+        value: a.name,
+      }));
+    }
+
+    // ISP not selected yet -> no areas
+    if (!formData.isp) {
+      return [];
+    }
+
+    // Only areas that belong to the chosen ISP
+    return areas
+      .filter(
+        (a: any) =>
+          resolveIspName(a.isp).toLowerCase() ===
+          String(formData.isp).toLowerCase()
+      )
+      .map((a: any) => ({
+        label: a.name,
+        value: a.name,
+      }));
+  };
+
+  /* ==========================================================
      TRANSFORM FORM DATA
   ========================================================== */
 
@@ -324,6 +427,7 @@ function DealersPageContent() {
       dealerId: data.dealerId?.trim(),
       name: data.name?.trim(),
       cellNo: data.cellNo?.trim(),
+      isp: data.isp || '',
       area: data.area,
       address: data.address?.trim() || data.area,
       openingBalance: parseFloat(data.openingBalance) || 0,
@@ -380,7 +484,8 @@ function DealersPageContent() {
     const matchesSearch =
       d.name?.toLowerCase().includes(q) ||
       d.dealerId?.toLowerCase().includes(q) ||
-      d.cellNo?.includes(q);
+      d.cellNo?.includes(q) ||
+      d.isp?.toLowerCase().includes(q);
 
     return matchesStatus && matchesSearch;
   });
@@ -403,6 +508,12 @@ function DealersPageContent() {
             <Phone className="h-3 w-3 text-blue-500" />
             {d.cellNo}
           </span>
+          {d.isp && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <Wifi className="h-3 w-3 text-blue-500" />
+              ISP: {d.isp}
+            </span>
+          )}
         </div>
       ),
     },
@@ -528,7 +639,7 @@ function DealersPageContent() {
 
         {/* SEARCH */}
         <SearchBar
-          placeholder="Search dealer name, ID or cell no..."
+          placeholder="Search dealer name, ID, cell no or ISP..."
           value={search}
           onChange={setSearch}
         />
@@ -614,6 +725,7 @@ function DealersPageContent() {
                   dealerId: editingDealer.dealerId,
                   name: editingDealer.name,
                   cellNo: editingDealer.cellNo,
+                  isp: editingDealer.isp || '',
                   area: editingDealer.area,
                   commission: editingDealer.commission,
                   address: editingDealer.address,
@@ -625,6 +737,7 @@ function DealersPageContent() {
           }
           transformData={transformDealerData}
           context={{ areas }}
+          dynamicOptions={resolveDynamicOptions}
         />
 
         {/* VIEW DEALER MODAL */}
@@ -700,6 +813,13 @@ function DealersPageContent() {
                     label="Cell No."
                     value={viewingDealer.cellNo || '—'}
                   />
+                  {viewingDealer.isp && (
+                    <ViewField
+                      icon={<Wifi className="h-4 w-4" />}
+                      label="ISP"
+                      value={viewingDealer.isp}
+                    />
+                  )}
                   <ViewField
                     icon={<MapPin className="h-4 w-4" />}
                     label="Area"

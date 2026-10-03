@@ -29,6 +29,7 @@ import {
   Wrench,
   Edit2,
   Trash2,
+  Wifi,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -67,6 +68,7 @@ type PartnerArea = {
   expected: number;
   recoveryRate: number;
   color: AreaColor;
+  isp?: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 };
@@ -87,6 +89,7 @@ export default function PartnerAreasPage() {
   const [areas, setAreas] = useState<PartnerArea[]>([]);
   const [editingArea, setEditingArea] = useState<PartnerArea | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isps, setIsps] = useState<any[]>([]);
 
   const router = useRouter();
 
@@ -96,7 +99,20 @@ export default function PartnerAreasPage() {
 
   useEffect(() => {
     fetchAreas();
+    fetchIsps();
   }, []);
+
+  const fetchIsps = async () => {
+    try {
+      const { data } = await api.get('/isps');
+      const list =
+        data.success && Array.isArray(data.isps) ? data.isps : [];
+      setIsps(list);
+    } catch (e) {
+      console.error('Error fetching ISPs:', e);
+      setIsps([]);
+    }
+  };
 
   const fetchAreas = async () => {
     try {
@@ -160,7 +176,9 @@ export default function PartnerAreasPage() {
       > = {};
 
       partners.forEach((partner: any) => {
-        const areaName = resolvePartnerArea(partner.area ?? partner.partnerAreaName ?? partner.areaId);
+        const areaName = resolvePartnerArea(
+          partner.area ?? partner.partnerAreaName ?? partner.areaId
+        );
 
         if (!areaName) return;
 
@@ -276,6 +294,11 @@ export default function PartnerAreasPage() {
               expected: stats.expected,
               recoveryRate,
 
+              isp:
+                typeof area.isp === 'object' && area.isp
+                  ? area.isp.name || ''
+                  : area.isp || '',
+
               color: ([
                 'blue',
                 'green',
@@ -341,7 +364,7 @@ export default function PartnerAreasPage() {
   };
 
   const handleEdit = (
-    area:PartnerArea,
+    area: PartnerArea,
     event?: React.MouseEvent
   ) => {
     event?.stopPropagation();
@@ -363,7 +386,8 @@ export default function PartnerAreasPage() {
         !query ||
         area.name.toLowerCase().includes(query) ||
         area.code?.toLowerCase().includes(query) ||
-        area.region?.toLowerCase().includes(query);
+        area.region?.toLowerCase().includes(query) ||
+        area.isp?.toLowerCase().includes(query);
 
       const isActive = area.partners > 0;
 
@@ -472,10 +496,10 @@ export default function PartnerAreasPage() {
   const areaFields: Field[] = [
     {
       name: 'name',
-      label: 'Partner Area Name',
+      label: 'Area Name',
       type: 'text',
       required: true,
-      placeholder: 'Enter partner area name',
+      placeholder: 'Enter area name',
     },
     {
       name: 'description',
@@ -483,12 +507,28 @@ export default function PartnerAreasPage() {
       type: 'textarea',
       placeholder: 'Optional description',
     },
+    ...(isps.length > 0
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map((isp: any) => ({
+              label: isp.name,
+              value: isp.name,
+            })),
+          },
+        ]
+      : []),
   ];
 
   const transformAreaData = (data: any) => ({
     name: data.name,
     code: data.code || '',
     description: data.description || '',
+    isp: data.isp || '',
   });
 
   if (loading) {
@@ -516,7 +556,7 @@ export default function PartnerAreasPage() {
             className="flex items-center gap-2 rounded-xl bg-[#D9A82E] px-4 py-3 text-sm text-white"
           >
             <PlusCircle className="h-5 w-5 text-white-900" />
-            Add Partner Area
+            Add Area
           </button>
         </div>
 
@@ -660,6 +700,13 @@ export default function PartnerAreasPage() {
                               {area.code}
                             </p>
                           )}
+
+                          {area.isp && (
+                            <p className="mt-1 inline-flex items-center gap-1 truncate text-xs font-medium text-blue-600 dark:text-blue-400">
+                              <Wifi className="h-3 w-3" />
+                              {area.isp}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -696,7 +743,7 @@ export default function PartnerAreasPage() {
                       </div>
                     </div>
 
-                    {/* ✅ CUSTOMER COUNT ROW — with collapsed edit/delete icons */}
+                    {/* USER COUNT ROW */}
                     <div className="mt-4 flex items-center justify-between gap-2 border-t border-gray-100 pt-4 dark:border-gray-700">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 flex-shrink-0 text-gray-500 dark:text-gray-400" />
@@ -706,7 +753,7 @@ export default function PartnerAreasPage() {
                         </span>
 
                         <span className="text-sm text-gray-500 dark:text-gray-400">
-                          Partners
+                          Users
                         </span>
                       </div>
 
@@ -747,7 +794,7 @@ export default function PartnerAreasPage() {
                               <Users className="h-4 w-4 text-blue-500" />
                             }
                             value={area.partners}
-                            label="Partners"
+                            label="Users"
                           />
 
                           <MiniStat
@@ -776,6 +823,16 @@ export default function PartnerAreasPage() {
                         </div>
 
                         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+                          {area.isp && (
+                            <InfoBlock
+                              icon={
+                                <Wifi className="h-4 w-4 text-blue-500" />
+                              }
+                              label="ISP"
+                              value={area.isp}
+                            />
+                          )}
+
                           {area.region && (
                             <InfoBlock
                               icon={
@@ -910,7 +967,7 @@ export default function PartnerAreasPage() {
                             )}
                           >
                             <Users className="h-4 w-4" />
-                            View Partners
+                            View Users
                           </button>
 
                           <button
@@ -922,6 +979,33 @@ export default function PartnerAreasPage() {
                           >
                             <Eye className="h-4 w-4" />
                             View Details
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(event) =>
+                              handleEdit(area, event)
+                            }
+                            className="flex items-center justify-center gap-2 rounded-lg bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-600 transition hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-900/40"
+                            aria-label={`Edit ${area.name}`}
+                          >
+                            <Edit2 className="h-4 w-4" />
+                            Edit
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(
+                                area.id,
+                                area.name
+                              )
+                            }
+                            className="flex items-center justify-center gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-900/40"
+                            aria-label={`Delete ${area.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Delete
                           </button>
                         </div>
                       </>
@@ -985,6 +1069,7 @@ export default function PartnerAreasPage() {
                   code: editingArea.code || '',
                   description:
                     editingArea.description || '',
+                  isp: editingArea.isp || '',
                 }
               : undefined
           }

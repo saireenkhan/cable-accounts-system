@@ -25,6 +25,7 @@ import {
   XCircle,
   Search,
   TrendingUp,
+  Wifi,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -56,10 +57,6 @@ const compareMonths = (a: string, b: string) => {
 
 // ============================================================
 // ✅ Resolve a customer's area to its display name
-// Handles:
-//   - customer.area is a populated object { _id, name }
-//   - customer.area is a string name "Mateen Heaven 5H"
-//   - customer.area is an ObjectId string "6aa54e..."
 // ============================================================
 function resolveAreaName(
   customerArea: any,
@@ -67,26 +64,31 @@ function resolveAreaName(
 ): string {
   if (!customerArea) return 'No Area';
 
-  // If it's an object with name
   if (typeof customerArea === 'object' && customerArea.name) {
     return customerArea.name;
   }
 
   const asString = String(customerArea).trim();
 
-  // If the string looks like a valid area name in our lookup, use it
   if (areaLookup[asString]) return areaLookup[asString];
 
-  // If the string is an ObjectId and we have a lookup entry for it
-  if (areaLookup[asString]) return areaLookup[asString];
-
-  // If the string is an area name (not an ObjectId), return as-is
-  // ObjectId = 24 hex chars
   const isObjectId = /^[a-fA-F0-9]{24}$/.test(asString);
   if (!isObjectId) return asString;
 
-  // It's an ObjectId with no lookup match
   return 'Unknown Area';
+}
+
+// ============================================================
+// ✅ Resolve a customer's ISP to a display name
+// ============================================================
+function resolveIspName(customerIsp: any): string {
+  if (!customerIsp) return '';
+
+  if (typeof customerIsp === 'object') {
+    return customerIsp.name || customerIsp.ispName || '';
+  }
+
+  return String(customerIsp).trim();
 }
 
 // ============================================================
@@ -265,6 +267,7 @@ function ReceivePaymentModal({
   payments,
   packages,
   areas,
+  isps,
   areaLookup,
   fetchData,
 }: {
@@ -275,9 +278,11 @@ function ReceivePaymentModal({
   payments: any[];
   packages: any[];
   areas: any[];
+  isps: any[];
   areaLookup: Record<string, string>;
   fetchData: () => void;
 }) {
+  const [selectedIsp, setSelectedIsp] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -290,20 +295,43 @@ function ReceivePaymentModal({
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
 
-  // ✅ Build area options from the `/areas` endpoint, NOT from customers
-  const areaOptions = areas
-    .map((a: any) => ({
-      label: a.name || a.areaName || String(a._id),
-      value: a.name || a.areaName || String(a._id),
+  // ✅ Only show the ISP filter if the ISP page actually has ISPs
+  const showIspFilter = isps.length > 0;
+
+  // ✅ ISP options — from the /isps endpoint
+  const ispOptions = isps
+    .map((isp: any) => ({
+      label: isp.name || String(isp._id),
+      value: isp.name || String(isp._id),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  // ✅ Filter customers by resolved area name
+  // ✅ Area options — filtered by ISP only when the ISP filter is active
+  const areaOptions = Array.from(
+    new Set(
+      (showIspFilter && selectedIsp
+        ? customers.filter(
+            (c: any) => resolveIspName(c.isp) === selectedIsp
+          )
+        : customers
+      )
+        .map((c: any) => resolveAreaName(c.area, areaLookup))
+        .filter((v: string) => v && v !== 'No Area' && v !== 'Unknown Area')
+    )
+  )
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ label: name, value: name }));
+
   const getFilteredCustomers = () => {
     if (!selectedArea) return [];
     return customers.filter((c: any) => {
-      const resolved = resolveAreaName(c.area, areaLookup);
-      return resolved === selectedArea;
+      const areaMatch = resolveAreaName(c.area, areaLookup) === selectedArea;
+      if (!areaMatch) return false;
+
+      if (showIspFilter && selectedIsp) {
+        return resolveIspName(c.isp) === selectedIsp;
+      }
+      return true;
     });
   };
 
@@ -326,6 +354,7 @@ function ReceivePaymentModal({
       const defaultMonth = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       setSelectedMonth(defaultMonth);
       setPaymentDate(now.toISOString().split('T')[0]);
+      setSelectedIsp('');
       setSelectedArea('');
       setSelectedCustomerId('');
       setReceiveAmount('');
@@ -335,32 +364,42 @@ function ReceivePaymentModal({
       setMonthlySummary([]);
     }
   }, [isOpen]);
-useEffect(() => {
-  if (selectedCustomerId) {
-    const customer = customers.find((c) => c._id === selectedCustomerId);
-    setCustomerDetails(customer || null);
 
-    if (customer) {
-      const customerPayments = payments.filter(
-        (p) =>
-          (p.customer?._id === customer._id ||
-            p.customer === customer._id ||
-            p.customerId === customer._id) &&
-          !p.isNoPayment
-      );
+  useEffect(() => {
+    if (selectedCustomerId) {
+      const customer = customers.find((c) => c._id === selectedCustomerId);
+      setCustomerDetails(customer || null);
 
-      const allocs = allocatePayments(
-        customer.monthlyFee || 0,
-        customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
-      );
+      if (customer) {
+        const customerPayments = payments.filter(
+          (p) =>
+            (p.customer?._id === customer._id ||
+              p.customer === customer._id ||
+              p.customerId === customer._id) &&
+            !p.isNoPayment
+        );
 
-      setMonthlySummary(allocs);
+        const allocs = allocatePayments(
+          customer.monthlyFee || 0,
+          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+        );
+
+        setMonthlySummary(allocs);
+      }
+    } else {
+      setCustomerDetails(null);
+      setMonthlySummary([]);
     }
-  } else {
+  }, [selectedCustomerId, customers, payments]);
+
+  // ✅ Reset downstream when ISP changes (only if ISP filter is active)
+  useEffect(() => {
+    if (!showIspFilter) return;
+    setSelectedArea('');
+    setSelectedCustomerId('');
     setCustomerDetails(null);
     setMonthlySummary([]);
-  }
-}, [selectedCustomerId, customers, payments]);
+  }, [selectedIsp, showIspFilter]);
 
   useEffect(() => {
     setSelectedCustomerId('');
@@ -410,6 +449,7 @@ useEffect(() => {
   const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
 
   const handleSubmit = async () => {
+    if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedArea) return toast.error('Please select an area first');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
@@ -433,13 +473,13 @@ useEffect(() => {
       }
 
       const payload = {
-  customer: customerObj._id,   
-  month: selectedMonth,
-  amount: receivedAmount,
-  paymentMethod: paymentMethod,
-  paymentDate: paymentDate,
-  remarks: notes,
-};
+        customer: customerObj._id,
+        month: selectedMonth,
+        amount: receivedAmount,
+        paymentMethod: paymentMethod,
+        paymentDate: paymentDate,
+        remarks: notes,
+      };
 
       const response = await api.post('/payments', payload);
 
@@ -462,6 +502,7 @@ useEffect(() => {
   };
 
   const handleNoPayment = async () => {
+    if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedArea) return toast.error('Please select an area first');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
@@ -517,7 +558,9 @@ useEffect(() => {
               Receive User Payment
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Select area, then user ID to record payment
+              {showIspFilter
+                ? 'Select ISP, then area, then user ID to record payment'
+                : 'Select area, then user ID to record payment'}
             </p>
           </div>
           <button
@@ -560,6 +603,23 @@ useEffect(() => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
+              {/* ✅ ISP field only rendered if the ISP page has ISPs */}
+              {showIspFilter && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <Wifi className="h-4 w-4 inline mr-1" />
+                    ISP *
+                  </label>
+                  <SearchableSelect
+                    options={ispOptions}
+                    value={selectedIsp}
+                    onChange={setSelectedIsp}
+                    placeholder="Search & Select ISP"
+                    label="ISP"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <MapPin className="h-4 w-4 inline mr-1" />
@@ -569,8 +629,13 @@ useEffect(() => {
                   options={areaOptions}
                   value={selectedArea}
                   onChange={setSelectedArea}
-                  placeholder="Search & Select Area"
+                  placeholder={
+                    showIspFilter && !selectedIsp
+                      ? 'Select ISP first'
+                      : 'Search & Select Area'
+                  }
                   label="Area"
+                  disabled={showIspFilter && !selectedIsp}
                 />
               </div>
 
@@ -844,6 +909,7 @@ export default function ReceivePaymentPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [isps, setIsps] = useState<any[]>([]);
   const [areaLookup, setAreaLookup] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -859,14 +925,15 @@ export default function ReceivePaymentPage() {
         return;
       }
 
-      const [paymentsRes, customersRes, packagesRes, areasRes] = await Promise.all([
-        api.get('/payments'),
-        api.get('/customers?limit=1000'),
-        api.get('/packages'),
-        api.get('/areas'),
-      ]);
+      const [paymentsRes, customersRes, packagesRes, areasRes, ispsRes] =
+        await Promise.all([
+          api.get('/payments'),
+          api.get('/customers?limit=1000'),
+          api.get('/packages'),
+          api.get('/areas'),
+          api.get('/isps'),
+        ]);
 
-      // ✅ Build area lookup map: { "6aa54e..." -> "Mateen Heaven 5H", "Mateen Heaven 5H" -> "Mateen Heaven 5H" }
       const lookup: Record<string, string> = {};
       if (areasRes.data.success) {
         const areaList = areasRes.data.areas || [];
@@ -880,10 +947,22 @@ export default function ReceivePaymentPage() {
       }
       setAreaLookup(lookup);
 
+      // ✅ ISPs — used to decide whether the ISP filter shows up
+      if (ispsRes.data.success && Array.isArray(ispsRes.data.isps)) {
+        setIsps(ispsRes.data.isps);
+      } else {
+        setIsps([]);
+      }
+
       if (paymentsRes.data.success) {
         const customerIdMap: Record<string, string> = {};
+        const customerIspMap: Record<string, string> = {};
+
         (customersRes.data.customers || []).forEach((c: any) => {
           customerIdMap[c.name] = c.customerId || c.code || 'N/A';
+          if (c._id) {
+            customerIspMap[String(c._id)] = resolveIspName(c.isp);
+          }
         });
 
         const formattedPayments = paymentsRes.data.payments.map((payment: any) => {
@@ -894,12 +973,18 @@ export default function ReceivePaymentPage() {
             payment.customer?.code ||
             'N/A';
 
+          const resolvedIsp =
+            resolveIspName(payment.customer?.isp) ||
+            customerIspMap[String(payment.customer?._id || '')] ||
+            '';
+
           return {
             id: payment._id,
             receipt: payment.receiptNo || 'N/A',
             userId: displayUserId,
             customer: customerName,
             customerId: payment.customer?._id || '',
+            isp: resolvedIsp,
             month: payment.month || 'N/A',
             date: payment.paymentDate
               ? new Date(payment.paymentDate).toLocaleDateString('en-PK', {
@@ -960,7 +1045,7 @@ export default function ReceivePaymentPage() {
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
 
-    const totalProfit = payments
+  const totalProfit = payments
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => {
       const customer = customers.find(
@@ -1010,7 +1095,6 @@ export default function ReceivePaymentPage() {
   const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
   const currentMonth = `${MONTHS[currentMonthIndex]} ${currentYear}`;
 
-
   customers.forEach((customer: any) => {
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
     if (monthlyFee === 0) return;
@@ -1057,7 +1141,7 @@ export default function ReceivePaymentPage() {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
 
-       const allCustomerPayments = payments.filter(
+    const allCustomerPayments = payments.filter(
       (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
     if (allCustomerPayments.length === 0) {
@@ -1282,66 +1366,65 @@ export default function ReceivePaymentPage() {
             <DataTable
               data={filteredPayments}
               columns={columns}
-actions={[
-  {
-    label: 'PDF',
-    value: 'pdf',
-    icon: <Printer className="h-4 w-4" />,
-  },
-]}
-onAction={(item, action) => {
-  if (action !== 'pdf') return;
+              actions={[
+                {
+                  label: 'PDF',
+                  value: 'pdf',
+                  icon: <Printer className="h-4 w-4" />,
+                },
+              ]}
+              onAction={(item, action) => {
+                if (action !== 'pdf') return;
 
-  const customer = customers.find(
-    (c) => String(c._id) === String(item.customerId)
-  );
+                const customer = customers.find(
+                  (c) => String(c._id) === String(item.customerId)
+                );
 
-  const area = resolveAreaName(customer?.area, areaLookup);
+                const area = resolveAreaName(customer?.area, areaLookup);
 
-  // Compute balances so the receipt shows the full picture
-  const monthlyFee = parseFloat(String(customer?.monthlyFee)) || 0;
-  const customerPayments = payments.filter(
-    (p) => String(p.customerId) === String(item.customerId) && !p.isNoPayment
-  );
-  const allocs = allocatePayments(
-    monthlyFee,
-    customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
-  );
+                const monthlyFee = parseFloat(String(customer?.monthlyFee)) || 0;
+                const customerPayments = payments.filter(
+                  (p) => String(p.customerId) === String(item.customerId) && !p.isNoPayment
+                );
+                const allocs = allocatePayments(
+                  monthlyFee,
+                  customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+                );
 
-  const currentAlloc = allocs.find((a) => a.month === item.month);
-  const previousBalance = allocs
-    .filter((a) => compareMonths(a.month, item.month) < 0 && !a.isPaid)
-    .reduce((sum, a) => sum + a.remaining, 0);
-  const currentBalance = currentAlloc ? currentAlloc.remaining : monthlyFee;
-  const totalBalance = previousBalance + currentBalance;
+                const currentAlloc = allocs.find((a) => a.month === item.month);
+                const previousBalance = allocs
+                  .filter((a) => compareMonths(a.month, item.month) < 0 && !a.isPaid)
+                  .reduce((sum, a) => sum + a.remaining, 0);
+                const currentBalance = currentAlloc ? currentAlloc.remaining : monthlyFee;
+                const totalBalance = previousBalance + currentBalance;
 
-  downloadReceipt({
-    title: 'Payment Receipt',
-    receiptNo: item.receipt,
-    partyLabel: 'User',
-    partyName: item.customer,
-    partyId: item.userId,
-    area,
-    phone: customer?.phone,
-    month: item.month,
-    paymentDate: item.date,
-    paymentMethod: item.method,
-    packageName:
-      typeof customer?.package === 'string'
-        ? customer.package
-        : customer?.package?.name,
-    packagePrice: item.packagePrice,
-    amount: item.amount,
-    remarks: customer?.remarks,
-    previousBalance,
-    currentBalance,
-    totalBalance,
-    remainingBalance: Math.max(0, totalBalance - (item.amount || 0)),
-    isNoPayment: item.isNoPayment,
-  });
+                downloadReceipt({
+                  title: 'Payment Receipt',
+                  receiptNo: item.receipt,
+                  partyLabel: 'User',
+                  partyName: item.customer,
+                  partyId: item.userId,
+                  area,
+                  phone: customer?.phone,
+                  month: item.month,
+                  paymentDate: item.date,
+                  paymentMethod: item.method,
+                  packageName:
+                    typeof customer?.package === 'string'
+                      ? customer.package
+                      : customer?.package?.name,
+                  packagePrice: item.packagePrice,
+                  amount: item.amount,
+                  remarks: customer?.remarks,
+                  previousBalance,
+                  currentBalance,
+                  totalBalance,
+                  remainingBalance: Math.max(0, totalBalance - (item.amount || 0)),
+                  isNoPayment: item.isNoPayment,
+                });
 
-  toast.success(`Receipt downloaded for ${item.customer}`);
-}}
+                toast.success(`Receipt downloaded for ${item.customer}`);
+              }}
               accordionTitle="customer"
               accordionSubtitle="userId"
               emptyMessage="No payments found"
@@ -1356,9 +1439,10 @@ onAction={(item, action) => {
             fetchAllData();
           }}
           customers={customers}
-          payments={payments}
+          payments={packages.length >= 0 ? payments : payments}
           packages={packages}
           areas={areas}
+          isps={isps}
           areaLookup={areaLookup}
           fetchData={fetchAllData}
         />

@@ -7,6 +7,7 @@ import {
   UserPlus,
   Edit,
   Trash2,
+  Wifi,
   Eye,
   UserCheck,
   UserX,
@@ -126,21 +127,6 @@ const getCurrentMonth = (): string => {
    PAYMENT HELPERS
 ============================================================ */
 
-/**
- * Match payments with the current customer.
- *
- * Supports:
- * - payment.customer._id
- * - payment.customer.id
- * - payment.customer
- * - payment.customerId
- * - payment.customer.name
- * - payment.customerName
- * - payment.name
- * - customer's Mongo _id
- * - customer's customerId
- * - customer's name
- */
 function getUserPayments(
   user: any,
   payments: any[]
@@ -165,22 +151,6 @@ function getUserPayments(
       customer?.customerId ??
       p.customerId;
 
-    // ----------------------------------------------------------
-    // THE FIX (round 2):
-    //
-    // If this payment carries a real identifier (a mongo id or a
-    // customerId code), match STRICTLY by that identifier and
-    // never fall back to name matching. Matching by name in
-    // parallel with ID matching is unsafe: two different
-    // customers can share the exact same name (e.g. two separate
-    // "Saireen Fatima Khan" records with different customerIds),
-    // and an OR'd name match will silently pull one customer's
-    // payment into another customer's totals, which is exactly
-    // what made a partially-paid customer look fully paid here.
-    //
-    // Name matching is now only used as a last resort, for
-    // payments that carry NO identifier at all.
-    // ----------------------------------------------------------
     const hasIdentifier =
       Boolean(paymentCustomerId) ||
       Boolean(paymentCustomerCode);
@@ -215,48 +185,7 @@ function getUserPayments(
   });
 }
 
-/**
- * ------------------------------------------------------------
- * THE FIX
- * ------------------------------------------------------------
- * Determine the amount ACTUALLY RECEIVED for a single payment
- * record.
- *
- * The previous implementation summed `p.amount` directly and
- * treated that as "money received". That is wrong whenever the
- * payment record separates the monthly/total amount from the
- * amount actually paid (e.g. `amount: 6000, paidAmount: 5000,
- * status: "Partial"`) — in that case `p.amount` is the FULL
- * monthly fee, not what the customer actually paid, so a
- * partial payment was silently counted as a full one.
- *
- * This function looks for an explicit "amount actually
- * received" field first, trying the common field names a
- * payments API is likely to use. Only if none of those fields
- * exist does it fall back to `p.amount` — and even then, if the
- * payment's own `status` field says the payment is partial/
- * pending/unpaid, it refuses to silently treat `p.amount` (the
- * full fee) as money received.
- *
- * NOTE: I do not have your actual Payment model/API response,
- * only this page, so I could not read the real field name off
- * your schema as instructed. I've made this resilient to the
- * most likely field names. If your real payment objects use a
- * different field for "amount actually received", send me the
- * Payment model or a sample /payments response and I'll pin the
- * exact field instead of relying on this candidate list.
- */
 function getPaymentPaidAmount(p: any): number {
-  // Confirmed from your actual payment data: `amount` is the
-  // figure ACTUALLY RECEIVED for that payment (Rs. 5,000 for a
-  // Partial payment, Rs. 6,000 for a Paid one) — the plan/monthly
-  // total lives in a separate field (e.g. `packagePrice`) that we
-  // never need here, since `user.monthlyFeeRaw` already gives us
-  // the fee to compare against.
-  //
-  // A couple of alternate field names are supported as a
-  // fallback only, in case some records use a differently-named
-  // field for the same "amount received" value.
   const candidates = [
     p.amount,
     p.paidAmount,
@@ -276,10 +205,6 @@ function getPaymentPaidAmount(p: any): number {
   return 0;
 }
 
-/**
- * Get the total amount ACTUALLY PAID by this customer
- * for a particular month.
- */
 function getMonthPaidAmount(
   user: any,
   payments: any[],
@@ -303,13 +228,6 @@ function getMonthPaidAmount(
     );
 }
 
-/**
- * A month is fully paid only when:
- *
- * total ACTUAL payments received >= monthly fee
- *
- * Partial payments do NOT count as paid.
- */
 function isMonthPaid(
   user: any,
   payments: any[],
@@ -345,19 +263,6 @@ function isCurrentMonthFullyPaid(
    PAYMENT-AWARE UPCOMING EXPIRY
 ============================================================ */
 
-/**
- * Upcoming expiry rules:
- *
- * 1. Fully paid current month
- *    -> NOT upcoming
- *
- * 2. Expiry date has passed
- *    -> NOT upcoming
- *
- * 3. Expiry is today through next 7 days
- *    AND current month is not fully paid
- *    -> Upcoming Expiry
- */
 function isPaymentAwareUpcomingExpiry(
   user: any,
   payments: any[]
@@ -368,8 +273,6 @@ function isPaymentAwareUpcomingExpiry(
 
   if (!expiry) return false;
 
-  // Fully paid current month means
-  // this customer must not appear in Upcoming.
   if (
     isCurrentMonthFullyPaid(
       user,
@@ -387,7 +290,6 @@ function isPaymentAwareUpcomingExpiry(
     expiry.getDate()
   );
 
-  // Expiry has already passed.
   if (expiryDay < today) {
     return false;
   }
@@ -411,21 +313,6 @@ function isPaymentAwareUpcomingExpiry(
    EFFECTIVE STATUS
 ============================================================ */
 
-/**
- * Status rules:
- *
- * Manual Inactive/Suspended are preserved.
- *
- * Current month fully paid:
- *     -> Active
- *
- * Current month partial/unpaid:
- *
- *     expiry today -> Upcoming Expiry
- *     expiry 1-7 days -> Upcoming Expiry
- *     expiry passed -> Expired
- *     expiry >7 days away -> normal/base status
- */
 function computeEffectiveStatus(
   user: any,
   payments: any[]
@@ -434,9 +321,6 @@ function computeEffectiveStatus(
     user.statusRaw || ''
   ).toLowerCase();
 
-  // ----------------------------------------------------------
-  // Preserve manually controlled statuses.
-  // ----------------------------------------------------------
   if (
     rawStatus === 'inactive' ||
     rawStatus === 'suspended'
@@ -446,11 +330,6 @@ function computeEffectiveStatus(
       : 'Suspended';
   }
 
-  // ----------------------------------------------------------
-  // Fully paid current month = Active.
-  //
-  // This takes priority over expiry date.
-  // ----------------------------------------------------------
   if (
     isCurrentMonthFullyPaid(
       user,
@@ -476,18 +355,10 @@ function computeEffectiveStatus(
     expiry.getDate()
   );
 
-  // ----------------------------------------------------------
-  // Expiry date has passed AND current month
-  // isn't fully paid = Expired.
-  // ----------------------------------------------------------
   if (expiryDay < today) {
     return 'Expired';
   }
 
-  // ----------------------------------------------------------
-  // Expiry is today through next 7 days AND
-  // current month isn't fully paid = Upcoming Expiry.
-  // ----------------------------------------------------------
   const diffMs =
     expiryDay.getTime() -
     today.getTime();
@@ -504,9 +375,6 @@ function computeEffectiveStatus(
     return 'Upcoming Expiry';
   }
 
-  // ----------------------------------------------------------
-  // Otherwise retain normal status.
-  // ----------------------------------------------------------
   return effectiveStatus(user);
 }
 
@@ -590,6 +458,9 @@ function UsersPageContent() {
   const [payments, setPayments] =
     useState<any[]>([]);
 
+  const [isps, setIsps] =
+    useState<any[]>([]);
+
   /* ==========================================================
      URL FILTERS
   ========================================================== */
@@ -609,6 +480,32 @@ function UsersPageContent() {
       setAreaFilter(area);
     }
   }, [searchParams]);
+
+  /* ==========================================================
+     FETCH ISPS
+  ========================================================== */
+
+  const fetchISPs = async () => {
+    try {
+      if (!sessionStorage.getItem('token')) {
+        return [];
+      }
+
+      const { data } = await api.get('/isps');
+
+      const list =
+        data.success && Array.isArray(data.isps)
+          ? data.isps
+          : [];
+
+      setIsps(list);
+
+      return list;
+    } catch (e) {
+      console.error('Error fetching ISPs:', e);
+      return [];
+    }
+  };
 
   /* ==========================================================
      FETCH AREAS
@@ -661,11 +558,39 @@ function UsersPageContent() {
   };
 
   /* ==========================================================
+     RESOLVE ISP NAME
+  ========================================================== */
+
+  const resolveIspName = (
+    raw: any,
+    ispList: any[]
+  ): string => {
+    if (!raw) return '';
+
+    if (typeof raw === 'object') {
+      return raw.name || raw.ispName || '';
+    }
+
+    const rawStr = String(raw);
+
+    const match = ispList.find(
+      (i) =>
+        String(i._id) === rawStr ||
+        String(i.id) === rawStr ||
+        String(i.name).toLowerCase() ===
+          rawStr.toLowerCase()
+    );
+
+    return match?.name || rawStr;
+  };
+
+  /* ==========================================================
      FETCH USERS + PAYMENTS
   ========================================================== */
 
   const fetchUsers = async (
-    areaList = areas
+    areaList = areas,
+    ispList = isps
   ) => {
     try {
       if (
@@ -701,8 +626,6 @@ function UsersPageContent() {
         return;
       }
 
-      // IMPORTANT:
-      // Store payments in state.
       setPayments(paymentList);
 
       const mappedUsers =
@@ -734,6 +657,11 @@ function UsersPageContent() {
             area: areaName(
               c.area,
               areaList
+            ),
+
+            isp: resolveIspName(
+              c.isp,
+              ispList
             ),
 
             package:
@@ -806,12 +734,13 @@ function UsersPageContent() {
 
   useEffect(() => {
     (async () => {
-      const list =
+      const areaList =
         await fetchAreas();
-
+      const ispList =
+        await fetchISPs();
       await fetchPackages();
 
-      await fetchUsers(list);
+      await fetchUsers(areaList, ispList);
     })();
   }, []);
 
@@ -819,18 +748,6 @@ function UsersPageContent() {
      STATS
   ========================================================== */
 
-  // ------------------------------------------------------------
-  // THE FIX:
-  //
-  // The customer list already respects `areaFilter` (see
-  // `matchesArea` inside `filteredUsers` below), but the stat
-  // cards were computed straight from the full `users` array, so
-  // "View Customers" on an area correctly filtered the list while
-  // the counts kept showing every area's numbers.
-  //
-  // Scope the stats to the same area filter the list uses, so
-  // both agree.
-  // ------------------------------------------------------------
   const statsUsers = areaFilter
     ? users.filter((u) => u.area === areaFilter)
     : users;
@@ -894,6 +811,17 @@ function UsersPageContent() {
 
   /* ==========================================================
      USER FORM FIELDS
+     --------------------------------------------------------
+     Field order:
+       1. customerId
+       2. name
+       3. phone
+       4. address
+       5. ISP         (only if isps have loaded)
+       6. Area        (disabled until ISP is chosen,
+                       options filtered by selected ISP)
+       7. package
+       ...rest
   ========================================================== */
 
   const userFields: Field[] = [
@@ -933,12 +861,38 @@ function UsersPageContent() {
         'House #, Street',
     },
 
+    ...(isps.length > 0
+      ? [
+          {
+            name: 'isp',
+            label: 'ISP',
+            type: 'select' as const,
+            required: true,
+            searchable: true,
+            options: isps.map(
+              (isp) => ({
+                label: isp.name,
+                value: isp.name,
+              })
+            ),
+          },
+        ]
+      : []),
+
     {
       name: 'area',
       label: 'Area',
       type: 'select',
       required: true,
       searchable: true,
+      placeholder:
+        isps.length > 0
+          ? 'Select ISP first'
+          : 'Select Area',
+      disabledUntil:
+        isps.length > 0
+          ? 'isp'
+          : undefined,
       options: areas.map(
         (a) => ({
           label: a.name,
@@ -1067,6 +1021,44 @@ function UsersPageContent() {
   ];
 
   /* ==========================================================
+     DYNAMIC AREA OPTIONS — filtered by selected ISP
+  ========================================================== */
+
+  const resolveDynamicOptions = (
+    fieldName: string,
+    formData: Record<string, any>
+  ) => {
+    if (fieldName !== 'area') {
+      return [];
+    }
+
+    // No ISPs configured at all -> show every area
+    if (isps.length === 0) {
+      return areas.map((a) => ({
+        label: a.name,
+        value: a.name,
+      }));
+    }
+
+    // ISP not selected yet -> no areas
+    if (!formData.isp) {
+      return [];
+    }
+
+    // Only areas that belong to the chosen ISP
+    return areas
+      .filter(
+        (a) =>
+          resolveIspName(a.isp, isps).toLowerCase() ===
+          String(formData.isp).toLowerCase()
+      )
+      .map((a) => ({
+        label: a.name,
+        value: a.name,
+      }));
+  };
+
+  /* ==========================================================
      TRANSFORM FORM DATA
   ========================================================== */
 
@@ -1130,6 +1122,9 @@ function UsersPageContent() {
         areas
       ),
 
+      isp:
+        data.isp || '',
+
       package:
         data.package,
 
@@ -1170,39 +1165,40 @@ function UsersPageContent() {
     setEditingUser(null);
     setModal(false);
 
-    fetchUsers(areas);
+    fetchUsers(areas, isps);
   };
-const handleDelete = async (id: string, name: string) => {
-  if (
-    !confirm(
-      `Are you sure you want to delete ${name}?\n\nThis will also permanently delete all of their payment records.`
-    )
-  ) {
-    return;
-  }
 
-  try {
-    const { data } = await api.delete(`/customers/${id}`);
-
-    setUsers((prev) => prev.filter((u) => u.id !== id));
-
-    const extra =
-      data?.deletedPayments > 0
-        ? ` (${data.deletedPayments} payment${data.deletedPayments === 1 ? '' : 's'} also removed)`
-        : '';
-
-    toast.success(`${name} deleted${extra}`);
-
-    if (editingUser?.id === id) setEditingUser(null);
-    if (viewingUser?.id === id) {
-      setView(false);
-      setViewingUser(null);
+  const handleDelete = async (id: string, name: string) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete ${name}?\n\nThis will also permanently delete all of their payment records.`
+      )
+    ) {
+      return;
     }
-  } catch (e) {
-    console.error(e);
-    toast.error('Failed to delete user');
-  }
-};
+
+    try {
+      const { data } = await api.delete(`/customers/${id}`);
+
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+
+      const extra =
+        data?.deletedPayments > 0
+          ? ` (${data.deletedPayments} payment${data.deletedPayments === 1 ? '' : 's'} also removed)`
+          : '';
+
+      toast.success(`${name} deleted${extra}`);
+
+      if (editingUser?.id === id) setEditingUser(null);
+      if (viewingUser?.id === id) {
+        setView(false);
+        setViewingUser(null);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to delete user');
+    }
+  };
 
   /* ==========================================================
      FILTERED USERS
@@ -1290,14 +1286,17 @@ const handleDelete = async (id: string, name: string) => {
             {u.name}
           </span>
 
-          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            <CalendarDays className="h-3 w-3 text-blue-500" />
-
-            Activated:{' '}
-            {displayDate(
-              u.activationDate
-            )}
+          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+            <CalendarDays className="h-3 w-3" />
+            Activated: {displayDate(u.activationDate)}
           </span>
+
+          {u.isp && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <Wifi className="h-3 w-3 text-blue-500" />
+              ISP: {u.isp}
+            </span>
+          )}
         </div>
       ),
     },
@@ -1380,10 +1379,7 @@ const handleDelete = async (id: string, name: string) => {
     <Layout>
       <div className="space-y-5">
 
-        {/* ==================================================
-            HEADER
-        ================================================== */}
-
+        {/* HEADER */}
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -1410,10 +1406,7 @@ const handleDelete = async (id: string, name: string) => {
           </button>
         </header>
 
-        {/* ==================================================
-            STATS
-        ================================================== */}
-
+        {/* STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map(
             ([
@@ -1501,20 +1494,14 @@ const handleDelete = async (id: string, name: string) => {
           )}
         </div>
 
-        {/* ==================================================
-            SEARCH
-        ================================================== */}
-
+        {/* SEARCH */}
         <SearchBar
           placeholder="Search by name, user ID or phone..."
           value={search}
           onChange={setSearch}
         />
 
-        {/* ==================================================
-            USER LIST
-        ================================================== */}
-
+        {/* USER LIST */}
         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
 
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
@@ -1662,10 +1649,7 @@ const handleDelete = async (id: string, name: string) => {
           </div>
         </section>
 
-        {/* ==================================================
-            ADD / EDIT USER MODAL
-        ================================================== */}
-
+        {/* ADD / EDIT USER MODAL */}
         <AddUserModal
           isOpen={modal}
           onClose={() => {
@@ -1726,6 +1710,9 @@ const handleDelete = async (id: string, name: string) => {
                     areas
                   ),
 
+                  isp:
+                    editingUser.isp || '',
+
                   package:
                     editingUser.package,
 
@@ -1758,12 +1745,10 @@ const handleDelete = async (id: string, name: string) => {
             packages,
             areas,
           }}
+          dynamicOptions={resolveDynamicOptions}
         />
 
-        {/* ==================================================
-            VIEW USER MODAL
-        ================================================== */}
-
+        {/* VIEW USER MODAL */}
         {view &&
           viewingUser && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1897,6 +1882,18 @@ const handleDelete = async (id: string, name: string) => {
                         areas
                       )}
                     />
+
+                    {viewingUser.isp && (
+                      <ViewField
+                        icon={
+                          <Wifi className="h-4 w-4" />
+                        }
+                        label="ISP"
+                        value={
+                          viewingUser.isp
+                        }
+                      />
+                    )}
 
                     <ViewField
                       icon={

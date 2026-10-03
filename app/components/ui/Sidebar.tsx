@@ -195,6 +195,12 @@ const menuItems: MenuItem[] = [
     section: 'general',
   },
 
+  {
+    label: 'Add ISP',
+    href: '/ISP',
+    icon: <UserRoundPlus className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
   // NOTIFICATIONS
   {
     label: 'Notification',

@@ -25,7 +25,15 @@ export interface Field {
   maxLength?: number;
   step?: number;
   editable?: boolean;
+  /**
+   * Field stays disabled until the named field has a value.
+   * The field is also cleared whenever the named field changes.
+   * If `dynamicOptions` is provided, its options are used for this field.
+   */
+  disabledUntil?: string;
 }
+
+type Option = { label: string; value: string };
 
 interface AddUserModalProps {
   isOpen: boolean;
@@ -42,6 +50,10 @@ interface AddUserModalProps {
   context?: any;
   method?: 'POST' | 'PUT' | 'PATCH';
   initialData?: Record<string, any>;
+  dynamicOptions?: (
+    fieldName: string,
+    formData: Record<string, any>
+  ) => Option[];
 }
 
 const defaultFields: Field[] = [
@@ -103,13 +115,15 @@ function SearchableSelect({
   placeholder,
   label,
   name,
+  disabled = false,
 }: {
-  options: Array<{ label: string; value: string }>;
+  options: Option[];
   value: string;
   onChange: (name: string, value: string) => void;
   placeholder: string;
   label?: string;
   name: string;
+  disabled?: boolean;
 }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -120,6 +134,14 @@ function SearchableSelect({
     const selected = options.find((opt) => opt.value === value);
     setDisplayValue(selected?.label || '');
   }, [value, options]);
+
+  // Close dropdown if the field becomes disabled
+  useEffect(() => {
+    if (disabled) {
+      setIsOpen(false);
+      setSearchTerm('');
+    }
+  }, [disabled]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -152,14 +174,22 @@ function SearchableSelect({
   return (
     <div className="relative" ref={dropdownRef}>
       <div
+        aria-disabled={disabled}
         className={cn(
-          'w-full px-3 py-2 rounded-lg border cursor-pointer flex items-center justify-between',
-          isOpen
-            ? 'border-blue-500 ring-2 ring-blue-500/50'
-            : 'border-gray-300 dark:border-gray-600',
-          'bg-white dark:bg-gray-800 text-gray-900 dark:text-white'
+          'w-full px-3 py-2 rounded-lg border flex items-center justify-between',
+          disabled
+            ? 'cursor-not-allowed opacity-60 bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600'
+            : 'cursor-pointer bg-white dark:bg-gray-800',
+          !disabled &&
+            (isOpen
+              ? 'border-blue-500 ring-2 ring-blue-500/50'
+              : 'border-gray-300 dark:border-gray-600'),
+          'text-gray-900 dark:text-white'
         )}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (disabled) return;
+          setIsOpen(!isOpen);
+        }}
       >
         <span
           className={
@@ -176,7 +206,7 @@ function SearchableSelect({
         </span>
       </div>
 
-      {isOpen && (
+      {isOpen && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg max-h-60 overflow-hidden">
           <div className="p-2 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
@@ -239,6 +269,7 @@ export function AddUserModal({
   context = {},
   method = 'POST',
   initialData,
+  dynamicOptions,
 }: AddUserModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -308,11 +339,6 @@ export function AddUserModal({
       setFormData(formInit);
       setApiError(null);
       retryCountRef.current = 0;
-
-      console.log(
-        '🔄 Modal opened, initial data:',
-        formInit
-      );
     }
 
     prevIsOpenRef.current = isOpen;
@@ -334,12 +360,7 @@ export function AddUserModal({
     ): number | undefined => {
       if (typeof field.max === 'function') {
         try {
-          const calculatedMax = field.max(
-            data,
-            context
-          );
-
-          return calculatedMax;
+          return field.max(data, context);
         } catch (e) {
           console.error(
             `Error calculating max for ${field.name}:`,
@@ -356,15 +377,73 @@ export function AddUserModal({
   );
 
   // ======================================================
+  // RESOLVE OPTIONS (static or dynamic)
+  // ======================================================
+
+  const getFieldOptions = useCallback(
+    (field: Field, data: Record<string, any>): Option[] => {
+      if (dynamicOptions && field.disabledUntil) {
+        try {
+          return dynamicOptions(field.name, data) || [];
+        } catch (e) {
+          console.error(
+            `Error resolving dynamic options for ${field.name}:`,
+            e
+          );
+          return [];
+        }
+      }
+
+      return field.options || [];
+    },
+    [dynamicOptions]
+  );
+
+  // ======================================================
+  // IS FIELD DISABLED BECAUSE ITS PARENT IS EMPTY
+  // ======================================================
+
+  const isLockedByParent = useCallback(
+    (field: Field, data: Record<string, any>): boolean => {
+      if (!field.disabledUntil) return false;
+      return !data[field.disabledUntil];
+    },
+    []
+  );
+
+  // ======================================================
   // UPDATE DEPENDENT FIELDS
   // ======================================================
 
   const updateDependentFields = useCallback(
     (name: string, value: any) => {
+      const previousValue = formData[name];
+
       const newFormData = {
         ...formData,
         [name]: value,
       };
+
+      // --------------------------------------------------
+      // CLEAR FIELDS THAT ARE LOCKED BEHIND THIS FIELD
+      // (runs only on user-driven changes, so edit-mode
+      //  initial values are never wiped)
+      // --------------------------------------------------
+
+       if (previousValue !== value) {
+        // Clear every field locked behind this one, and everything
+        // locked behind those (e.g. ISP -> Area -> Dealer ID)
+        const clearLockedFields = (parent: string) => {
+          finalFields.forEach((field) => {
+            if (field.disabledUntil === parent) {
+              newFormData[field.name] = '';
+              clearLockedFields(field.name);
+            }
+          });
+        };
+
+        clearLockedFields(name);
+      }
 
       // --------------------------------------------------
       // PASS 1
@@ -1005,11 +1084,20 @@ export function AddUserModal({
                       !field.editable)
                 );
 
-              // ==================================================
-              // IMPORTANT FIX:
-              // Resolve function-based max to a number BEFORE
-              // passing it to the native input.
-              // ==================================================
+              const lockedByParent =
+                isLockedByParent(
+                  field,
+                  formData
+                );
+
+              const isDisabled =
+                isReadOnly || lockedByParent;
+
+              const fieldOptions =
+                getFieldOptions(
+                  field,
+                  formData
+                );
 
               const fieldMax =
                 getFieldMax(
@@ -1041,7 +1129,7 @@ export function AddUserModal({
                     field.searchable ? (
                       <SearchableSelect
                         options={
-                          field.options || []
+                          fieldOptions
                         }
                         value={
                           formData[
@@ -1051,12 +1139,18 @@ export function AddUserModal({
                         onChange={
                           handleSelectChange
                         }
-                        placeholder={`Select ${field.label}`}
+                        placeholder={
+                          field.placeholder ||
+                          `Select ${field.label}`
+                        }
                         label={
                           field.label
                         }
                         name={
                           field.name
+                        }
+                        disabled={
+                          lockedByParent
                         }
                       />
                     ) : (
@@ -1074,16 +1168,16 @@ export function AddUserModal({
                           field.required
                         }
                         disabled={
-                          isReadOnly
+                          isDisabled
                         }
-                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100 dark:disabled:bg-gray-700/50"
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <option value="">
                           {field.placeholder ||
                             `Select ${field.label}`}
                         </option>
 
-                        {field.options?.map(
+                        {fieldOptions.map(
                           (opt) => (
                             <option
                               key={
@@ -1157,20 +1251,24 @@ export function AddUserModal({
                       readOnly={
                         isReadOnly
                       }
+                      disabled={
+                        lockedByParent
+                      }
                       min={
                         field.min
                       }
                       max={
                         fieldMax
                       }
-                   maxLength={field.maxLength}
+                      maxLength={field.maxLength}
                       step={
                         field.step
                       }
                       className={cn(
                         'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none',
-                        isReadOnly &&
-                          'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed'
+                        (isReadOnly || lockedByParent) &&
+                          'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed',
+                        lockedByParent && 'opacity-60'
                       )}
                     />
                   )}

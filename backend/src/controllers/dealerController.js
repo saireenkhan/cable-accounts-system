@@ -1,13 +1,12 @@
 const DealerModel = require('../models/Dealer');
 const DealerPaymentModel = require('../models/DealerPayment');
+const DealerAreaModel = require('../models/DealerArea');
 const AreaModel = require('../models/Area');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 
 // ============================================================
 // GENERATE DEALER ID
-// Accepts the tenant-scoped Dealer model so it works
-// regardless of tenant context.
 // ============================================================
 const generateDealerId = async (Dealer) => {
   const count = await Dealer.countDocuments();
@@ -23,13 +22,11 @@ const generateDealerId = async (Dealer) => {
 const resolveArea = async (Area, areaInput) => {
   if (!areaInput) return null;
 
-  // Already an ObjectId-looking value → look it up by _id
   if (/^[a-f\d]{24}$/i.test(String(areaInput))) {
     const byId = await Area.findById(areaInput);
     if (byId) return byId;
   }
 
-  // Otherwise treat it as a name
   const name =
     typeof areaInput === 'object' && areaInput.name
       ? areaInput.name
@@ -48,13 +45,40 @@ const resolveArea = async (Area, areaInput) => {
 };
 
 // ============================================================
+// VALIDATE AREA vs ISP
+// If the dealer area exists and has an ISP set, it must match
+// the ISP chosen for the dealer. Returns an error message or null.
+// ============================================================
+const validateAreaForIsp = async (DealerArea, areaInput, isp) => {
+  if (!areaInput || !isp) return null;
+
+  const areaName =
+    typeof areaInput === 'object' && areaInput.name
+      ? areaInput.name
+      : String(areaInput);
+
+  const dealerArea = await DealerArea.findOne({ name: areaName });
+
+  if (
+    dealerArea &&
+    dealerArea.isp &&
+    String(dealerArea.isp).trim().toLowerCase() !==
+      String(isp).trim().toLowerCase()
+  ) {
+    return `Area "${areaName}" does not belong to ISP "${isp}".`;
+  }
+
+  return null;
+};
+
+// ============================================================
 // GET ALL DEALERS
 // ============================================================
 exports.getDealers = async (req, res) => {
   const Dealer = tenantScope(DealerModel, req);
 
   try {
-    const { search, status } = req.query;
+    const { search, status, isp } = req.query;
     const filter = {};
 
     if (search) {
@@ -65,6 +89,7 @@ exports.getDealers = async (req, res) => {
       ];
     }
     if (status) filter.status = status;
+    if (isp) filter.isp = isp;
 
     const dealers = await Dealer.find(filter)
       .populate('area', 'name')
@@ -74,7 +99,7 @@ exports.getDealers = async (req, res) => {
     res.json({ success: true, dealers });
   } catch (error) {
     logger.error(`Get dealers error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -83,6 +108,7 @@ exports.getDealers = async (req, res) => {
 // ============================================================
 exports.createDealer = async (req, res) => {
   const Area = tenantScope(AreaModel, req);
+  const DealerArea = tenantScope(DealerAreaModel, req);
   const Dealer = tenantScope(DealerModel, req);
 
   try {
@@ -91,6 +117,7 @@ exports.createDealer = async (req, res) => {
       name,
       cellNo,
       area,
+      isp,
       address,
       openingBalance,
       remarks,
@@ -115,6 +142,11 @@ exports.createDealer = async (req, res) => {
       });
     }
 
+    const areaError = await validateAreaForIsp(DealerArea, area, isp);
+    if (areaError) {
+      return res.status(400).json({ success: false, message: areaError });
+    }
+
     const areaDoc = await resolveArea(Area, area);
 
     const createdBy = req.user ? req.user.id : null;
@@ -123,6 +155,7 @@ exports.createDealer = async (req, res) => {
       dealerId,
       name,
       cellNo,
+      isp: isp ? String(isp).trim() : '',
       area: areaDoc ? areaDoc._id : null,
       address: address || '',
       openingBalance: parseFloat(openingBalance) || 0,
@@ -146,6 +179,14 @@ exports.createDealer = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Create dealer error:', error);
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'A dealer with this ID already exists',
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message || 'Server error',
@@ -158,6 +199,7 @@ exports.createDealer = async (req, res) => {
 // ============================================================
 exports.updateDealer = async (req, res) => {
   const Area = tenantScope(AreaModel, req);
+  const DealerArea = tenantScope(DealerAreaModel, req);
   const Dealer = tenantScope(DealerModel, req);
 
   try {
@@ -166,6 +208,7 @@ exports.updateDealer = async (req, res) => {
       name,
       cellNo,
       area,
+      isp,
       address,
       openingBalance,
       remarks,
@@ -174,6 +217,15 @@ exports.updateDealer = async (req, res) => {
     } = req.body;
 
     console.log('📝 Updating dealer:', req.params.id, req.body);
+
+    const existingDealer = await Dealer.findById(req.params.id);
+
+    if (!existingDealer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dealer not found',
+      });
+    }
 
     const update = {};
 
@@ -184,13 +236,25 @@ exports.updateDealer = async (req, res) => {
     if (remarks !== undefined) update.remarks = remarks || '';
     if (commission !== undefined) update.commission = commission;
     if (status !== undefined) update.status = status;
+    if (isp !== undefined) update.isp = String(isp || '').trim();
 
     if (openingBalance !== undefined && openingBalance !== '') {
       update.openingBalance = parseFloat(openingBalance) || 0;
     }
 
-    // Resolve area name → ObjectId
+    // Resolve area name -> ObjectId (checked against the new or existing ISP)
     if (area) {
+      const effectiveIsp = isp !== undefined ? isp : existingDealer.isp;
+
+      const areaError = await validateAreaForIsp(
+        DealerArea,
+        area,
+        effectiveIsp
+      );
+      if (areaError) {
+        return res.status(400).json({ success: false, message: areaError });
+      }
+
       const areaDoc = await resolveArea(Area, area);
       if (areaDoc) update.area = areaDoc._id;
     }
@@ -202,10 +266,6 @@ exports.updateDealer = async (req, res) => {
       .populate('area', 'name')
       .populate('createdBy', 'name');
 
-    if (!dealer) {
-      return res.status(404).json({ message: 'Dealer not found' });
-    }
-
     console.log('✅ Dealer updated:', dealer.dealerId);
 
     res.json({
@@ -215,6 +275,14 @@ exports.updateDealer = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Update dealer error:', error);
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'A dealer with this ID already exists',
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: error.message || 'Server error',
@@ -232,13 +300,16 @@ exports.deleteDealer = async (req, res) => {
     const dealer = await Dealer.findByIdAndDelete(req.params.id);
 
     if (!dealer) {
-      return res.status(404).json({ message: 'Dealer not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Dealer not found',
+      });
     }
 
     res.json({ success: true, message: 'Dealer deleted successfully' });
   } catch (error) {
     logger.error(`Delete dealer error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 
@@ -317,6 +388,6 @@ exports.getDealerStats = async (req, res) => {
     });
   } catch (error) {
     logger.error(`Get dealer stats error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

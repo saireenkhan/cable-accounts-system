@@ -16,10 +16,10 @@ exports.getAreas = async (req, res) => {
 exports.createArea = async (req, res) => {
     const Area = tenantScope(AreaModel, req);
   try {
-    const { name, code, description } = req.body;
-    
+    const { name, code, description, isp } = req.body;
+
     console.log('📝 Creating area with data:', req.body);
-    
+
     // ✅ Validate required fields
     if (!name) {
       return res.status(400).json({
@@ -27,7 +27,7 @@ exports.createArea = async (req, res) => {
         message: 'Area name is required'
       });
     }
-    
+
     // ✅ Check if area already exists
     const existingArea = await Area.findOne({ name });
     if (existingArea) {
@@ -36,16 +36,17 @@ exports.createArea = async (req, res) => {
         message: `Area "${name}" already exists`
       });
     }
-    
+
     const area = await Area.create({
       name: name.trim(),
       code: code || '',
       description: description || '',
+      isp: isp || '',
       isActive: true
     });
-    
+
     console.log('✅ Area created successfully:', area);
-    
+
     res.status(201).json({
       success: true,
       area,
@@ -63,7 +64,7 @@ exports.createArea = async (req, res) => {
 exports.updateArea = async (req, res) => {
     const Area = tenantScope(AreaModel, req);
   try {
-    const { name, code, description, isActive } = req.body;
+    const { name, code, description, isp, isActive } = req.body;
 
     const update = {};
 
@@ -83,6 +84,10 @@ exports.updateArea = async (req, res) => {
 
     if (description !== undefined) {
       update.description = String(description).trim();
+    }
+
+    if (isp !== undefined) {
+      update.isp = String(isp).trim();
     }
 
     if (isActive !== undefined) {
