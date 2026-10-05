@@ -10,6 +10,7 @@ import {
   Bell,
   MessageCircle,
   Handshake,
+  Lock,
   MapPin,
   Package,
   FileText,
@@ -188,6 +189,13 @@ const menuItems: MenuItem[] = [
     icon: <UserRoundPlus className="h-[18px] w-[18px]" />,
     section: 'general',
   },
+   // Promise Management
+  {
+    label: 'Promise Management',
+    href: '/promises',
+    icon: <Lock className="h-[18px] w-[18px]" />,
+    section: 'promise',
+  },
   {
     label: 'WhatsApp Bot',
     href: '/whatsapp',
@@ -222,6 +230,7 @@ const sectionTitles: Record<SidebarSection, string> = {
   expense: 'Expense Management',
   general: 'General',
   notify: 'Notifications',
+  promise : 'Promise Management',
 };
 
 /* =========================================================
@@ -236,6 +245,7 @@ const sectionOrder: SidebarSection[] = [
   'expense',
   'general',
   'notify',
+  'promise',
 ];
 
 /* =========================================================

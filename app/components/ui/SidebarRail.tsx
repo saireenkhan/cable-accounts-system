@@ -2,6 +2,7 @@
 
 import React from 'react';
 import {
+  Lock,
   HomeIcon,
   Handshake,
   Truck,
@@ -19,7 +20,8 @@ export type SidebarSection =
   | 'staff'
   | 'expense'
   | 'general'
-  | 'notify';
+  | 'notify'
+  |'promise';
 
 interface RailItem {
   section: SidebarSection;
@@ -37,6 +39,13 @@ const railItems: RailItem[] = [
     section: 'partner',
     label: 'Partner Management',
     icon: <Handshake className="h-5 w-5" />,
+  },
+     // Promise Management
+  {
+    section: 'promise',
+    label: 'Promise Management',
+    icon: <Lock className="h-5 w-5" />,
+   
   },
   {
     section: 'dealer',

@@ -29,7 +29,7 @@ const reportRoutes = require('./routes/reportRoutes');
 const dealerAreaRoutes = require('./routes/dealerAreaRoutes');
 const partnerAreaRoutes = require('./routes/partnerAreaRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
-
+const promiseRoutes = require('./routes/promiseRoutes');
 // ============================================================
 // PROCESS ERROR HANDLERS
 // ============================================================
@@ -146,6 +146,7 @@ app.get('/api/health', healthHandler);
 // ROUTES
 // ============================================================
 
+app.use('/api/promises', promiseRoutes);
 app.use(
   '/api/whatsapp',
   require('./routes/whatsappRoutes')
