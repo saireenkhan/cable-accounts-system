@@ -69,7 +69,7 @@ const statusStyles: Record<string, string> = {
 };
 
 /* ============================================================
-   STATS STYLES
+   STATS COLORS
 ============================================================ */
 const colorClasses: Record<string, string> = {
   blue:
@@ -225,16 +225,21 @@ function PromisesPageContent() {
 
   /* ----------------------------------------------------------
      STATS
+     - Total = sum of promised amounts
+     - Status buckets = sum of money actually received
   ---------------------------------------------------------- */
-  const sumAmount = (arr: any[]) =>
+  const sumPromised = (arr: any[]) =>
     arr.reduce((s, p) => s + Number(p.promiseAmount || 0), 0);
+
+  const sumPaid = (arr: any[]) =>
+    arr.reduce((s, p) => s + Number(p.totalPaid || 0), 0);
 
   const stats = [
     {
       key: 'all',
       label: 'TOTAL PROMISES',
       value: promises.length,
-      amount: sumAmount(promises),
+      amount: sumPromised(promises),
       Icon: Handshake,
       color: 'blue',
       dark: true,
@@ -243,7 +248,7 @@ function PromisesPageContent() {
       key: 'Today',
       label: 'DUE TODAY',
       value: promises.filter((p) => p.status === 'Today').length,
-      amount: sumAmount(promises.filter((p) => p.status === 'Today')),
+      amount: sumPaid(promises.filter((p) => p.status === 'Today')),
       Icon: Sun,
       color: 'amber',
       dark: false,
@@ -252,7 +257,7 @@ function PromisesPageContent() {
       key: 'Upcoming',
       label: 'UPCOMING',
       value: promises.filter((p) => p.status === 'Upcoming').length,
-      amount: sumAmount(promises.filter((p) => p.status === 'Upcoming')),
+      amount: sumPaid(promises.filter((p) => p.status === 'Upcoming')),
       Icon: CalendarClock,
       color: 'sky',
       dark: false,
@@ -261,7 +266,7 @@ function PromisesPageContent() {
       key: 'Kept',
       label: 'PROMISE KEPT',
       value: promises.filter((p) => p.status === 'Kept').length,
-      amount: sumAmount(promises.filter((p) => p.status === 'Kept')),
+      amount: sumPaid(promises.filter((p) => p.status === 'Kept')),
       Icon: CalendarCheck,
       color: 'green',
       dark: false,
@@ -270,7 +275,7 @@ function PromisesPageContent() {
       key: 'Broken',
       label: 'BROKEN PROMISE',
       value: promises.filter((p) => p.status === 'Broken').length,
-      amount: sumAmount(promises.filter((p) => p.status === 'Broken')),
+      amount: sumPaid(promises.filter((p) => p.status === 'Broken')),
       Icon: CalendarX,
       color: 'red',
       dark: false,
@@ -317,7 +322,8 @@ function PromisesPageContent() {
       render: (item: any) => {
         const promised = Number(item.promiseAmount || 0);
         const paid = Number(item.totalPaid || 0);
-        const showProgress = paid > 0 && paid < promised && item.status !== 'Kept';
+        const showProgress =
+          paid > 0 && paid < promised && item.status !== 'Kept';
 
         return (
           <div className="flex flex-col">
