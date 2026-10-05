@@ -69,7 +69,7 @@ const statusStyles: Record<string, string> = {
 };
 
 /* ============================================================
-   STATS STYLES  (same pattern as User Management)
+   STATS STYLES
 ============================================================ */
 const colorClasses: Record<string, string> = {
   blue:
@@ -139,10 +139,7 @@ function PromisesPageContent() {
   const [areas, setAreas] = useState<any[]>([]);
 
   const [search, setSearch] = useState('');
-
-  // statusFilter doubles as the clickable-stat key
   const [statusFilter, setStatusFilter] = useState<string>('all');
-
   const [dateFilter, setDateFilter] = useState<string>('');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -227,12 +224,12 @@ function PromisesPageContent() {
   }, [promises, search, statusFilter, dateFilter]);
 
   /* ----------------------------------------------------------
-     STATS  (with click-to-filter)
+     STATS
   ---------------------------------------------------------- */
   const sumAmount = (arr: any[]) =>
     arr.reduce((s, p) => s + Number(p.promiseAmount || 0), 0);
 
-   const stats = [
+  const stats = [
     {
       key: 'all',
       label: 'TOTAL PROMISES',
@@ -317,11 +314,31 @@ function PromisesPageContent() {
     {
       key: 'promiseAmount',
       header: 'Promise Amount',
-      render: (item: any) => (
-        <span className="font-medium text-gray-900 dark:text-white">
-          Rs. {Number(item.promiseAmount || 0).toLocaleString()}
-        </span>
-      ),
+      render: (item: any) => {
+        const promised = Number(item.promiseAmount || 0);
+        const paid = Number(item.totalPaid || 0);
+        const showProgress = paid > 0 && paid < promised && item.status !== 'Kept';
+
+        return (
+          <div className="flex flex-col">
+            <span className="font-medium text-gray-900 dark:text-white">
+              Rs. {promised.toLocaleString()}
+            </span>
+
+            {showProgress && (
+              <span className="text-xs text-green-600 dark:text-green-400">
+                Rs. {paid.toLocaleString()} received
+              </span>
+            )}
+
+            {item.status === 'Kept' && (
+              <span className="text-xs text-green-600 dark:text-green-400">
+                Fully paid
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'promiseDate',
@@ -393,14 +410,13 @@ function PromisesPageContent() {
           </button>
         </header>
 
-        {/* STATS — clickable, filters the table */}
+        {/* STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {stats.map((s) => {
             const active = statusFilter === s.key;
             const c = colorClasses[s.color] || '';
             const parts = c.split(' ');
 
-            // Special "dark" card for Total Promises (matches User Management)
             if (s.dark) {
               return (
                 <button
@@ -691,9 +707,18 @@ function PromisesPageContent() {
                   <ViewField
                     icon={<DollarSign className="h-4 w-4" />}
                     label="Promise Amount"
-                    value={`Rs. ${Number(
-                      viewingPromise.promiseAmount || 0
-                    ).toLocaleString()}`}
+                    value={(() => {
+                      const promised = Number(
+                        viewingPromise.promiseAmount || 0
+                      );
+                      const paid = Number(viewingPromise.totalPaid || 0);
+
+                      if (paid <= 0)
+                        return `Rs. ${promised.toLocaleString()}`;
+                      if (paid >= promised)
+                        return `Rs. ${promised.toLocaleString()} (fully paid)`;
+                      return `Rs. ${promised.toLocaleString()} — Rs. ${paid.toLocaleString()} received`;
+                    })()}
                     highlight
                   />
 

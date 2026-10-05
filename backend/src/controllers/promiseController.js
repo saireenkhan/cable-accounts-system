@@ -38,7 +38,6 @@ async function getTotalPaidForCustomer(customerDoc) {
   try {
     let partnerDoc = null;
 
-    // If the Customer schema ever adds a `partner` ref, use it.
     if (customerDoc.partner) {
       const partnerId = customerDoc.partner._id || customerDoc.partner;
       try {
@@ -48,7 +47,6 @@ async function getTotalPaidForCustomer(customerDoc) {
       }
     }
 
-    // Fallback: same name (matches existing data).
     if (!partnerDoc && customerDoc.name) {
       try {
         partnerDoc = await Partner.findOne({ name: customerDoc.name });
@@ -77,11 +75,8 @@ async function getTotalPaidForCustomer(customerDoc) {
 
 /* ============================================================
    Compute live status from promise date + payments.
-
-   Rules:
-   - "Kept" is sticky (money received is a fact).
-   - "Broken" / "Today" / "Upcoming" are always recomputed
-     from the current date and payment totals.
+   - "Kept" is sticky.
+   - "Broken" / "Today" / "Upcoming" are always recomputed.
 ============================================================ */
 async function computeLiveStatus(promise) {
   if (promise.status === 'Kept') {
@@ -102,12 +97,10 @@ async function computeLiveStatus(promise) {
 
   const promisedAmount = Number(promise.promiseAmount || 0);
 
-  // Fully covered → Kept
   if (promisedAmount > 0 && totalPaid >= promisedAmount) {
     return 'Kept';
   }
 
-  // Date-based fallback
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -120,10 +113,7 @@ async function computeLiveStatus(promise) {
 }
 
 /* ============================================================
-   Shared populate config for the `customer` field.
-   NOTE: Customer schema has no `partner` field, so we do NOT
-   populate it — the total-paid helper resolves the partner
-   by name at query time instead.
+   Shared populate config
 ============================================================ */
 const CUSTOMER_POPULATE = {
   path: 'customer',
@@ -136,6 +126,7 @@ const CUSTOMER_POPULATE = {
 
 /* ============================================================
    GET /api/promises
+   Attaches `totalPaid` to each promise.
 ============================================================ */
 exports.getPromises = async (req, res) => {
   try {
@@ -154,7 +145,21 @@ exports.getPromises = async (req, res) => {
       promises.map(async (p) => {
         const live = await computeLiveStatus(p);
         p.status = live;
-        return p;
+
+        let totalPaid = 0;
+        try {
+          const customerId = p.customer?._id || p.customer;
+          const customerDoc = await Customer.findById(customerId);
+          if (customerDoc) {
+            totalPaid = await getTotalPaidForCustomer(customerDoc);
+          }
+        } catch (e) {
+          console.error('⚠️ totalPaid lookup failed:', e.message);
+        }
+
+        const obj = p.toObject();
+        obj.totalPaid = totalPaid;
+        return obj;
       })
     );
 
@@ -182,7 +187,21 @@ exports.getPromise = async (req, res) => {
 
     promise.status = await computeLiveStatus(promise);
 
-    res.json({ success: true, promise });
+    let totalPaid = 0;
+    try {
+      const customerId = promise.customer?._id || promise.customer;
+      const customerDoc = await Customer.findById(customerId);
+      if (customerDoc) {
+        totalPaid = await getTotalPaidForCustomer(customerDoc);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const obj = promise.toObject();
+    obj.totalPaid = totalPaid;
+
+    res.json({ success: true, promise: obj });
   } catch (err) {
     console.error('getPromise error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -248,7 +267,17 @@ exports.createPromise = async (req, res) => {
     await doc.save();
     await doc.populate(CUSTOMER_POPULATE);
 
-    res.status(201).json({ success: true, promise: doc });
+    let totalPaid = 0;
+    try {
+      totalPaid = await getTotalPaidForCustomer(customerDoc);
+    } catch (e) {
+      // ignore
+    }
+
+    const obj = doc.toObject();
+    obj.totalPaid = totalPaid;
+
+    res.status(201).json({ success: true, promise: obj });
   } catch (err) {
     console.error('createPromise error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -257,8 +286,7 @@ exports.createPromise = async (req, res) => {
 
 /* ============================================================
    PUT /api/promises/:id
-   `status` is intentionally NOT editable here — it must be
-   recomputed. Use PATCH /:id/status for manual overrides.
+   `status` is intentionally NOT editable here.
 ============================================================ */
 exports.updatePromise = async (req, res) => {
   try {
@@ -292,7 +320,21 @@ exports.updatePromise = async (req, res) => {
     await promise.save();
     await promise.populate(CUSTOMER_POPULATE);
 
-    res.json({ success: true, promise });
+    let totalPaid = 0;
+    try {
+      const customerId = promise.customer?._id || promise.customer;
+      const customerDoc = await Customer.findById(customerId);
+      if (customerDoc) {
+        totalPaid = await getTotalPaidForCustomer(customerDoc);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const obj = promise.toObject();
+    obj.totalPaid = totalPaid;
+
+    res.json({ success: true, promise: obj });
   } catch (err) {
     console.error('updatePromise error:', err);
     res.status(500).json({ success: false, message: 'Server error' });
@@ -301,8 +343,6 @@ exports.updatePromise = async (req, res) => {
 
 /* ============================================================
    PATCH /api/promises/:id/status
-   Manual override for Kept / Broken (e.g. admin marks
-   a promise as broken even before the date passes).
 ============================================================ */
 exports.updatePromiseStatus = async (req, res) => {
   try {
