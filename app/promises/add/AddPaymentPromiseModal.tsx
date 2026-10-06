@@ -25,7 +25,6 @@ type Props = {
 
 /* ============================================================
    USER SEARCHABLE SELECT
-   Shows only User ID in dropdown + closed state
 ============================================================ */
 function UserSearchableSelect({
   customers,
@@ -61,10 +60,10 @@ function UserSearchableSelect({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-left flex items-center justify-between text-sm"
+        className="w-full px-2.5 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-left flex items-center justify-between text-sm"
       >
-        <span className="flex items-center gap-2 truncate">
-          <User className="h-4 w-4 text-gray-400 flex-shrink-0" />
+        <span className="flex items-center gap-1.5 truncate">
+          <User className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
           <span
             className={cn(
               'truncate',
@@ -76,26 +75,26 @@ function UserSearchableSelect({
             {selected ? selected.customerId : placeholder}
           </span>
         </span>
-        <span className="text-gray-400">{open ? '▲' : '▼'}</span>
+        <span className="text-gray-400 text-xs">{open ? '▲' : '▼'}</span>
       </button>
 
       {open && (
-        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-72 overflow-hidden">
-          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <Search className="h-4 w-4 text-gray-400" />
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-64 overflow-hidden">
+          <div className="p-1.5 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded-md">
+              <Search className="h-3.5 w-3.5 text-gray-400" />
               <input
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search user ID, name or phone..."
-                className="flex-1 bg-transparent outline-none text-sm"
+                className="flex-1 bg-transparent outline-none text-xs"
               />
             </div>
           </div>
-          <div className="overflow-y-auto max-h-60">
+          <div className="overflow-y-auto max-h-52">
             {filtered.length === 0 ? (
-              <div className="px-4 py-3 text-sm text-gray-500">
+              <div className="px-3 py-2 text-xs text-gray-500">
                 No users found
               </div>
             ) : (
@@ -109,13 +108,13 @@ function UserSearchableSelect({
                     setQuery('');
                   }}
                   className={cn(
-                    'w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700',
+                    'w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-gray-700',
                     c._id === value &&
                       'bg-blue-50 dark:bg-blue-900/30'
                   )}
                 >
                   <div className="font-medium">{c.customerId}</div>
-                  <div className="text-xs text-gray-500">{c.phone}</div>
+                  <div className="text-[10px] text-gray-500">{c.phone}</div>
                 </button>
               ))
             )}
@@ -230,20 +229,20 @@ export default function AddPaymentPromiseModal({
      RENDER
   ---------------------------------------------------------- */
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-gray-200 dark:border-gray-700">
         {/* HEADER */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-start justify-between px-4 py-2.5 border-b border-gray-200 dark:border-gray-700">
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-base font-bold text-gray-900 dark:text-white">
               {editingPromise ? 'Edit Payment Promise' : 'Add Payment Promise'}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {editingPromise
                 ? 'Update the promise details below.'
                 : 'Create a new customer payment commitment.'}
@@ -251,17 +250,17 @@ export default function AddPaymentPromiseModal({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="h-4 w-4 text-gray-500" />
           </button>
         </div>
 
         {/* BODY */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-11rem)] space-y-5">
+        <div className="px-4 py-3 overflow-y-auto max-h-[calc(85vh-7rem)] space-y-3">
           {/* USER ID */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
               Select User
             </label>
             <UserSearchableSelect
@@ -273,7 +272,7 @@ export default function AddPaymentPromiseModal({
 
           {/* USER NAME (auto) */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
               User Name
             </label>
             <input
@@ -281,14 +280,14 @@ export default function AddPaymentPromiseModal({
               value={selectedCustomer?.name || ''}
               readOnly
               placeholder="Auto-filled from User ID"
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800/60 text-gray-900 dark:text-white cursor-not-allowed"
+              className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800/60 text-gray-900 dark:text-white cursor-not-allowed"
             />
           </div>
 
           {/* GRID */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
                 Promise Amount
               </label>
               <input
@@ -296,30 +295,30 @@ export default function AddPaymentPromiseModal({
                 value={promiseAmount}
                 onChange={(e) => setPromiseAmount(e.target.value)}
                 placeholder="Enter amount"
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
                 Promise Date
               </label>
               <input
                 type="date"
                 value={promiseDate}
                 onChange={(e) => setPromiseDate(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
                 Payment Method
               </label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               >
                 <option>Cash</option>
                 <option>JazzCash</option>
@@ -330,7 +329,7 @@ export default function AddPaymentPromiseModal({
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
                 Recovery Officer
               </label>
               <input
@@ -338,18 +337,18 @@ export default function AddPaymentPromiseModal({
                 value={recoveryOfficer}
                 onChange={(e) => setRecoveryOfficer(e.target.value)}
                 placeholder="Officer name"
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
                 Promise Source
               </label>
               <select
                 value={promiseSource}
                 onChange={(e) => setPromiseSource(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
+                className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               >
                 <option>Phone Call</option>
                 <option>WhatsApp</option>
@@ -362,31 +361,31 @@ export default function AddPaymentPromiseModal({
 
           {/* REMARKS */}
           <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
               Customer Commitment / Remarks
             </label>
             <textarea
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              rows={3}
+              rows={2}
               placeholder="Example: Customer promised to pay after salary..."
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 resize-none"
+              className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 resize-none"
             />
           </div>
         </div>
 
         {/* FOOTER */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+        <div className="flex justify-end gap-2 px-4 py-2.5 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
+            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 font-medium hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 rounded-lg bg-[#d6b138] hover:bg-[#f7ce48] text-white text-sm font-semibold disabled:opacity-60"
+            className="px-4 py-1.5 text-sm rounded-md bg-[#d6b138] hover:bg-[#f7ce48] text-white font-semibold disabled:opacity-60"
           >
             {saving ? 'Saving...' : 'Save Promise'}
           </button>

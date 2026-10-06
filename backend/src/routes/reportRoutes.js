@@ -7,6 +7,7 @@ const {
   getOutstandingReport,
   getAreaReport,
   getPackageReport,
+  getUserReport,
   getExpenseReport,
   getProfitLossReport,
   getDashboardSummary,
@@ -21,6 +22,7 @@ router.get('/collection', getCollectionReport);
 router.get('/outstanding', getOutstandingReport);
 router.get('/areas', getAreaReport);
 router.get('/packages', getPackageReport);
+router.get('/user/:customerId', getUserReport);
 router.get('/expenses', getExpenseReport);
 router.get('/profit-loss', getProfitLossReport);
 router.get('/dashboard-summary', getDashboardSummary);

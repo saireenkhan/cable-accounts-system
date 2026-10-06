@@ -277,7 +277,7 @@ function SearchableSelect({
       <div
         aria-disabled={disabled}
         className={cn(
-          'w-full px-3 py-2 rounded-lg border flex items-center justify-between',
+          'w-full px-2.5 py-1.5 text-sm rounded-md border flex items-center justify-between',
 
           disabled
             ? 'cursor-not-allowed opacity-60 bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600'
@@ -307,16 +307,16 @@ function SearchableSelect({
             placeholder}
         </span>
 
-        <span className="text-gray-400 ml-2">
+        <span className="text-gray-400 ml-2 text-xs">
           {isOpen ? '▲' : '▼'}
         </span>
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg max-h-60 overflow-hidden">
-          <div className="p-2 border-b border-gray-200 dark:border-gray-700">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-700 rounded-lg">
-              <Search className="h-4 w-4 text-gray-400" />
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 shadow-lg max-h-52 overflow-hidden">
+          <div className="p-1.5 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 dark:bg-gray-700 rounded-md">
+              <Search className="h-3.5 w-3.5 text-gray-400" />
 
               <input
                 type="text"
@@ -329,7 +329,7 @@ function SearchableSelect({
                 placeholder={`Search ${
                   label || 'options'
                 }...`}
-                className="flex-1 bg-transparent outline-none text-sm text-gray-900 dark:text-white placeholder-gray-400"
+                className="flex-1 bg-transparent outline-none text-xs text-gray-900 dark:text-white placeholder-gray-400"
                 onClick={(e) =>
                   e.stopPropagation()
                 }
@@ -337,10 +337,10 @@ function SearchableSelect({
             </div>
           </div>
 
-          <div className="overflow-y-auto max-h-48">
+          <div className="overflow-y-auto max-h-40">
             {filteredOptions.length ===
             0 ? (
-              <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">
+              <div className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400">
                 No{' '}
                 {label?.toLowerCase() ||
                   'options'}{' '}
@@ -352,7 +352,7 @@ function SearchableSelect({
                   <div
                     key={opt.value}
                     className={cn(
-                      'px-4 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
+                      'px-3 py-1.5 text-xs cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors',
 
                       value === opt.value &&
                         'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
@@ -502,7 +502,7 @@ function SearchableMultiSelect({
       <div
         aria-disabled={disabled}
         className={cn(
-          'w-full min-h-[42px] px-3 py-2 rounded-lg border flex items-center justify-between gap-2',
+          'w-full min-h-[34px] px-2.5 py-1.5 text-sm rounded-md border flex items-center justify-between gap-2',
 
           disabled
             ? 'cursor-not-allowed opacity-60 bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600'
@@ -521,14 +521,14 @@ function SearchableMultiSelect({
           setIsOpen(!isOpen);
         }}
       >
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
           {selectedLabels.length >
           0 ? (
             selectedLabels.map(
               (item) => (
                 <span
                   key={item}
-                  className="rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                  className="rounded bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                 >
                   {item}
                 </span>
@@ -541,16 +541,16 @@ function SearchableMultiSelect({
           )}
         </div>
 
-        <span className="flex-shrink-0 text-gray-400">
+        <span className="flex-shrink-0 text-gray-400 text-xs">
           {isOpen ? '▲' : '▼'}
         </span>
       </div>
 
       {isOpen && !disabled && (
-        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
-          <div className="border-b border-gray-200 p-2 dark:border-gray-700">
-            <div className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-1.5 dark:bg-gray-700">
-              <Search className="h-4 w-4 text-gray-400" />
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800">
+          <div className="border-b border-gray-200 p-1.5 dark:border-gray-700">
+            <div className="flex items-center gap-1.5 rounded-md bg-gray-50 px-2 py-1 dark:bg-gray-700">
+              <Search className="h-3.5 w-3.5 text-gray-400" />
 
               <input
                 type="text"
@@ -563,7 +563,7 @@ function SearchableMultiSelect({
                 placeholder={`Search ${
                   label || 'options'
                 }...`}
-                className="flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder-gray-400 dark:text-white"
+                className="flex-1 bg-transparent text-xs text-gray-900 outline-none placeholder-gray-400 dark:text-white"
                 onClick={(e) =>
                   e.stopPropagation()
                 }
@@ -571,10 +571,10 @@ function SearchableMultiSelect({
             </div>
           </div>
 
-          <div className="max-h-56 overflow-y-auto">
+          <div className="max-h-44 overflow-y-auto">
             {filteredOptions.length ===
             0 ? (
-              <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+              <div className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
                 No{' '}
                 {label?.toLowerCase() ||
                   'options'}{' '}
@@ -598,7 +598,7 @@ function SearchableMultiSelect({
                         )
                       }
                       className={cn(
-                        'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors',
+                        'flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors',
 
                         selected
                           ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
@@ -607,7 +607,7 @@ function SearchableMultiSelect({
                     >
                       <span
                         className={cn(
-                          'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
+                          'flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded border',
 
                           selected
                             ? 'border-blue-600 bg-blue-600 text-white'
@@ -615,7 +615,7 @@ function SearchableMultiSelect({
                         )}
                       >
                         {selected && (
-                          <Check className="h-3 w-3" />
+                          <Check className="h-2.5 w-2.5" />
                         )}
                       </span>
 
@@ -633,8 +633,8 @@ function SearchableMultiSelect({
 
           {selectedValues.length >
             0 && (
-            <div className="border-t border-gray-200 px-3 py-2 dark:border-gray-700">
-              <span className="text-xs text-gray-500 dark:text-gray-400">
+            <div className="border-t border-gray-200 px-2.5 py-1.5 dark:border-gray-700">
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">
                 {selectedValues.length}{' '}
                 ISP
                 {selectedValues.length !==
@@ -716,8 +716,6 @@ export function AddUserModal({
           initialData[field.name] !==
             undefined
         ) {
-          // Make sure multi-select
-          // edit values are always arrays.
           if (field.multiple) {
             const initialValue =
               initialData[
@@ -1620,8 +1618,6 @@ export function AddUserModal({
             payload
           );
 
-        // Protect multi-select
-        // fields after transformData.
         for (const field of finalFields) {
           if (!field.multiple) {
             continue;
@@ -1803,19 +1799,19 @@ export function AddUserModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
+      <div className="relative bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-gray-200 dark:border-gray-700">
 
         {/* HEADER */}
 
         <div
           className={cn(
-            'flex items-center justify-between px-6 py-4 border-b',
+            'flex items-center justify-between px-4 py-2.5 border-b',
             colorMap[
               color as keyof typeof colorMap
             ],
@@ -1823,14 +1819,14 @@ export function AddUserModal({
           )}
         >
           <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <User className="h-5 w-5" />
+            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+              <User className="h-4 w-4" />
 
               {title}
             </h2>
 
             {subtitle && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 {subtitle}
               </p>
             )}
@@ -1839,9 +1835,9 @@ export function AddUserModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700 transition-colors"
+            className="p-1.5 rounded-md hover:bg-white/50 dark:hover:bg-gray-700 transition-colors"
           >
-            <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+            <X className="h-4 w-4 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -1849,11 +1845,11 @@ export function AddUserModal({
 
         <form
           onSubmit={handleSubmit}
-          className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)]"
+          className="px-4 py-3 overflow-y-auto max-h-[calc(85vh-7rem)]"
         >
           {apiError && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
-              <span className="text-lg mt-0.5">
+            <div className="mb-3 p-2 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-md text-red-700 dark:text-red-400 text-xs flex items-start gap-1.5">
+              <span className="text-sm mt-0.5">
                 ⚠️
               </span>
 
@@ -1865,8 +1861,8 @@ export function AddUserModal({
 
           {retryCountRef.current >
             0 && (
-            <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm flex items-start gap-2">
-              <span className="text-lg mt-0.5">
+            <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-700 dark:text-yellow-400 text-xs flex items-start gap-1.5">
+              <span className="text-sm mt-0.5">
                 🔄
               </span>
 
@@ -1882,7 +1878,7 @@ export function AddUserModal({
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {finalFields.map(
               (field) => {
                 if (
@@ -1989,7 +1985,7 @@ export function AddUserModal({
                         : ''
                     }
                   >
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5">
                       {
                         field.label
                       }{' '}
@@ -2090,7 +2086,7 @@ export function AddUserModal({
                           disabled={
                             isDisabled
                           }
-                          className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100 dark:disabled:bg-gray-700/50 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                           <option value="">
                             {field.placeholder ||
@@ -2139,7 +2135,7 @@ export function AddUserModal({
                         required={
                           field.required
                         }
-                        rows={3}
+                        rows={2}
                         placeholder={
                           field.placeholder
                         }
@@ -2147,7 +2143,7 @@ export function AddUserModal({
                           isReadOnly
                         }
                         className={cn(
-                          'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none',
+                          'w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none',
 
                           isReadOnly &&
                             'bg-gray-100 dark:bg-gray-700/50 cursor-not-allowed'
@@ -2193,7 +2189,7 @@ export function AddUserModal({
                           field.step
                         }
                         className={cn(
-                          'w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none',
+                          'w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none',
 
                           (isReadOnly ||
                             lockedByParent) &&
@@ -2212,11 +2208,11 @@ export function AddUserModal({
 
           {/* ACTIONS */}
 
-          <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium transition-colors"
+              className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 font-medium transition-colors"
             >
               {cancelLabel}
             </button>
@@ -2225,7 +2221,7 @@ export function AddUserModal({
               type="submit"
               disabled={isLoading}
               className={cn(
-                'px-6 py-2 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-70',
+                'px-4 py-1.5 text-sm text-white rounded-md font-medium transition-colors disabled:opacity-70',
                 buttonColorMap[
                   color as keyof typeof buttonColorMap
                 ]

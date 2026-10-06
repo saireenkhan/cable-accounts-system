@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import { DataTable } from '@/app/components/ui/DataTable';
+import UserReportModal from '@/app/components/modals/UserReportModal';
 import api from '@/app/lib/api';
 import {
   PieChart,
@@ -46,9 +47,13 @@ export default function ReportsPage() {
   const [modalData, setModalData] = useState<any>(null);
   const [modalType, setModalType] = useState<string>('');
 
+  const [userReportOpen, setUserReportOpen] = useState(false);
+  const [customers, setCustomers] = useState<any[]>([]);
+
   useEffect(() => {
     loadAreas();
     loadSummary();
+    loadCustomers();
   }, []);
 
   const loadAreas = async () => {
@@ -60,6 +65,27 @@ export default function ReportsPage() {
       }
     } catch (e) {
       console.error('Areas fetch failed', e);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const res = await api.get('/customers?limit=10000');
+      console.log('🔍 /customers response:', res.data);
+
+      if (res.data?.success) {
+        const list =
+          res.data.customers ||
+          res.data.data ||
+          res.data.users ||
+          res.data.results ||
+          [];
+
+        console.log('✅ Loaded customers:', list.length);
+        setCustomers(list);
+      }
+    } catch (e) {
+      console.error('❌ Customers fetch failed', e);
     }
   };
 
@@ -104,6 +130,11 @@ export default function ReportsPage() {
   };
 
   const handleViewReport = async (type: string, label: string) => {
+    if (type === 'userReport') {
+      setUserReportOpen(true);
+      return;
+    }
+
     const deferred = [
       'dealerAccount',
       'dealerPayment',
@@ -249,16 +280,16 @@ export default function ReportsPage() {
     },
     {
       id: 10,
-      type: 'userActivity',
-      report: 'User Activity Report',
-      description: 'Portal users, roles and access (coming soon)',
-      filter: 'Role / Status',
+      type: 'userReport',
+      report: 'User Report',
+      description: 'Individual customer full payment history (with PDF export)',
+      filter: 'User',
     },
     {
       id: 11,
       type: 'profitLoss',
       report: 'Profit & Loss Report',
-      description: 'Package profit + dealer commission − costs',
+      description: 'Package profit + dealer commission − costs (incl. salaries)',
       filter: 'Date',
     },
   ];
@@ -271,6 +302,7 @@ export default function ReportsPage() {
     'Expense',
     'Area',
     'Package',
+    'User',
     'P&L',
   ];
 
@@ -332,7 +364,7 @@ export default function ReportsPage() {
             rows={modalData.customers?.map((c: any) => [
               c.customerId || c.code || 'N/A',
               c.name,
-              c.area?.name || 'N/A',
+              c.area?.name || c.area || 'N/A',
               c.package || 'N/A',
               `Rs. ${(c.monthlyFee || 0).toLocaleString()}`,
               c.status,
@@ -407,7 +439,7 @@ export default function ReportsPage() {
               modalData.payments?.map((p: any) => [
                 p.receiptNo,
                 p.customer?.name || 'N/A',
-                p.customer?.area?.name || 'N/A',
+                p.customer?.area || 'N/A',
                 p.month,
                 p.paymentMethod,
                 `Rs. ${(p.amount || 0).toLocaleString()}`,
@@ -580,7 +612,8 @@ export default function ReportsPage() {
       const d = modalData;
       return (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* TOP STATS */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <Stat
               label="Package Profit"
               value={`Rs. ${(d.totalPackageProfit || 0).toLocaleString()}`}
@@ -592,8 +625,20 @@ export default function ReportsPage() {
               tone="green"
             />
             <Stat
-              label="Total Costs"
-              value={`Rs. ${(d.totalCosts || 0).toLocaleString()}`}
+              label="Gross Profit"
+              value={`Rs. ${(d.grossProfit || 0).toLocaleString()}`}
+              tone="green"
+            />
+            <Stat
+              label="Staff Salaries"
+              value={`Rs. ${(d.totalSalaries || 0).toLocaleString()}`}
+              tone="red"
+            />
+            <Stat
+              label="Other Costs"
+              value={`Rs. ${(
+                (d.totalExpenses || 0) + (d.totalPurchases || 0)
+              ).toLocaleString()}`}
               tone="red"
             />
             <Stat
@@ -603,6 +648,7 @@ export default function ReportsPage() {
             />
           </div>
 
+          {/* BREAKDOWN */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="p-4 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/20">
               <h4 className="text-xs uppercase text-green-700 dark:text-green-400 font-semibold mb-3">
@@ -622,6 +668,7 @@ export default function ReportsPage() {
               <h4 className="text-xs uppercase text-red-700 dark:text-red-400 font-semibold mb-3">
                 Costs
               </h4>
+              <Line label="Staff Salaries" value={d.totalSalaries} />
               <Line label="Expenses" value={d.totalExpenses} />
               <Line label="Purchases" value={d.totalPurchases} />
               <div className="border-t border-red-200 dark:border-red-800 mt-2 pt-2">
@@ -630,6 +677,38 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* NET BANNER */}
+          <div
+            className={cn(
+              'p-4 rounded-lg border flex items-center justify-between',
+              d.isProfit
+                ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+                : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+            )}
+          >
+            <span
+              className={cn(
+                'text-sm font-semibold uppercase',
+                d.isProfit
+                  ? 'text-green-700 dark:text-green-400'
+                  : 'text-red-700 dark:text-red-400'
+              )}
+            >
+              {d.isProfit ? 'Net Profit' : 'Net Loss'}
+            </span>
+            <span
+              className={cn(
+                'text-2xl font-bold',
+                d.isProfit
+                  ? 'text-green-700 dark:text-green-400'
+                  : 'text-red-700 dark:text-red-400'
+              )}
+            >
+              Rs. {Math.abs(d.netProfit || 0).toLocaleString()}
+            </span>
+          </div>
+
+          {/* MONTHLY TREND */}
           <div>
             <h4 className="font-semibold text-gray-800 dark:text-white text-sm mb-2">
               Monthly Trend
@@ -639,6 +718,7 @@ export default function ReportsPage() {
                 'Month',
                 'Package Profit',
                 'Commission',
+                'Salaries',
                 'Expenses',
                 'Purchases',
                 'Net Profit',
@@ -648,6 +728,7 @@ export default function ReportsPage() {
                   m.month,
                   `Rs. ${m.packageProfit.toLocaleString()}`,
                   `Rs. ${m.commissionProfit.toLocaleString()}`,
+                  `Rs. ${(m.salaries || 0).toLocaleString()}`,
                   `Rs. ${m.expenses.toLocaleString()}`,
                   `Rs. ${m.purchases.toLocaleString()}`,
                   `Rs. ${m.netProfit.toLocaleString()}`,
@@ -656,6 +737,38 @@ export default function ReportsPage() {
             />
           </div>
 
+          {/* SALARY BREAKDOWN */}
+          {d.salaryBreakdown && d.salaryBreakdown.length > 0 && (
+            <div>
+              <h4 className="font-semibold text-gray-800 dark:text-white text-sm mb-2">
+                Staff Salary Breakdown ({d.salaryBreakdown.length} staff
+                {d.meta?.monthsInRange
+                  ? ` × ${d.meta.monthsInRange} month(s)`
+                  : ''}
+                )
+              </h4>
+              <SimpleTable
+                head={[
+                  'Staff ID',
+                  'Name',
+                  'Designation',
+                  'Area',
+                  'Monthly',
+                  'Total',
+                ]}
+                rows={d.salaryBreakdown.map((s: any) => [
+                  s.staffId || '—',
+                  s.name,
+                  s.designation,
+                  s.area,
+                  `Rs. ${(s.monthlySalary || 0).toLocaleString()}`,
+                  `Rs. ${(s.total || 0).toLocaleString()}`,
+                ])}
+              />
+            </div>
+          )}
+
+          {/* PACKAGE PROFIT DETAILS */}
           <div>
             <h4 className="font-semibold text-gray-800 dark:text-white text-sm mb-2">
               Package Profit Breakdown ({d.paymentDetails?.length || 0} payments)
@@ -682,6 +795,7 @@ export default function ReportsPage() {
             />
           </div>
 
+          {/* COMMISSION DETAILS */}
           <div>
             <h4 className="font-semibold text-gray-800 dark:text-white text-sm mb-2">
               Dealer Commission Breakdown ({d.commissionDetails?.length || 0} payments)
@@ -929,6 +1043,13 @@ export default function ReportsPage() {
             </div>
           </div>
         )}
+
+        {/* User Report Modal */}
+        <UserReportModal
+          isOpen={userReportOpen}
+          onClose={() => setUserReportOpen(false)}
+          customers={customers}
+        />
       </div>
     </Layout>
   );

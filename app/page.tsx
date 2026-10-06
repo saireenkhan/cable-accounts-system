@@ -49,12 +49,6 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
-
-  const fillDemoCredentials = () => {
-    setEmail('admin@cable.com');
-    setPassword('Admin@123');
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4">
       <div className="w-full max-w-md">
@@ -87,7 +81,6 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@cable.com"
                 required
                 disabled={isLoading}
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:opacity-50"
@@ -103,7 +96,6 @@ export default function LoginPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
                   required
                   disabled={isLoading}
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pr-12 disabled:opacity-50"
@@ -130,13 +122,6 @@ export default function LoginPage() {
                 />
                 Remember me
               </label>
-              <button
-                type="button"
-                onClick={fillDemoCredentials}
-                className="text-xs text-[#d6b138]dark:text-[#f7ce48] hover:underline"
-              >
-                Use demo credentials
-              </button>
             </div>
 
             <button

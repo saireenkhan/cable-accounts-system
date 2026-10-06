@@ -6,6 +6,7 @@ const Dealer = require('../models/Dealer');
 const DealerPayment = require('../models/DealerPayment');
 const Package = require('../models/Package');
 const Area = require('../models/Area');
+const Staff = require('../models/Staff');
 const logger = require('../utils/logger');
 
 // ============================================================
@@ -26,26 +27,74 @@ const buildMonthPaidMap = (payments) => {
   return map;
 };
 
-// Commission rate string "10%" → 0.10
 const parseCommissionRate = (rateStr) => {
   if (!rateStr) return 0;
   const n = parseFloat(String(rateStr).replace('%', ''));
   return isNaN(n) ? 0 : n / 100;
 };
 
+// Build a map of { areaId → areaName } for the legacy string/ObjectId field
+const buildAreaLookup = async () => {
+  const areas = await Area.find({}).select('_id name').lean();
+  const map = {};
+  areas.forEach((a) => {
+    map[String(a._id)] = a.name;
+  });
+  return map;
+};
+
+// ============================================================
+// STAFF SALARY HELPER
+// ============================================================
+const getSalaryCost = async (fromDate, toDate) => {
+  const staff = await Staff.find({ isActive: true }).populate(
+    'assignedArea',
+    'name'
+  );
+
+  const totalMonthlySalary = staff.reduce(
+    (s, st) => s + (st.salary || 0),
+    0
+  );
+
+  let monthsInRange = 1;
+  if (fromDate && toDate) {
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    monthsInRange =
+      (to.getFullYear() - from.getFullYear()) * 12 +
+      (to.getMonth() - from.getMonth()) +
+      1;
+    if (monthsInRange < 1) monthsInRange = 1;
+  }
+
+  const totalSalaries = totalMonthlySalary * monthsInRange;
+
+  return {
+    totalSalaries,
+    staffCount: staff.length,
+    monthlySalary: totalMonthlySalary,
+    monthsInRange,
+    breakdown: staff.map((s) => ({
+      staffId: s.staffId,
+      name: s.name,
+      designation: s.designation,
+      area: s.assignedArea?.name || '—',
+      monthlySalary: s.salary || 0,
+      total: (s.salary || 0) * monthsInRange,
+    })),
+  };
+};
+
 // ============================================================
 // 1. CUSTOMER REPORT
-// GET /api/reports/customers
 // ============================================================
 exports.getCustomerReport = async (req, res) => {
   try {
     const { area, status, fromDate, toDate } = req.query;
     const filter = {};
 
-    if (area && area !== 'All Areas') {
-      const areaDoc = await Area.findOne({ name: area });
-      if (areaDoc) filter.area = areaDoc._id;
-    }
+    if (area && area !== 'All Areas') filter.area = area;
     if (status && status !== 'All Status') filter.status = status;
     if (fromDate && toDate) {
       filter.createdAt = {
@@ -55,8 +104,8 @@ exports.getCustomerReport = async (req, res) => {
     }
 
     const customers = await Customer.find(filter)
-      .populate('area', 'name')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     const total = customers.length;
     const active = customers.filter((c) => c.status === 'active').length;
@@ -74,21 +123,32 @@ exports.getCustomerReport = async (req, res) => {
 
 // ============================================================
 // 2. BALANCE REPORT
-// GET /api/reports/balance
 // ============================================================
 exports.getBalanceReport = async (req, res) => {
   try {
     const { area, status } = req.query;
     const filter = {};
+    const areaLookup = await buildAreaLookup();
 
     if (area && area !== 'All Areas') {
-      const areaDoc = await Area.findOne({ name: area });
-      if (areaDoc) filter.area = areaDoc._id;
+      // Find matching area id (legacy data may store id)
+      const areaDoc = await Area.findOne({ name: area }).select('_id').lean();
+      if (areaDoc) {
+        filter.$or = [{ area: area }, { area: String(areaDoc._id) }];
+      } else {
+        filter.area = area;
+      }
     }
     if (status && status !== 'All Status') filter.status = status;
 
-    const customers = await Customer.find(filter).populate('area', 'name');
+    const customers = await Customer.find(filter).lean();
     const payments = await Payment.find({ isNoPayment: false });
+
+    const resolveAreaName = (raw) => {
+      if (!raw) return 'N/A';
+      const s = String(raw);
+      return areaLookup[s] || s;
+    };
 
     const rows = customers.map((c) => {
       const monthlyFee = c.monthlyFee || 0;
@@ -109,7 +169,7 @@ exports.getBalanceReport = async (req, res) => {
         _id: c._id,
         customerId: c.customerId || c.code || 'N/A',
         name: c.name,
-        area: c.area?.name || 'N/A',
+        area: resolveAreaName(c.area),
         monthlyFee,
         activeMonths: activeMonths.length,
         totalExpected,
@@ -139,13 +199,13 @@ exports.getBalanceReport = async (req, res) => {
 };
 
 // ============================================================
-// 3. COLLECTION (RECEIVE PAYMENT) REPORT
-// GET /api/reports/collection
+// 3. COLLECTION REPORT
 // ============================================================
 exports.getCollectionReport = async (req, res) => {
   try {
     const { fromDate, toDate, area } = req.query;
     const filter = { isNoPayment: false };
+    const areaLookup = await buildAreaLookup();
 
     if (fromDate && toDate) {
       filter.paymentDate = {
@@ -157,14 +217,27 @@ exports.getCollectionReport = async (req, res) => {
     let payments = await Payment.find(filter)
       .populate({
         path: 'customer',
-        select: 'name code area',
-        populate: { path: 'area', select: 'name' },
+        select: 'name code customerId area',
       })
       .populate('receivedBy', 'name')
       .sort({ paymentDate: -1 });
 
+    const resolveAreaName = (raw) => {
+      if (!raw) return 'N/A';
+      const s = String(raw);
+      return areaLookup[s] || s;
+    };
+
     if (area && area !== 'All Areas') {
-      payments = payments.filter((p) => p.customer?.area?.name === area);
+      payments = payments.filter((p) => {
+        const rawArea = p.customer?.area;
+        if (!rawArea) return false;
+        // Match either string name or resolved ObjectId → name
+        return (
+          rawArea === area ||
+          resolveAreaName(rawArea) === area
+        );
+      });
     }
 
     const total = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -178,9 +251,24 @@ exports.getCollectionReport = async (req, res) => {
       monthlyData[key] += p.amount || 0;
     });
 
+    const paymentsForClient = payments.map((p) => ({
+      ...p.toObject(),
+      customer: p.customer
+        ? {
+            ...p.customer,
+            area: resolveAreaName(p.customer.area),
+          }
+        : null,
+    }));
+
     res.json({
       success: true,
-      report: { total, count: payments.length, payments, monthlyData },
+      report: {
+        total,
+        count: payments.length,
+        payments: paymentsForClient,
+        monthlyData,
+      },
     });
   } catch (error) {
     logger.error(`Collection report error: ${error.message}`);
@@ -190,19 +278,30 @@ exports.getCollectionReport = async (req, res) => {
 
 // ============================================================
 // 4. OUTSTANDING REPORT
-// GET /api/reports/outstanding
 // ============================================================
 exports.getOutstandingReport = async (req, res) => {
   try {
     const { area } = req.query;
     const filter = {};
+    const areaLookup = await buildAreaLookup();
+
     if (area && area !== 'All Areas') {
-      const areaDoc = await Area.findOne({ name: area });
-      if (areaDoc) filter.area = areaDoc._id;
+      const areaDoc = await Area.findOne({ name: area }).select('_id').lean();
+      if (areaDoc) {
+        filter.$or = [{ area: area }, { area: String(areaDoc._id) }];
+      } else {
+        filter.area = area;
+      }
     }
 
-    const customers = await Customer.find(filter).populate('area', 'name');
+    const customers = await Customer.find(filter).lean();
     const payments = await Payment.find({ isNoPayment: false });
+
+    const resolveAreaName = (raw) => {
+      if (!raw) return 'N/A';
+      const s = String(raw);
+      return areaLookup[s] || s;
+    };
 
     const rows = [];
     let totalOutstanding = 0;
@@ -232,7 +331,7 @@ exports.getOutstandingReport = async (req, res) => {
           _id: c._id,
           customerId: c.customerId || c.code || 'N/A',
           name: c.name,
-          area: c.area?.name || 'N/A',
+          area: resolveAreaName(c.area),
           monthlyFee,
           outstanding,
         });
@@ -256,17 +355,23 @@ exports.getOutstandingReport = async (req, res) => {
 
 // ============================================================
 // 5. AREA REPORT
-// GET /api/reports/areas
 // ============================================================
 exports.getAreaReport = async (req, res) => {
   try {
-    const customers = await Customer.find({}).populate('area', 'name');
+    const customers = await Customer.find({}).lean();
     const payments = await Payment.find({ isNoPayment: false });
+    const areaLookup = await buildAreaLookup();
+
+    const resolveAreaName = (raw) => {
+      if (!raw) return 'No Area';
+      const s = String(raw);
+      return areaLookup[s] || s || 'No Area';
+    };
 
     const areaMap = {};
 
     customers.forEach((c) => {
-      const areaName = c.area?.name || 'No Area';
+      const areaName = resolveAreaName(c.area);
       if (!areaMap[areaName]) {
         areaMap[areaName] = {
           area: areaName,
@@ -285,7 +390,7 @@ exports.getAreaReport = async (req, res) => {
         (c) => c._id.toString() === p.customer?.toString()
       );
       if (!cust) return;
-      const areaName = cust.area?.name || 'No Area';
+      const areaName = resolveAreaName(cust.area);
       if (!areaMap[areaName]) return;
       areaMap[areaName].recovered += p.amount || 0;
     });
@@ -318,7 +423,6 @@ exports.getAreaReport = async (req, res) => {
 
 // ============================================================
 // 6. PACKAGE REPORT
-// GET /api/reports/packages
 // ============================================================
 exports.getPackageReport = async (req, res) => {
   try {
@@ -363,8 +467,159 @@ exports.getPackageReport = async (req, res) => {
 };
 
 // ============================================================
+// 6B. USER REPORT (single customer history with date range)
+// GET /api/reports/user/:customerId?fromDate=&toDate=
+// ============================================================
+exports.getUserReport = async (req, res) => {
+  try {
+    const mongoose = require('mongoose');
+    const { customerId } = req.params;
+    const { fromDate, toDate } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: 'Invalid customer ID' });
+    }
+
+    const customer = await Customer.findById(customerId).lean();
+
+    if (!customer) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Customer not found' });
+    }
+
+    // -------- Resolve area name --------
+    let areaName = 'N/A';
+    if (customer.area) {
+      if (typeof customer.area === 'object' && customer.area.name) {
+        areaName = customer.area.name;
+      } else {
+        const raw = String(customer.area).trim();
+        if (mongoose.Types.ObjectId.isValid(raw)) {
+          const areaDoc = await Area.findById(raw).select('name').lean();
+          areaName = areaDoc?.name || raw;
+        } else {
+          areaName = raw || 'N/A';
+        }
+      }
+    }
+
+    // -------- Date filter --------
+    const paymentFilter = {
+      customer: customer._id,
+      isNoPayment: false,
+    };
+
+    if (fromDate || toDate) {
+      const range = {};
+      if (fromDate) {
+        const from = new Date(fromDate);
+        from.setHours(0, 0, 0, 0);
+        range.$gte = from;
+      }
+      if (toDate) {
+        const to = new Date(toDate);
+        to.setHours(23, 59, 59, 999);
+        range.$lte = to;
+      }
+
+      // Match paymentDate OR (paymentDate missing AND createdAt in range)
+      paymentFilter.$or = [
+        { paymentDate: range },
+        {
+          paymentDate: { $exists: false },
+          createdAt: range,
+        },
+        {
+          paymentDate: null,
+          createdAt: range,
+        },
+      ];
+    }
+
+    // -------- Fetch payments --------
+    let payments = [];
+    try {
+      payments = await Payment.find(paymentFilter).sort({
+        paymentDate: -1,
+      });
+    } catch (e) {
+      payments = await Payment.find(paymentFilter).sort({
+        createdAt: -1,
+      });
+    }
+
+    const monthlyFee = customer.monthlyFee || 0;
+    const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+    const monthsPaid = new Set(
+      payments.map((p) => p.month).filter(Boolean)
+    ).size;
+    const totalExpected = monthlyFee * monthsPaid;
+    const outstanding = Math.max(0, totalExpected - totalPaid);
+
+    const byMonth = {};
+    payments.forEach((p) => {
+      const m = p.month || 'Unknown';
+      if (!byMonth[m]) byMonth[m] = 0;
+      byMonth[m] += p.amount || 0;
+    });
+
+    res.json({
+      success: true,
+      report: {
+        customer: {
+          _id: customer._id,
+          customerId: customer.customerId || customer.code || 'N/A',
+          name: customer.name || 'N/A',
+          phone: customer.phone || '',
+          cnic: customer.cnic || '',
+          address: customer.address || '',
+          area: areaName,
+          package: customer.package || 'N/A',
+          monthlyFee,
+          status: customer.status || 'unknown',
+          joiningDate: customer.createdAt,
+          dealer: 'N/A',
+          technician: 'N/A',
+        },
+        summary: {
+          monthlyFee,
+          totalPaid,
+          totalExpected,
+          outstanding,
+          monthsPaid,
+          paymentCount: payments.length,
+        },
+        payments: payments.map((p) => ({
+          receiptNo: p.receiptNo || '—',
+          amount: p.amount || 0,
+          month: p.month || '—',
+          paymentDate: p.paymentDate || p.createdAt,
+          method: p.paymentMethod || 'Cash',
+          receivedBy: p.receivedBy?.name || '—',
+          remarks: p.remarks || '',
+        })),
+        byMonth,
+        dateRange: {
+          from: fromDate || null,
+          to: toDate || null,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('❌ getUserReport ERROR:', error);
+    logger.error(`User report error: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Server error',
+    });
+  }
+};
+
+// ============================================================
 // 7. EXPENSE REPORT
-// GET /api/reports/expenses
 // ============================================================
 exports.getExpenseReport = async (req, res) => {
   try {
@@ -416,13 +671,6 @@ exports.getExpenseReport = async (req, res) => {
 
 // ============================================================
 // 8. PROFIT & LOSS REPORT
-// GET /api/reports/profit-loss
-//
-// Logic:
-//   Package profit  = payment.amount × (package.profit / package.sellingPrice)
-//   Commission profit = dealer_receive.amount × dealer.commission%
-//   Costs = expenses + purchases
-//   Net   = packageProfit + commissionProfit − costs
 // ============================================================
 exports.getProfitLossReport = async (req, res) => {
   try {
@@ -446,7 +694,6 @@ exports.getProfitLossReport = async (req, res) => {
     const dealerFilter = {};
     if (fromDate && toDate) dealerFilter.paymentDate = dateFilter;
 
-    // ---------- Fetch ----------
     const payments = await Payment.find(paymentFilter).populate(
       'customer',
       'name package'
@@ -459,7 +706,6 @@ exports.getProfitLossReport = async (req, res) => {
     const expenses = await Expense.find(expenseFilter);
     const purchases = await Purchase.find(purchaseFilter);
 
-    // ---------- Package lookup ----------
     const packageMap = {};
     packages.forEach((p) => {
       packageMap[p.name] = {
@@ -469,7 +715,6 @@ exports.getProfitLossReport = async (req, res) => {
       };
     });
 
-    // ---------- Package profit (per payment) ----------
     const paymentDetails = payments.map((p) => {
       const pkgName = p.customer?.package || '';
       const pkg = packageMap[pkgName];
@@ -478,10 +723,8 @@ exports.getProfitLossReport = async (req, res) => {
       let cost = 0;
 
       if (pkg && pkg.sellingPrice > 0) {
-        const profitRatio = pkg.profit / pkg.sellingPrice;
-        const costRatio = pkg.purchasePrice / pkg.sellingPrice;
-        profit = revenue * profitRatio;
-        cost = revenue * costRatio;
+        profit = revenue * (pkg.profit / pkg.sellingPrice);
+        cost = revenue * (pkg.purchasePrice / pkg.sellingPrice);
       }
 
       return {
@@ -496,17 +739,10 @@ exports.getProfitLossReport = async (req, res) => {
       };
     });
 
-    const totalPackageProfit = paymentDetails.reduce(
-      (s, p) => s + p.profit,
-      0
-    );
-    const totalCustomerRevenue = paymentDetails.reduce(
-      (s, p) => s + p.amount,
-      0
-    );
+    const totalPackageProfit = paymentDetails.reduce((s, p) => s + p.profit, 0);
+    const totalCustomerRevenue = paymentDetails.reduce((s, p) => s + p.amount, 0);
     const totalPackageCost = paymentDetails.reduce((s, p) => s + p.cost, 0);
 
-    // ---------- Commission profit ----------
     const commissionDetails = dealerReceive.map((d) => {
       const rateStr = d.dealer?.commission || '0%';
       const rate = parseCommissionRate(rateStr);
@@ -531,16 +767,17 @@ exports.getProfitLossReport = async (req, res) => {
       0
     );
 
-    // ---------- Costs ----------
     const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
     const totalPurchases = purchases.reduce((s, p) => s + (p.amount || 0), 0);
-    const totalCosts = totalExpenses + totalPurchases;
 
-    // ---------- Bottom line ----------
+    const salary = await getSalaryCost(fromDate, toDate);
+    const totalSalaries = salary.totalSalaries;
+
+    const totalCosts = totalExpenses + totalPurchases + totalSalaries;
+
     const grossProfit = totalPackageProfit + totalCommissionProfit;
     const netProfit = grossProfit - totalCosts;
 
-    // ---------- Monthly trend ----------
     const monthlyMap = {};
     const bumpMonth = (date, key, val) => {
       if (!date) return;
@@ -551,6 +788,7 @@ exports.getProfitLossReport = async (req, res) => {
           month: monthKey,
           packageProfit: 0,
           commissionProfit: 0,
+          salaries: 0,
           expenses: 0,
           purchases: 0,
           netProfit: 0,
@@ -568,12 +806,19 @@ exports.getProfitLossReport = async (req, res) => {
       bumpMonth(p.purchaseDate, 'purchases', p.amount || 0)
     );
 
+    if (salary.monthlySalary > 0) {
+      Object.keys(monthlyMap).forEach((k) => {
+        monthlyMap[k].salaries = salary.monthlySalary;
+      });
+    }
+
     const monthlyBreakdown = Object.values(monthlyMap)
       .map((m) => ({
         ...m,
         netProfit:
           m.packageProfit +
           m.commissionProfit -
+          m.salaries -
           m.expenses -
           m.purchases,
       }))
@@ -593,6 +838,7 @@ exports.getProfitLossReport = async (req, res) => {
         totalPackageCost,
         totalExpenses,
         totalPurchases,
+        totalSalaries,
         totalCosts,
 
         netProfit,
@@ -600,6 +846,7 @@ exports.getProfitLossReport = async (req, res) => {
 
         paymentDetails,
         commissionDetails,
+        salaryBreakdown: salary.breakdown,
         monthlyBreakdown,
 
         meta: {
@@ -607,6 +854,9 @@ exports.getProfitLossReport = async (req, res) => {
           dealerPaymentCount: dealerReceive.length,
           expenseCount: expenses.length,
           purchaseCount: purchases.length,
+          staffCount: salary.staffCount,
+          monthsInRange: salary.monthsInRange,
+          monthlySalaryTotal: salary.monthlySalary,
         },
       },
     });
@@ -617,8 +867,7 @@ exports.getProfitLossReport = async (req, res) => {
 };
 
 // ============================================================
-// DASHBOARD SUMMARY (for top 4 cards)
-// GET /api/reports/dashboard-summary
+// DASHBOARD SUMMARY
 // ============================================================
 exports.getDashboardSummary = async (req, res) => {
   try {
@@ -634,11 +883,9 @@ exports.getDashboardSummary = async (req, res) => {
       999
     );
 
-    // Customer counts
     const totalCustomers = await Customer.countDocuments({});
     const activeCustomers = await Customer.countDocuments({ status: 'active' });
 
-    // Payments this month
     const payments = await Payment.find({
       isNoPayment: false,
       paymentDate: { $gte: startOfMonth, $lte: endOfMonth },
@@ -646,7 +893,6 @@ exports.getDashboardSummary = async (req, res) => {
 
     const totalCollected = payments.reduce((s, p) => s + (p.amount || 0), 0);
 
-    // Receivable this month (sum of monthlyFee)
     const customers = await Customer.find({});
     const monthlyReceivable = customers.reduce(
       (s, c) => s + (c.monthlyFee || 0),
@@ -657,7 +903,6 @@ exports.getDashboardSummary = async (req, res) => {
         ? Math.min(100, Math.round((totalCollected / monthlyReceivable) * 100))
         : 0;
 
-    // Outstanding (all-time)
     const allPayments = await Payment.find({ isNoPayment: false });
     const customerPayMap = {};
     allPayments.forEach((p) => {
@@ -691,7 +936,6 @@ exports.getDashboardSummary = async (req, res) => {
       }
     });
 
-    // Net profit this month (real P&L logic)
     const packages = await Package.find({});
     const packageMap = {};
     packages.forEach((p) => {
@@ -737,11 +981,18 @@ exports.getDashboardSummary = async (req, res) => {
       0
     );
 
+    const activeStaff = await Staff.find({ isActive: true });
+    const monthlySalaryTotal = activeStaff.reduce(
+      (s, st) => s + (st.salary || 0),
+      0
+    );
+
     const netProfit = Math.round(
       packageProfitMonth +
         commissionProfitMonth -
         monthExpenseTotal -
-        monthPurchaseTotal
+        monthPurchaseTotal -
+        monthlySalaryTotal
     );
 
     res.json({
@@ -757,6 +1008,7 @@ exports.getDashboardSummary = async (req, res) => {
         defaulterCount,
         netProfit,
         isProfit: netProfit >= 0,
+        totalSalaries: monthlySalaryTotal,
         monthLabel: `${MONTHS[now.getMonth()]} ${now.getFullYear()}`,
       },
     });

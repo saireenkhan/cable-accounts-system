@@ -1109,15 +1109,6 @@ export default function PartnerAreasPage() {
       placeholder:
         'Enter area name',
     },
-
-    {
-      name: 'description',
-      label: 'Description',
-      type: 'textarea',
-      placeholder:
-        'Optional description',
-    },
-
     ...(isps.length > 0
       ? [
           {
@@ -1149,6 +1140,13 @@ export default function PartnerAreasPage() {
           },
         ]
       : []),
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      placeholder:
+        'Optional description',
+    },
   ];
 
   /* ============================================================

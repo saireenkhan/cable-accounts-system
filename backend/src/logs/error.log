@@ -43,3 +43,7 @@
 {"level":"error","message":"Update dealer error: Cast to ObjectId failed for value \"nazimabad\" (type string) at path \"area\" because of \"BSONError\"","timestamp":"2026-10-01T08:26:03.906Z"}
 {"level":"error","message":"Delete customer error: Cast to ObjectId failed for value \"Jane Smith\" (type string) at path \"customer\" for model \"Payment\"","timestamp":"2026-10-01T09:02:45.393Z"}
 {"level":"error","message":"Create ISP error: E11000 duplicate key error collection: cable_db.isps index: name_1 dup key: { name: \"storm fiber\" }","timestamp":"2026-10-03T10:01:50.626Z"}
+{"level":"error","message":"User report error: Cannot populate path `dealer` because it is not in your schema. Set the `strictPopulate` option to false to override.","timestamp":"2026-10-06T07:35:14.081Z"}
+{"level":"error","message":"User report error: Cannot populate path `dealer` because it is not in your schema. Set the `strictPopulate` option to false to override.","timestamp":"2026-10-06T07:36:45.412Z"}
+{"level":"error","message":"User report error: Cannot populate path `dealer` because it is not in your schema. Set the `strictPopulate` option to false to override.","timestamp":"2026-10-06T07:36:53.558Z"}
+{"level":"error","message":"User report error: Cannot populate path `dealer` because it is not in your schema. Set the `strictPopulate` option to false to override.","timestamp":"2026-10-06T07:44:12.046Z"}

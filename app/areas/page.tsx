@@ -495,13 +495,7 @@ export default function AreasPage() {
       required: true,
       placeholder: 'Enter area name',
     },
-    {
-      name: 'description',
-      label: 'Description',
-      type: 'textarea',
-      placeholder: 'Optional description',
-    },
-    ...(isps.length > 0
+        ...(isps.length > 0
       ? [
          {
   name: 'isp',
@@ -518,6 +512,13 @@ export default function AreasPage() {
 }
         ]
       : []),
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      placeholder: 'Optional description',
+    },
+
   ];
 
 const transformAreaData = (data: any) => ({

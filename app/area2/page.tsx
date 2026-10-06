@@ -191,22 +191,6 @@ export default function DealerAreasPage() {
       placeholder:
         'Enter dealer area name',
     },
-
-    {
-      name: 'code',
-      label: 'Area Code',
-      type: 'text',
-      placeholder: 'e.g., DLR-001',
-    },
-
-    {
-      name: 'description',
-      label: 'Description',
-      type: 'textarea',
-      placeholder:
-        'Optional description',
-    },
-
     ...(isps.length > 0
       ? [
           {
@@ -232,6 +216,13 @@ export default function DealerAreasPage() {
           },
         ]
       : []),
+    {
+      name: 'description',
+      label: 'Description',
+      type: 'textarea',
+      placeholder:
+        'Optional description',
+    },
   ];
 
   const transformAreaData = (data: any) => ({
