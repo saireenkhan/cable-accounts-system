@@ -1,5 +1,4 @@
 'use client';
-
 import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -9,6 +8,7 @@ import {
   Trash2,
   Wifi,
   Eye,
+  CreditCard,
   UserCheck,
   UserX,
   UserMinus,
@@ -36,7 +36,6 @@ import { SearchBar } from '@/app/components/ui/SearchBar';
 import api from '@/app/lib/api';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
-
 import {
   areaName,
   findPackage,
@@ -46,7 +45,6 @@ import {
   effectiveStatus,
   statusStyles,
 } from '@/app/lib/userUtils';
-
 const spinner = (
   <Layout>
     <div className="flex justify-center items-center h-64">
@@ -54,7 +52,6 @@ const spinner = (
     </div>
   </Layout>
 );
-
 const colorClasses: Record<string, string> = {
   blue:
     'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 border-blue-500 ring-blue-500/30',
@@ -67,7 +64,6 @@ const colorClasses: Record<string, string> = {
   red:
     'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30 border-red-500 ring-red-500/30',
 };
-
 const statusLabels: Record<string, string> = {
   active: 'Active',
   inactive: 'Inactive',
@@ -75,7 +71,6 @@ const statusLabels: Record<string, string> = {
   expired: 'Expired',
   suspended: 'Suspended',
 };
-
 const MONTHS = [
   'January',
   'February',
@@ -90,101 +85,79 @@ const MONTHS = [
   'November',
   'December',
 ];
-
 /* ============================================================
    DATE HELPERS
 ============================================================ */
-
 const toDateSafe = (val: any): Date | null => {
   if (!val) return null;
-
   if (val instanceof Date) {
     return isNaN(val.getTime()) ? null : val;
   }
-
   const d = new Date(val);
-
   return isNaN(d.getTime()) ? null : d;
 };
-
 const getToday = (): Date => {
   const now = new Date();
-
   return new Date(
     now.getFullYear(),
     now.getMonth(),
     now.getDate()
   );
 };
-
 const getCurrentMonth = (): string => {
   const now = new Date();
-
   return `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
 };
-
 /* ============================================================
    PAYMENT HELPERS
 ============================================================ */
-
 function getUserPayments(
   user: any,
   payments: any[]
 ): any[] {
   return payments.filter((p) => {
     if (p.isNoPayment) return false;
-
     const customer =
       p.customer &&
       typeof p.customer === 'object'
         ? p.customer
         : null;
-
     const paymentCustomerId =
       customer?._id ??
       customer?.id ??
       (typeof p.customer === 'string'
         ? p.customer
         : null);
-
     const paymentCustomerCode =
       customer?.customerId ??
       p.customerId;
-
     const hasIdentifier =
       Boolean(paymentCustomerId) ||
       Boolean(paymentCustomerCode);
-
     if (hasIdentifier) {
       const matchesMongoId =
         paymentCustomerId &&
         String(paymentCustomerId) === String(user.id);
-
       const matchesCustomerId =
         paymentCustomerCode &&
         String(paymentCustomerCode) ===
           String(user.customerId);
-
       return (
         Boolean(matchesMongoId) ||
         Boolean(matchesCustomerId)
       );
     }
-
     const paymentCustomerName =
       customer?.name ??
       p.customerName ??
       p.name;
-
     const matchesName =
       paymentCustomerName &&
       String(paymentCustomerName).trim().toLowerCase() ===
         String(user.name).trim().toLowerCase();
-
     return Boolean(matchesName);
   });
 }
-
 function getPaymentPaidAmount(p: any): number {
   const candidates = [
     p.amount,
@@ -194,17 +167,14 @@ function getPaymentPaidAmount(p: any): number {
     p.amountReceived,
     p.paid,
   ];
-
   for (const c of candidates) {
     if (c !== undefined && c !== null && c !== '') {
       const n = parseFloat(String(c));
       if (!isNaN(n)) return n;
     }
   }
-
   return 0;
 }
-
 function getMonthPaidAmount(
   user: any,
   payments: any[],
@@ -214,7 +184,6 @@ function getMonthPaidAmount(
     user,
     payments
   );
-
   return userPayments
     .filter((p) => {
       return (
@@ -227,7 +196,6 @@ function getMonthPaidAmount(
       0
     );
 }
-
 function isMonthPaid(
   user: any,
   payments: any[],
@@ -236,18 +204,14 @@ function isMonthPaid(
   const monthlyFee = Number(
     user.monthlyFeeRaw || 0
   );
-
   if (!monthlyFee) return false;
-
   const monthTotal = getMonthPaidAmount(
     user,
     payments,
     month
   );
-
   return monthTotal >= monthlyFee;
 }
-
 function isCurrentMonthFullyPaid(
   user: any,
   payments: any[]
@@ -258,11 +222,9 @@ function isCurrentMonthFullyPaid(
     getCurrentMonth()
   );
 }
-
 /* ============================================================
    PAYMENT-AWARE UPCOMING EXPIRY
 ============================================================ */
-
 function isPaymentAwareUpcomingExpiry(
   user: any,
   payments: any[]
@@ -270,9 +232,7 @@ function isPaymentAwareUpcomingExpiry(
   const expiry = toDateSafe(
     user.expiryDate
   );
-
   if (!expiry) return false;
-
   if (
     isCurrentMonthFullyPaid(
       user,
@@ -281,38 +241,30 @@ function isPaymentAwareUpcomingExpiry(
   ) {
     return false;
   }
-
   const today = getToday();
-
   const expiryDay = new Date(
     expiry.getFullYear(),
     expiry.getMonth(),
     expiry.getDate()
   );
-
   if (expiryDay < today) {
     return false;
   }
-
   const diffMs =
     expiryDay.getTime() -
     today.getTime();
-
   const diffDays = Math.floor(
     diffMs /
       (1000 * 60 * 60 * 24)
   );
-
   return (
     diffDays >= 0 &&
     diffDays <= 7
   );
 }
-
 /* ============================================================
    EFFECTIVE STATUS
 ============================================================ */
-
 function computeEffectiveStatus(
   user: any,
   payments: any[]
@@ -320,7 +272,6 @@ function computeEffectiveStatus(
   const rawStatus = String(
     user.statusRaw || ''
   ).toLowerCase();
-
   if (
     rawStatus === 'inactive' ||
     rawStatus === 'suspended'
@@ -329,7 +280,6 @@ function computeEffectiveStatus(
       ? 'Inactive'
       : 'Suspended';
   }
-
   if (
     isCurrentMonthFullyPaid(
       user,
@@ -338,50 +288,39 @@ function computeEffectiveStatus(
   ) {
     return 'Active';
   }
-
   const expiry = toDateSafe(
     user.expiryDate
   );
-
   if (!expiry) {
     return effectiveStatus(user);
   }
-
   const today = getToday();
-
   const expiryDay = new Date(
     expiry.getFullYear(),
     expiry.getMonth(),
     expiry.getDate()
   );
-
   if (expiryDay < today) {
     return 'Expired';
   }
-
   const diffMs =
     expiryDay.getTime() -
     today.getTime();
-
   const diffDays = Math.floor(
     diffMs /
       (1000 * 60 * 60 * 24)
   );
-
   if (
     diffDays >= 0 &&
     diffDays <= 7
   ) {
     return 'Upcoming Expiry';
   }
-
   return effectiveStatus(user);
 }
-
 /* ============================================================
    VIEW FIELD
 ============================================================ */
-
 function ViewField({
   icon,
   label,
@@ -409,7 +348,6 @@ function ViewField({
         {icon}
         {label}
       </div>
-
       <p
         className={cn(
           'font-semibold',
@@ -423,130 +361,99 @@ function ViewField({
     </div>
   );
 }
-
 /* ============================================================
    PAGE
 ============================================================ */
-
 function UsersPageContent() {
   const searchParams = useSearchParams();
-
   const [modal, setModal] = useState(false);
   const [view, setView] = useState(false);
   const [viewingUser, setViewingUser] =
     useState<any>(null);
   const [editingUser, setEditingUser] =
     useState<any>(null);
-
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
   const [areaFilter, setAreaFilter] =
     useState<string>('');
-
   const [loading, setLoading] =
     useState(true);
-
   const [users, setUsers] =
     useState<any[]>([]);
-
   const [packages, setPackages] =
     useState<any[]>([]);
-
   const [areas, setAreas] =
     useState<any[]>([]);
-
   const [payments, setPayments] =
     useState<any[]>([]);
-
   const [isps, setIsps] =
     useState<any[]>([]);
-
   /* ==========================================================
      URL FILTERS
   ========================================================== */
-
   useEffect(() => {
     const status =
       searchParams.get('status');
-
     if (status) {
       setFilter(status.toLowerCase());
     }
-
     const area =
       searchParams.get('area');
-
     if (area) {
       setAreaFilter(area);
     }
   }, [searchParams]);
-
   /* ==========================================================
      FETCH ISPS
   ========================================================== */
-
   const fetchISPs = async () => {
     try {
       if (!sessionStorage.getItem('token')) {
         return [];
       }
-
       const { data } = await api.get('/isps');
-
       const list =
         data.success && Array.isArray(data.isps)
           ? data.isps
           : [];
-
       setIsps(list);
-
       return list;
     } catch (e) {
       console.error('Error fetching ISPs:', e);
       return [];
     }
   };
-
   /* ==========================================================
      FETCH AREAS
   ========================================================== */
-
   const fetchAreas = async () => {
     try {
       if (!sessionStorage.getItem('token')) {
         return [];
       }
-
       const { data } =
         await api.get('/areas');
-
       const list =
         data.success
           ? data.areas || []
           : [];
-
       setAreas(list);
-
       return list;
     } catch (e) {
       console.error(e);
       return [];
     }
   };
-
   /* ==========================================================
      FETCH PACKAGES
   ========================================================== */
-
   const fetchPackages = async () => {
     try {
       if (!sessionStorage.getItem('token')) {
         return;
       }
-
       const { data } =
         await api.get('/packages');
-
       if (data.success) {
         setPackages(
           data.packages || []
@@ -556,17 +463,14 @@ function UsersPageContent() {
       console.error(e);
     }
   };
-
 /* ==========================================================
    RESOLVE ISP NAME
 ========================================================== */
-
 const resolveIspName = (
   raw: any,
   ispList: any[]
 ): string => {
   if (!raw) return '';
-
   // If raw is an array, resolve every ISP
   // and return them comma-separated.
   if (Array.isArray(raw)) {
@@ -577,7 +481,6 @@ const resolveIspName = (
       .filter(Boolean)
       .join(', ');
   }
-
   if (typeof raw === 'object') {
     return (
       raw.name ||
@@ -585,9 +488,7 @@ const resolveIspName = (
       ''
     );
   }
-
   const rawStr = String(raw);
-
   const match = ispList.find(
     (i) =>
       String(i._id) === rawStr ||
@@ -595,14 +496,11 @@ const resolveIspName = (
       String(i.name).toLowerCase() ===
         rawStr.toLowerCase()
   );
-
   return match?.name || rawStr;
 };
-
   /* ==========================================================
      FETCH USERS + PAYMENTS
   ========================================================== */
-
   const fetchUsers = async (
     areaList = areas,
     ispList = isps
@@ -616,7 +514,6 @@ const resolveIspName = (
         setLoading(false);
         return;
       }
-
       const [
         customersRes,
         paymentsRes,
@@ -626,100 +523,76 @@ const resolveIspName = (
         ),
         api.get('/payments'),
       ]);
-
       const customers =
         customersRes.data.customers ||
         [];
-
       const paymentList =
         paymentsRes.data.payments ||
         [];
-
       if (
         !customersRes.data.success
       ) {
         return;
       }
-
       setPayments(paymentList);
-
       const mappedUsers =
         customers.map((c: any) => {
           const activation =
             dateInput(
               c.activationDate
             );
-
           const expiry = c.expiryDate
             ? dateInput(c.expiryDate)
             : expiryDate(
                 activation
               );
-
           const user = {
             id: c._id,
-
             customerId:
               c.customerId || 'N/A',
-
             name: c.name || '',
-
             phone: c.phone || '',
-
             address:
               c.address || '',
-
             area: areaName(
               c.area,
               areaList
             ),
-
             isp: resolveIspName(
               c.isp,
               ispList
             ),
-
             package:
               c.package || '',
-
             packagePrice:
               Number(
                 c.packagePrice || 0
               ),
-
             discount:
               Number(
                 c.discount || 0
               ),
-
             discountRaw:
               Number(
                 c.discount || 0
               ),
-
             monthlyFeeRaw:
               Number(
                 c.monthlyFee || 0
               ),
-
             monthlyFee:
               `Rs. ${Number(
                 c.monthlyFee || 0
               ).toLocaleString()}`,
-
             activationDate:
               activation,
-
             expiryDate:
               expiry,
-
             statusRaw:
               c.status || 'active',
           };
-
           return {
             ...user,
-
             status:
               computeEffectiveStatus(
                 user,
@@ -727,14 +600,12 @@ const resolveIspName = (
               ),
           };
         });
-
       setUsers(mappedUsers);
     } catch (e) {
       console.error(
         'Error fetching users:',
         e
       );
-
       toast.error(
         'Failed to load users'
       );
@@ -742,11 +613,9 @@ const resolveIspName = (
       setLoading(false);
     }
   };
-
   /* ==========================================================
      INITIAL LOAD
   ========================================================== */
-
   useEffect(() => {
     (async () => {
       const areaList =
@@ -754,19 +623,15 @@ const resolveIspName = (
       const ispList =
         await fetchISPs();
       await fetchPackages();
-
       await fetchUsers(areaList, ispList);
     })();
   }, []);
-
   /* ==========================================================
      STATS
   ========================================================== */
-
   const statsUsers = areaFilter
     ? users.filter((u) => u.area === areaFilter)
     : users;
-
   const stats = [
     [
       'all',
@@ -775,7 +640,6 @@ const resolveIspName = (
       Users,
       'blue',
     ],
-
     [
       'active',
       'ACTIVE',
@@ -786,7 +650,6 @@ const resolveIspName = (
       UserCheck,
       'green',
     ],
-
     [
       'inactive',
       'INACTIVE',
@@ -797,7 +660,6 @@ const resolveIspName = (
       UserX,
       'gray',
     ],
-
     [
       'upcoming-expiry',
       'UPCOMING EXPIRIES',
@@ -811,7 +673,6 @@ const resolveIspName = (
       'orange',
       'Within 7 days',
     ],
-
     [
       'expired',
       'EXPIRED',
@@ -823,7 +684,6 @@ const resolveIspName = (
       'red',
     ],
   ] as const;
-
   /* ==========================================================
      USER FORM FIELDS
      --------------------------------------------------------
@@ -838,7 +698,6 @@ const resolveIspName = (
        7. package
        ...rest
   ========================================================== */
-
   const userFields: Field[] = [
     {
       name: 'customerId',
@@ -847,7 +706,6 @@ const resolveIspName = (
       required: true,
       readOnly: !!editingUser,
     },
-
     {
       name: 'name',
       label: 'Full Name',
@@ -857,7 +715,6 @@ const resolveIspName = (
         'Enter full name',
       readOnly: !!editingUser,
     },
-
     {
       name: 'phone',
       label: 'Phone',
@@ -866,7 +723,6 @@ const resolveIspName = (
       placeholder:
         '0300-1234567',
     },
-
     {
       name: 'address',
       label: 'Address',
@@ -875,7 +731,6 @@ const resolveIspName = (
       placeholder:
         'House #, Street',
     },
-
     ...(isps.length > 0
       ? [
           {
@@ -893,7 +748,6 @@ const resolveIspName = (
           },
         ]
       : []),
-
     {
       name: 'area',
       label: 'Area',
@@ -915,7 +769,6 @@ const resolveIspName = (
         })
       ),
     },
-
     {
       name: 'package',
       label: 'Package',
@@ -931,7 +784,6 @@ const resolveIspName = (
         })
       ),
     },
-
     {
       name: 'activationDate',
       label: 'Activation Date',
@@ -940,7 +792,6 @@ const resolveIspName = (
       placeholder:
         'Select activation date',
     },
-
     {
       name: 'expiryDate',
       label: 'Expiry Date',
@@ -951,7 +802,6 @@ const resolveIspName = (
       updateOnChange:
         expiryDate,
     },
-
     {
       name: 'discount',
       label: 'Discount (Rs.)',
@@ -959,7 +809,6 @@ const resolveIspName = (
       placeholder: '0',
       defaultValue: '0',
       min: 0,
-
       max: (
         data,
         context
@@ -973,7 +822,6 @@ const resolveIspName = (
             0
         ),
     },
-
     {
       name: 'monthlyFee',
       label: 'Monthly Fee (Rs.)',
@@ -982,7 +830,6 @@ const resolveIspName = (
       placeholder:
         'Auto-filled',
       dependsOn: 'package',
-
       updateOnChange: (
         _,
         data,
@@ -997,7 +844,6 @@ const resolveIspName = (
             )?.sellingPrice ||
               0
           );
-
         return Math.max(
           0,
           price -
@@ -1007,13 +853,11 @@ const resolveIspName = (
         );
       },
     },
-
     {
       name: 'status',
       label: 'Status',
       type: 'select',
       required: true,
-
       options: [
         {
           label: 'Active',
@@ -1034,11 +878,9 @@ const resolveIspName = (
       ],
     },
   ];
-
   /* ==========================================================
    DYNAMIC AREA OPTIONS — filtered by selected ISP
 ========================================================== */
-
 const resolveDynamicOptions = (
   fieldName: string,
   formData: Record<string, any>
@@ -1046,31 +888,25 @@ const resolveDynamicOptions = (
   if (fieldName !== 'area') {
     return [];
   }
-
   // ========================================================
   // NO ISP CONFIGURED
   // ========================================================
-
   if (isps.length === 0) {
     return areas.map((a) => ({
       label: a.name,
       value: a.name,
     }));
   }
-
   // ========================================================
   // ISP NOT SELECTED
   // ========================================================
-
   const selectedIsp =
     String(formData.isp || '')
       .trim()
       .toLowerCase();
-
   if (!selectedIsp) {
     return [];
   }
-
   // ========================================================
   // FILTER AREAS
   //
@@ -1084,11 +920,9 @@ const resolveDynamicOptions = (
   //
   // Both are supported.
   // ========================================================
-
   return areas
     .filter((area) => {
       let areaIsps: any[] = [];
-
       if (Array.isArray(area.isp)) {
         areaIsps = area.isp;
       } else if (
@@ -1098,7 +932,6 @@ const resolveDynamicOptions = (
       ) {
         areaIsps = [area.isp];
       }
-
       return areaIsps.some((areaIsp) => {
         const resolvedAreaIsp =
           resolveIspName(
@@ -1107,7 +940,6 @@ const resolveDynamicOptions = (
           )
             .trim()
             .toLowerCase();
-
         return (
           resolvedAreaIsp ===
           selectedIsp
@@ -1119,11 +951,9 @@ const resolveDynamicOptions = (
       value: area.name,
     }));
 };
-
   /* ==========================================================
      TRANSFORM FORM DATA
   ========================================================== */
-
   const transformUserData = (
     data: any
   ) => {
@@ -1132,23 +962,19 @@ const resolveDynamicOptions = (
         packages,
         data.package
       );
-
     const price =
       Number(
         pkg?.sellingPrice || 0
       );
-
     const discount =
       Number(
         data.discount || 0
       );
-
     if (discount < 0) {
       throw new Error(
         'Discount cannot be negative.'
       );
     }
-
     if (
       price > 0 &&
       discount > price
@@ -1157,64 +983,48 @@ const resolveDynamicOptions = (
         `Discount (Rs. ${discount.toLocaleString()}) cannot exceed the package price (Rs. ${price.toLocaleString()}).`
       );
     }
-
     const activation =
       dateInput(
         data.activationDate
       );
-
     if (!activation) {
       throw new Error(
         'Activation Date is required.'
       );
     }
-
     return {
       customerId:
         data.customerId,
-
       name: data.name,
-
       phone: data.phone,
-
       address: data.address,
-
       area: areaName(
         data.area,
         areas
       ),
-
       isp:
         data.isp || '',
-
       package:
         data.package,
-
       activationDate:
         activation,
-
       expiryDate:
         expiryDate(
           activation
         ),
-
       discount,
-
       monthlyFee:
         Math.max(
           0,
           price - discount
         ),
-
       status:
         data.status || 'active',
     };
   };
-
   /* ==========================================================
      SUCCESS
   ========================================================== */
-
   const handleSuccess = (
     data: any
   ) => {
@@ -1223,13 +1033,10 @@ const resolveDynamicOptions = (
         ? `${data.name} updated successfully!`
         : `${data.name} added successfully!`
     );
-
     setEditingUser(null);
     setModal(false);
-
     fetchUsers(areas, isps);
   };
-
   const handleDelete = async (id: string, name: string) => {
     if (
       !confirm(
@@ -1238,19 +1045,14 @@ const resolveDynamicOptions = (
     ) {
       return;
     }
-
     try {
       const { data } = await api.delete(`/customers/${id}`);
-
       setUsers((prev) => prev.filter((u) => u.id !== id));
-
       const extra =
         data?.deletedPayments > 0
           ? ` (${data.deletedPayments} payment${data.deletedPayments === 1 ? '' : 's'} also removed)`
           : '';
-
       toast.success(`${name} deleted${extra}`);
-
       if (editingUser?.id === id) setEditingUser(null);
       if (viewingUser?.id === id) {
         setView(false);
@@ -1261,42 +1063,33 @@ const resolveDynamicOptions = (
       toast.error('Failed to delete user');
     }
   };
-
   /* ==========================================================
      FILTERED USERS
   ========================================================== */
-
   const filteredUsers =
     users.filter((u) => {
       const status =
         u.status;
-
       const q =
         search.toLowerCase();
-
       const matchesStatus =
         filter === 'all' ||
-
         (
           filter === 'active' &&
           status === 'Active'
         ) ||
-
         (
           filter === 'inactive' &&
           status === 'Inactive'
         ) ||
-
         (
           filter === 'expired' &&
           status === 'Expired'
         ) ||
-
         (
           filter === 'suspended' &&
           status === 'Suspended'
         ) ||
-
         (
           filter ===
             'upcoming-expiry' &&
@@ -1305,54 +1098,43 @@ const resolveDynamicOptions = (
             payments
           )
         );
-
       const matchesSearch =
         u.name
           ?.toLowerCase()
           .includes(q) ||
-
         u.customerId
           ?.toLowerCase()
           .includes(q) ||
-
         u.phone?.includes(q);
-
       const matchesArea =
         !areaFilter ||
         u.area === areaFilter;
-
       return (
         matchesStatus &&
         matchesSearch &&
         matchesArea
       );
     });
-
   /* ==========================================================
      TABLE COLUMNS
   ========================================================== */
-
   const columns = [
     {
       key: 'customerId',
       header: 'User ID',
     },
-
     {
       key: 'name',
       header: 'Customer',
-
       render: (u: any) => (
         <div className="flex flex-col">
           <span className="font-medium text-gray-900 dark:text-white">
             {u.name}
           </span>
-
           <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
             <CalendarDays className="h-3 w-3" />
             Activated: {displayDate(u.activationDate)}
           </span>
-
           {u.isp && (
             <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
               <Wifi className="h-3 w-3 text-blue-500" />
@@ -1362,21 +1144,17 @@ const resolveDynamicOptions = (
         </div>
       ),
     },
-
     {
       key: 'phone',
       header: 'Phone',
     },
-
     {
       key: 'area',
       header: 'Area',
     },
-
     {
       key: 'discount',
       header: 'Discount',
-
       render: (u: any) => (
         <span
           className={
@@ -1392,25 +1170,20 @@ const resolveDynamicOptions = (
         </span>
       ),
     },
-
     {
       key: 'monthlyFee',
       header: 'Monthly Fee',
     },
-
     {
       key: 'status',
       header: 'Status',
-
       render: (u: any) => (
         <span
           className={cn(
             'px-2 py-1 rounded-full text-xs font-medium',
-
             statusStyles[
               u.status
             ] ||
-
               (
                 u.status ===
                 'Upcoming Expiry'
@@ -1424,37 +1197,29 @@ const resolveDynamicOptions = (
       ),
     },
   ];
-
   /* ==========================================================
      LOADING
   ========================================================== */
-
   if (loading) {
     return spinner;
   }
-
   /* ==========================================================
      RENDER
   ========================================================== */
-
   return (
     <Layout>
       <div className="space-y-5">
-
         {/* HEADER */}
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Users className="h-6 w-6 text-blue-600" />
-
               User Management
             </h1>
-
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Manage cable connections and customer details.
             </p>
           </div>
-
           <button
             onClick={() => {
               setEditingUser(null);
@@ -1463,11 +1228,9 @@ const resolveDynamicOptions = (
             className="flex items-center gap-2 px-4 py-2.5 bg-[#d6b138] hover:bg-[#f7ce48] text-white-900 rounded-lg text-sm font-medium transition-colors"
           >
             <UserPlus className="h-4 w-4" />
-
             Add User
           </button>
         </header>
-
         {/* STATS */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map(
@@ -1481,13 +1244,10 @@ const resolveDynamicOptions = (
             ]) => {
               const active =
                 filter === key;
-
               const c =
                 colorClasses[color];
-
               const parts =
                 c.split(' ');
-
               return (
                 <button
                   key={key}
@@ -1496,7 +1256,6 @@ const resolveDynamicOptions = (
                   }
                   className={cn(
                     'bg-white dark:bg-gray-800 rounded-xl shadow-sm border p-5 text-left transition-all hover:shadow-md hover:scale-[1.02]',
-
                     active
                       ? `${parts
                           .slice(-3)
@@ -1511,7 +1270,6 @@ const resolveDynamicOptions = (
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {label}
                       </p>
-
                       <p
                         className={cn(
                           'text-2xl font-bold mt-1',
@@ -1520,7 +1278,6 @@ const resolveDynamicOptions = (
                       >
                         {value}
                       </p>
-
                       <p className="text-xs mt-1 text-gray-500 dark:text-gray-400">
                         {sub ||
                           (active
@@ -1528,7 +1285,6 @@ const resolveDynamicOptions = (
                             : '')}
                       </p>
                     </div>
-
                     <div
                       className={cn(
                         'h-12 w-12 rounded-full flex items-center justify-center',
@@ -1555,25 +1311,19 @@ const resolveDynamicOptions = (
             }
           )}
         </div>
-
         {/* SEARCH */}
         <SearchBar
           placeholder="Search by name, user ID or phone..."
           value={search}
           onChange={setSearch}
         />
-
         {/* USER LIST */}
         <section className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
-
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
-
             <div className="flex items-center gap-2 flex-wrap">
-
               <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
                 User List
               </h2>
-
               {filter !== 'all' && (
                 <button
                   onClick={() =>
@@ -1586,18 +1336,15 @@ const resolveDynamicOptions = (
                   {statusLabels[
                     filter
                   ] || 'All'}
-
                   <X className="h-3 w-3" />
                 </button>
               )}
-
               {areaFilter && (
                 <button
                   onClick={() => {
                     setAreaFilter(
                       ''
                     );
-
                     if (
                       typeof window !==
                       'undefined'
@@ -1606,11 +1353,9 @@ const resolveDynamicOptions = (
                         new URL(
                           window.location.href
                         );
-
                       url.searchParams.delete(
                         'area'
                       );
-
                       window.history.replaceState(
                         {},
                         '',
@@ -1622,18 +1367,15 @@ const resolveDynamicOptions = (
                 >
                   Area:{' '}
                   {areaFilter}
-
                   <X className="h-3 w-3" />
                 </button>
               )}
             </div>
-
             <span className="text-xs text-gray-500 dark:text-gray-400">
               {filteredUsers.length}{' '}
               users found
             </span>
           </div>
-
           <div className="p-2">
             <DataTable
               data={
@@ -1649,14 +1391,18 @@ const resolveDynamicOptions = (
                     <Edit className="h-3 w-3" />
                   ),
                 },
-
                 {
                   value: 'view',
                   icon: (
                     <Eye className="h-3 w-3" />
                   ),
                 },
-
+                {
+                  value: 'receive-payment',
+                  icon: (
+                    <CreditCard className="h-3 w-3" />
+                  ),
+                },
                 {
                   value: 'delete',
                   icon: (
@@ -1670,6 +1416,13 @@ const resolveDynamicOptions = (
               ) => {
                 if (
                   action ===
+                  'receive-payment'
+                ) {
+                  window.location.href =
+                    `/billing?customerId=${encodeURIComponent(item.id)}&openModal=true`;
+                }
+                if (
+                  action ===
                   'delete'
                 ) {
                   handleDelete(
@@ -1677,7 +1430,6 @@ const resolveDynamicOptions = (
                     item.name
                   );
                 }
-
                 if (
                   action ===
                   'edit'
@@ -1685,12 +1437,10 @@ const resolveDynamicOptions = (
                   setEditingUser(
                     item
                   );
-
                   setModal(
                     true
                   );
                 }
-
                 if (
                   action ===
                   'view'
@@ -1698,7 +1448,6 @@ const resolveDynamicOptions = (
                   setViewingUser(
                     item
                   );
-
                   setView(
                     true
                   );
@@ -1710,7 +1459,6 @@ const resolveDynamicOptions = (
             />
           </div>
         </section>
-
         {/* ADD / EDIT USER MODAL */}
         <AddUserModal
           isOpen={modal}
@@ -1757,44 +1505,33 @@ const resolveDynamicOptions = (
               ? {
                   customerId:
                     editingUser.customerId,
-
                   name:
                     editingUser.name,
-
                   phone:
                     editingUser.phone,
-
                   address:
                     editingUser.address,
-
                   area: areaName(
                     editingUser.area,
                     areas
                   ),
-
                   isp:
                     editingUser.isp || '',
-
                   package:
                     editingUser.package,
-
                   activationDate:
                     dateInput(
                       editingUser.activationDate
                     ),
-
                   expiryDate:
                     dateInput(
                       editingUser.expiryDate
                     ),
-
                   discount:
                     editingUser.discountRaw ||
                     0,
-
                   monthlyFee:
                     editingUser.monthlyFeeRaw,
-
                   status:
                     editingUser.statusRaw,
                 }
@@ -1809,36 +1546,28 @@ const resolveDynamicOptions = (
           }}
           dynamicOptions={resolveDynamicOptions}
         />
-
         {/* VIEW USER MODAL */}
         {view &&
           viewingUser && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-
               <div
                 className="fixed inset-0 bg-black/50 backdrop-blur-sm"
                 onClick={() =>
                   setView(false)
                 }
               />
-
               <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
-
                 <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
-
                   <div className="flex items-center gap-3">
-
                     <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/40 rounded-full flex items-center justify-center">
                       <UserIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                     </div>
-
                     <div>
                       <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                         {
                           viewingUser.name
                         }
                       </h2>
-
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         User ID:{' '}
                         {
@@ -1847,7 +1576,6 @@ const resolveDynamicOptions = (
                       </p>
                     </div>
                   </div>
-
                   <button
                     onClick={() =>
                       setView(false)
@@ -1857,13 +1585,10 @@ const resolveDynamicOptions = (
                     <X className="h-5 w-5 text-gray-500" />
                   </button>
                 </div>
-
                 <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)] space-y-4">
-
                   {(() => {
                     const status =
                       viewingUser.status;
-
                     const StatusIcon =
                       status ===
                       'Active'
@@ -1875,17 +1600,14 @@ const resolveDynamicOptions = (
                               'Upcoming Expiry'
                             ? Clock
                             : XCircle;
-
                     return (
                       <div className="flex justify-center">
                         <span
                           className={cn(
                             'px-4 py-1.5 rounded-full text-sm font-semibold inline-flex items-center gap-1.5',
-
                             statusStyles[
                               status
                             ] ||
-
                               (
                                 status ===
                                 'Upcoming Expiry'
@@ -1895,15 +1617,12 @@ const resolveDynamicOptions = (
                           )}
                         >
                           <StatusIcon className="h-4 w-4" />
-
                           {status}
                         </span>
                       </div>
                     );
                   })()}
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
                     <ViewField
                       icon={
                         <Hash className="h-4 w-4" />
@@ -1913,7 +1632,6 @@ const resolveDynamicOptions = (
                         viewingUser.customerId
                       }
                     />
-
                     <ViewField
                       icon={
                         <UserIcon className="h-4 w-4" />
@@ -1923,7 +1641,6 @@ const resolveDynamicOptions = (
                         viewingUser.name
                       }
                     />
-
                     <ViewField
                       icon={
                         <Phone className="h-4 w-4" />
@@ -1933,7 +1650,6 @@ const resolveDynamicOptions = (
                         viewingUser.phone
                       }
                     />
-
                     <ViewField
                       icon={
                         <MapPin className="h-4 w-4" />
@@ -1944,7 +1660,6 @@ const resolveDynamicOptions = (
                         areas
                       )}
                     />
-
                     {viewingUser.isp && (
                       <ViewField
                         icon={
@@ -1956,7 +1671,6 @@ const resolveDynamicOptions = (
                         }
                       />
                     )}
-
                     <ViewField
                       icon={
                         <PackageIcon className="h-4 w-4" />
@@ -1967,7 +1681,6 @@ const resolveDynamicOptions = (
                         'No package assigned'
                       }
                     />
-
                     <ViewField
                       icon={
                         <CalendarDays className="h-4 w-4" />
@@ -1977,7 +1690,6 @@ const resolveDynamicOptions = (
                         viewingUser.activationDate
                       )}
                     />
-
                     <ViewField
                       icon={
                         <CalendarDays className="h-4 w-4" />
@@ -1993,7 +1705,6 @@ const resolveDynamicOptions = (
                           'Upcoming Expiry'
                       }
                     />
-
                     <ViewField
                       icon={
                         <Percent className="h-4 w-4" />
@@ -2004,7 +1715,6 @@ const resolveDynamicOptions = (
                           0
                       ).toLocaleString()}`}
                     />
-
                     <ViewField
                       icon={
                         <DollarSign className="h-4 w-4" />
@@ -2016,7 +1726,6 @@ const resolveDynamicOptions = (
                       ).toLocaleString()}`}
                       highlight
                     />
-
                     <ViewField
                       icon={
                         <Home className="h-4 w-4" />
@@ -2028,12 +1737,9 @@ const resolveDynamicOptions = (
                       }
                       fullWidth
                     />
-
                   </div>
                 </div>
-
                 <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-
                   <button
                     onClick={() =>
                       setView(false)
@@ -2042,17 +1748,14 @@ const resolveDynamicOptions = (
                   >
                     Close
                   </button>
-
                   <button
                     onClick={() => {
                       setView(
                         false
                       );
-
                       setEditingUser(
                         viewingUser
                       );
-
                       setModal(
                         true
                       );
@@ -2060,7 +1763,6 @@ const resolveDynamicOptions = (
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium"
                   >
                     <Edit className="h-4 w-4" />
-
                     Edit
                   </button>
                 </div>
@@ -2071,11 +1773,9 @@ const resolveDynamicOptions = (
     </Layout>
   );
 }
-
 /* ============================================================
    EXPORT
 ============================================================ */
-
 export default function UsersPage() {
   return (
     <Suspense fallback={spinner}>

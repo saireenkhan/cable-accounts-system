@@ -1,5 +1,4 @@
 'use client';
-
 import React, { useState, useEffect, useRef } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { DataTable } from '@/app/components/ui/DataTable';
@@ -29,7 +28,6 @@ import {
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
-
 // ============================================================
 // MONTH UTILS
 // ============================================================
@@ -37,7 +35,6 @@ const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-
 const parseMonth = (monthStr: string) => {
   const parts = (monthStr || '').split(' ');
   return {
@@ -46,7 +43,6 @@ const parseMonth = (monthStr: string) => {
     idx: MONTHS.indexOf(parts[0]),
   };
 };
-
 const compareMonths = (a: string, b: string) => {
   const pa = parseMonth(a);
   const pb = parseMonth(b);
@@ -54,7 +50,6 @@ const compareMonths = (a: string, b: string) => {
   if (pa.year !== pb.year) return pa.year - pb.year;
   return pa.idx - pb.idx;
 };
-
 // ============================================================
 // ✅ Resolve a customer's area to its display name
 // ============================================================
@@ -63,34 +58,25 @@ function resolveAreaName(
   areaLookup: Record<string, string>
 ): string {
   if (!customerArea) return 'No Area';
-
   if (typeof customerArea === 'object' && customerArea.name) {
     return customerArea.name;
   }
-
   const asString = String(customerArea).trim();
-
   if (areaLookup[asString]) return areaLookup[asString];
-
   const isObjectId = /^[a-fA-F0-9]{24}$/.test(asString);
   if (!isObjectId) return asString;
-
   return 'Unknown Area';
 }
-
 // ============================================================
 // ✅ Resolve a customer's ISP to a display name
 // ============================================================
 function resolveIspName(customerIsp: any): string {
   if (!customerIsp) return '';
-
   if (typeof customerIsp === 'object') {
     return customerIsp.name || customerIsp.ispName || '';
   }
-
   return String(customerIsp).trim();
 }
-
 // ============================================================
 // ✅ CORE: allocate the ENTIRE payment pool oldest-first
 // ============================================================
@@ -102,32 +88,25 @@ interface MonthAllocation {
   isPaid: boolean;
   overpaid: number;
 }
-
 function allocatePayments(
   monthlyFee: number,
   paymentsForCustomer: { month: string; amount: number }[]
 ): MonthAllocation[] {
   if (!monthlyFee || monthlyFee <= 0) return [];
-
   const byMonth: Record<string, number> = {};
   paymentsForCustomer.forEach((p) => {
     if (!p.month) return;
     byMonth[p.month] = (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
   });
-
   const months = Object.keys(byMonth).sort(compareMonths);
   if (months.length === 0) return [];
-
   const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
-
   let pool = totalPool;
   const result: MonthAllocation[] = [];
-
   for (const month of months) {
     const applied = Math.min(pool, monthlyFee);
     const remaining = Math.max(0, monthlyFee - applied);
     pool -= applied;
-
     result.push({
       month,
       expected: monthlyFee,
@@ -137,10 +116,8 @@ function allocatePayments(
       overpaid: 0,
     });
   }
-
   return result;
 }
-
 // ============ SEARCHABLE SELECT ============
 function SearchableSelect({
   options,
@@ -161,12 +138,10 @@ function SearchableSelect({
   const [isOpen, setIsOpen] = useState(false);
   const [displayValue, setDisplayValue] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     const selected = options.find((opt) => opt.value === value);
     setDisplayValue(selected?.label || '');
   }, [value, options]);
-
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -176,18 +151,15 @@ function SearchableSelect({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
   const filteredOptions = options.filter((opt) =>
     opt.label.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
   const handleSelect = (optValue: string, optLabel: string) => {
     setDisplayValue(optLabel);
     setIsOpen(false);
     setSearchTerm('');
     onChange(optValue);
   };
-
   return (
     <div className="relative" ref={dropdownRef}>
       <div
@@ -214,7 +186,6 @@ function SearchableSelect({
         </div>
         <span className="text-gray-400 ml-2">{isOpen ? '▲' : '▼'}</span>
       </div>
-
       {isOpen && !disabled && (
         <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-lg max-h-60 overflow-hidden">
           <div className="p-2 border-b border-gray-200 dark:border-gray-700">
@@ -257,7 +228,6 @@ function SearchableSelect({
     </div>
   );
 }
-
 // ============ USER PAYMENT MODAL ============
 function ReceivePaymentModal({
   isOpen,
@@ -270,6 +240,7 @@ function ReceivePaymentModal({
   isps,
   areaLookup,
   fetchData,
+  initialCustomerId,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -281,6 +252,7 @@ function ReceivePaymentModal({
   isps: any[];
   areaLookup: Record<string, string>;
   fetchData: () => void;
+  initialCustomerId?: string;
 }) {
   const [selectedIsp, setSelectedIsp] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
@@ -294,10 +266,8 @@ function ReceivePaymentModal({
   const [isSubmittingNoPayment, setIsSubmittingNoPayment] = useState(false);
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [monthlySummary, setMonthlySummary] = useState<MonthAllocation[]>([]);
-
   // ✅ Only show the ISP filter if the ISP page actually has ISPs
   const showIspFilter = isps.length > 0;
-
   // ✅ ISP options — from the /isps endpoint
   const ispOptions = isps
     .map((isp: any) => ({
@@ -305,7 +275,6 @@ function ReceivePaymentModal({
       value: isp.name || String(isp._id),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
-
   // ✅ Area options — filtered by ISP only when the ISP filter is active
   const areaOptions = Array.from(
     new Set(
@@ -321,22 +290,18 @@ function ReceivePaymentModal({
   )
     .sort((a, b) => a.localeCompare(b))
     .map((name) => ({ label: name, value: name }));
-
   const getFilteredCustomers = () => {
     if (!selectedArea) return [];
     return customers.filter((c: any) => {
       const areaMatch = resolveAreaName(c.area, areaLookup) === selectedArea;
       if (!areaMatch) return false;
-
       if (showIspFilter && selectedIsp) {
         return resolveIspName(c.isp) === selectedIsp;
       }
       return true;
     });
   };
-
   const filteredCustomers = getFilteredCustomers();
-
   const userOptions = filteredCustomers.map((c: any) => {
     const userId = c.customerId || c.code || 'N/A';
     return {
@@ -344,10 +309,8 @@ function ReceivePaymentModal({
       value: c._id,
     };
   });
-
   const currentYear = new Date().getFullYear();
   const monthOptions = MONTHS.map((month) => `${month} ${currentYear}`);
-
   useEffect(() => {
     if (isOpen) {
       const now = new Date();
@@ -362,14 +325,33 @@ function ReceivePaymentModal({
       setNotes('');
       setCustomerDetails(null);
       setMonthlySummary([]);
-    }
-  }, [isOpen]);
 
+      if (initialCustomerId) {
+        const customer = customers.find(
+          (c: any) => String(c._id) === String(initialCustomerId)
+        );
+
+        if (customer) {
+          const customerArea = resolveAreaName(customer.area, areaLookup);
+          const rawIsp = resolveIspName(customer.isp);
+          const matchedIsp = isps.find(
+            (isp: any) =>
+              String(isp._id) === String(rawIsp) ||
+              String(isp.name || '').toLowerCase() === String(rawIsp).toLowerCase()
+          );
+          const customerIsp = matchedIsp?.name || rawIsp;
+
+          if (showIspFilter) setSelectedIsp(customerIsp);
+          setSelectedArea(customerArea);
+          setSelectedCustomerId(String(customer._id));
+        }
+      }
+    }
+  }, [isOpen, initialCustomerId]);
   useEffect(() => {
     if (selectedCustomerId) {
       const customer = customers.find((c) => c._id === selectedCustomerId);
       setCustomerDetails(customer || null);
-
       if (customer) {
         const customerPayments = payments.filter(
           (p) =>
@@ -378,12 +360,10 @@ function ReceivePaymentModal({
               p.customerId === customer._id) &&
             !p.isNoPayment
         );
-
         const allocs = allocatePayments(
           customer.monthlyFee || 0,
           customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
         );
-
         setMonthlySummary(allocs);
       }
     } else {
@@ -391,22 +371,27 @@ function ReceivePaymentModal({
       setMonthlySummary([]);
     }
   }, [selectedCustomerId, customers, payments]);
-
   // ✅ Reset downstream when ISP changes (only if ISP filter is active)
   useEffect(() => {
     if (!showIspFilter) return;
+    if (
+      initialCustomerId &&
+      String(selectedCustomerId) === String(initialCustomerId)
+    ) return;
     setSelectedArea('');
     setSelectedCustomerId('');
     setCustomerDetails(null);
     setMonthlySummary([]);
   }, [selectedIsp, showIspFilter]);
-
   useEffect(() => {
+    if (
+      initialCustomerId &&
+      String(selectedCustomerId) === String(initialCustomerId)
+    ) return;
     setSelectedCustomerId('');
     setCustomerDetails(null);
     setMonthlySummary([]);
   }, [selectedArea]);
-
   const getPackageName = () => {
     if (!customerDetails?.package) return 'No package assigned';
     if (typeof customerDetails.package === 'string') return customerDetails.package;
@@ -414,40 +399,31 @@ function ReceivePaymentModal({
       return customerDetails.package.name || 'Unknown Package';
     return 'No package assigned';
   };
-
   const getCurrentMonthBalance = () => {
     if (!customerDetails) {
       return { previousBalance: 0, currentBalance: 0, totalBalance: 0 };
     }
-
     const monthlyFee = customerDetails.monthlyFee || 0;
     const allocs = monthlySummary || [];
-
     const previousBalance = allocs
       .filter((a) => compareMonths(a.month, selectedMonth) < 0 && !a.isPaid)
       .reduce((sum, a) => sum + a.remaining, 0);
-
     const selectedAlloc = allocs.find((a) => a.month === selectedMonth);
     const currentBalance = selectedAlloc ? selectedAlloc.remaining : monthlyFee;
-
     return {
       previousBalance,
       currentBalance,
       totalBalance: previousBalance + currentBalance,
     };
   };
-
   const { previousBalance, currentBalance, totalBalance } = getCurrentMonthBalance();
-
   const receivedAmount = parseFloat(receiveAmount) || 0;
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
-
   const selectedAllocation = (monthlySummary || []).find(
     (a) => a.month === selectedMonth
   );
   const isDuplicateMonth = !!selectedAllocation?.isPaid;
   const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
-
   const handleSubmit = async () => {
     if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedArea) return toast.error('Please select an area first');
@@ -455,14 +431,12 @@ function ReceivePaymentModal({
     if (!selectedMonth) return toast.error('Please select a billing month');
     if (!receiveAmount || parseFloat(receiveAmount) <= 0)
       return toast.error('Please enter a valid amount');
-
     if (isDuplicateMonth) {
       toast.error(
         `${customerDetails?.name} has already fully paid for ${selectedMonth}. Duplicate entries are not allowed.`
       );
       return;
     }
-
     setIsSubmitting(true);
     try {
       const customerObj = customers.find((c) => c._id === selectedCustomerId);
@@ -471,7 +445,6 @@ function ReceivePaymentModal({
         setIsSubmitting(false);
         return;
       }
-
       const payload = {
         customer: customerObj._id,
         month: selectedMonth,
@@ -480,9 +453,7 @@ function ReceivePaymentModal({
         paymentDate: paymentDate,
         remarks: notes,
       };
-
       const response = await api.post('/payments', payload);
-
       if (response.data.success) {
         toast.success(
           `Payment of Rs. ${receivedAmount.toLocaleString()} recorded for ${customerObj.name}`
@@ -500,13 +471,11 @@ function ReceivePaymentModal({
       setIsSubmitting(false);
     }
   };
-
   const handleNoPayment = async () => {
     if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedArea) return toast.error('Please select an area first');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
-
     setIsSubmittingNoPayment(true);
     try {
       const customerObj = customers.find((c) => c._id === selectedCustomerId);
@@ -515,7 +484,6 @@ function ReceivePaymentModal({
         setIsSubmittingNoPayment(false);
         return;
       }
-
       const payload = {
         customer: customerObj.name,
         month: selectedMonth,
@@ -525,9 +493,7 @@ function ReceivePaymentModal({
         remarks: notes || 'No payment received',
         isNoPayment: true,
       };
-
       const response = await api.post('/payments', payload);
-
       if (response.data.success) {
         toast.success(`No payment recorded for ${customerObj.name} - ${selectedMonth}`);
         fetchData();
@@ -543,13 +509,10 @@ function ReceivePaymentModal({
       setIsSubmittingNoPayment(false);
     }
   };
-
   if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
       <div className="relative bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 border-gray-200 dark:border-gray-700">
           <div>
@@ -570,7 +533,6 @@ function ReceivePaymentModal({
             <X className="h-5 w-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
-
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-8rem)]">
           {isDuplicateMonth && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-lg text-red-700 dark:text-red-400 text-sm flex items-start gap-2">
@@ -585,7 +547,6 @@ function ReceivePaymentModal({
               </div>
             </div>
           )}
-
           {!isDuplicateMonth && alreadyPaidThisMonth > 0 && (
             <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300 text-sm flex items-start gap-2">
               <Clock className="h-5 w-5 flex-shrink-0 mt-0.5" />
@@ -600,7 +561,6 @@ function ReceivePaymentModal({
               </div>
             </div>
           )}
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-4">
               {/* ✅ ISP field only rendered if the ISP page has ISPs */}
@@ -619,7 +579,6 @@ function ReceivePaymentModal({
                   />
                 </div>
               )}
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <MapPin className="h-4 w-4 inline mr-1" />
@@ -638,7 +597,6 @@ function ReceivePaymentModal({
                   disabled={showIspFilter && !selectedIsp}
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <User className="h-4 w-4 inline mr-1" />
@@ -653,7 +611,6 @@ function ReceivePaymentModal({
                   disabled={!selectedArea}
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   User Name
@@ -666,7 +623,6 @@ function ReceivePaymentModal({
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700/50 text-gray-900 dark:text-white cursor-not-allowed font-semibold"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <Package className="h-4 w-4 inline mr-1" />
@@ -679,7 +635,6 @@ function ReceivePaymentModal({
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed font-semibold"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   <Calendar className="h-4 w-4 inline mr-1" />
@@ -698,7 +653,6 @@ function ReceivePaymentModal({
                 </select>
               </div>
             </div>
-
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -711,7 +665,6 @@ function ReceivePaymentModal({
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white cursor-not-allowed font-semibold"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Previous Balance (Rs.)
@@ -732,7 +685,6 @@ function ReceivePaymentModal({
                   />
                 )}
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Total Balance (Rs.)
@@ -758,7 +710,6 @@ function ReceivePaymentModal({
                   )}
                 </div>
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Receive Amount (Rs.) *
@@ -777,7 +728,6 @@ function ReceivePaymentModal({
                   )}
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Remaining Balance (Rs.)
@@ -795,7 +745,6 @@ function ReceivePaymentModal({
                 />
               </div>
             </div>
-
             <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-gray-200 dark:border-gray-700">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -808,7 +757,6 @@ function ReceivePaymentModal({
                   className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Payment Method *
@@ -824,7 +772,6 @@ function ReceivePaymentModal({
                   <option value="Bank Transfer">Bank Transfer</option>
                 </select>
               </div>
-
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Notes
@@ -839,7 +786,6 @@ function ReceivePaymentModal({
               </div>
             </div>
           </div>
-
           <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               type="button"
@@ -848,7 +794,6 @@ function ReceivePaymentModal({
             >
               Cancel
             </button>
-
             <button
               type="button"
               onClick={handleNoPayment}
@@ -863,11 +808,10 @@ function ReceivePaymentModal({
               ) : (
                 <>
                   <XCircle className="h-4 w-4" />
-                  No Payment 
+                  No Payment&#x20;
                 </>
               )}
             </button>
-
             <button
               type="button"
               onClick={handleSubmit}
@@ -898,24 +842,40 @@ function ReceivePaymentModal({
     </div>
   );
 }
-
 // ============ MAIN PAGE ============
 export default function ReceivePaymentPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [initialCustomerId, setInitialCustomerId] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-
   const [payments, setPayments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [isps, setIsps] = useState<any[]>([]);
   const [areaLookup, setAreaLookup] = useState<Record<string, string>>({});
-
   useEffect(() => {
     fetchAllData();
   }, []);
 
+  useEffect(() => {
+    if (loading || customers.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const customerId = params.get('customerId') || '';
+    const shouldOpen = params.get('openModal') === 'true';
+
+    if (!customerId || !shouldOpen) return;
+
+    const exists = customers.some(
+      (customer: any) => String(customer._id) === String(customerId)
+    );
+
+    if (!exists) return;
+
+    setInitialCustomerId(customerId);
+    setIsModalOpen(true);
+  }, [loading, customers]);
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -924,7 +884,6 @@ export default function ReceivePaymentPage() {
         setLoading(false);
         return;
       }
-
       const [paymentsRes, customersRes, packagesRes, areasRes, ispsRes] =
         await Promise.all([
           api.get('/payments'),
@@ -933,7 +892,6 @@ export default function ReceivePaymentPage() {
           api.get('/areas'),
           api.get('/isps'),
         ]);
-
       const lookup: Record<string, string> = {};
       if (areasRes.data.success) {
         const areaList = areasRes.data.areas || [];
@@ -946,25 +904,21 @@ export default function ReceivePaymentPage() {
         setAreas(areaList);
       }
       setAreaLookup(lookup);
-
       // ✅ ISPs — used to decide whether the ISP filter shows up
       if (ispsRes.data.success && Array.isArray(ispsRes.data.isps)) {
         setIsps(ispsRes.data.isps);
       } else {
         setIsps([]);
       }
-
       if (paymentsRes.data.success) {
         const customerIdMap: Record<string, string> = {};
         const customerIspMap: Record<string, string> = {};
-
         (customersRes.data.customers || []).forEach((c: any) => {
           customerIdMap[c.name] = c.customerId || c.code || 'N/A';
           if (c._id) {
             customerIspMap[String(c._id)] = resolveIspName(c.isp);
           }
         });
-
         const formattedPayments = paymentsRes.data.payments.map((payment: any) => {
           const customerName = payment.customer?.name || 'Unknown';
           const displayUserId =
@@ -972,12 +926,10 @@ export default function ReceivePaymentPage() {
             customerIdMap[customerName] ||
             payment.customer?.code ||
             'N/A';
-
           const resolvedIsp =
             resolveIspName(payment.customer?.isp) ||
             customerIspMap[String(payment.customer?._id || '')] ||
             '';
-
           return {
             id: payment._id,
             receipt: payment.receiptNo || 'N/A',
@@ -1006,11 +958,9 @@ export default function ReceivePaymentPage() {
         });
         setPayments(formattedPayments);
       }
-
       if (customersRes.data.success) {
         setCustomers(customersRes.data.customers);
       }
-
       if (packagesRes.data.success) {
         setPackages(packagesRes.data.packages || []);
       }
@@ -1021,13 +971,10 @@ export default function ReceivePaymentPage() {
       setLoading(false);
     }
   };
-
   const totalCustomers = customers.length;
-
   const totalReceivable = customers.reduce((sum: number, customer: any) => {
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
     if (monthlyFee === 0) return sum;
-
     const customerPayments = payments.filter(
       (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
@@ -1035,16 +982,12 @@ export default function ReceivePaymentPage() {
     customerPayments.forEach((p) => {
       if (p.month) activeMonths.add(p.month);
     });
-
     const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
-
     return sum + monthlyFee * monthCount;
   }, 0);
-
   const totalCollected = payments
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
-
   const totalProfit = payments
     .filter((p) => !p.isNoPayment)
     .reduce((sum, p) => {
@@ -1052,69 +995,51 @@ export default function ReceivePaymentPage() {
         (c) => String(c._id) === String(p.customerId)
       );
       if (!customer) return sum;
-
       const pkgName =
         typeof customer.package === 'string'
           ? customer.package
           : customer.package?.name;
       if (!pkgName) return sum;
-
       const pkg = packages.find((pk: any) => pk.name === pkgName);
       if (!pkg) return sum;
-
       const selling = parseFloat(String(pkg.sellingPrice)) || 0;
       const cost = parseFloat(String(pkg.purchasePrice)) || 0;
       if (selling <= 0) return sum;
-
       const ratio = (selling - cost) / selling;
       const profit = (parseFloat(String(p.amount)) || 0) * ratio;
-
       return sum + profit;
     }, 0);
-
   const totalProfitMargin =
     totalCollected > 0 ? Math.round((totalProfit / totalCollected) * 100) : 0;
-
   const now = new Date();
   const currentMonthIndex = now.getMonth();
   const currentYear = now.getFullYear();
-
   const isPastOrCurrentMonth = (monthStr: string) => {
     const [monthName, yearStr] = monthStr.split(' ');
     const year = parseInt(yearStr);
     const monthIndex = MONTHS.indexOf(monthName);
-
     if (isNaN(year) || monthIndex === -1) return false;
-
     if (year < currentYear) return true;
     if (year === currentYear && monthIndex <= currentMonthIndex) return true;
-
     return false;
   };
-
   const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
   const currentMonth = `${MONTHS[currentMonthIndex]} ${currentYear}`;
-
   customers.forEach((customer: any) => {
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
     if (monthlyFee === 0) return;
-
     const customerPayments = payments.filter(
       (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
-
     if (customerPayments.length === 0) {
       monthStatusCounts.notpaid += 1;
       return;
     }
-
     const allocs = allocatePayments(
       monthlyFee,
       customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
     );
-
     const currentAlloc = allocs.find((a) => a.month === currentMonth);
-
     if (currentAlloc) {
       if (currentAlloc.isPaid) monthStatusCounts.paid += 1;
       else if (currentAlloc.applied > 0) monthStatusCounts.partial += 1;
@@ -1123,11 +1048,9 @@ export default function ReceivePaymentPage() {
       monthStatusCounts.notpaid += 1;
     }
   });
-
   const paidCustomers = monthStatusCounts.paid;
   const partialCustomers = monthStatusCounts.partial;
   const notPaidCustomers = monthStatusCounts.notpaid;
-
   const getPaymentStatus = (payment: any) => {
     const customer = customers.find(
       (c) => String(c._id) === String(payment.customerId)
@@ -1135,44 +1058,35 @@ export default function ReceivePaymentPage() {
     if (!customer) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
-
     const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
     if (monthlyFee === 0) {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
-
     const allCustomerPayments = payments.filter(
       (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
     if (allCustomerPayments.length === 0) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
-
     const allocs = allocatePayments(
       monthlyFee,
       allCustomerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
     );
-
     const thisMonth = allocs.find((a) => a.month === payment.month);
     if (!thisMonth) {
       return { status: 'partial', label: 'Partial', color: 'partial' };
     }
-
     if (thisMonth.isPaid) {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
-
     if (thisMonth.applied > 0) {
       return { status: 'partial', label: 'Partial', color: 'partial' };
     }
-
     if (isPastOrCurrentMonth(payment.month)) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
-
     return { status: 'partial', label: 'Partial', color: 'partial' };
   };
-
   const filteredPayments = payments.filter((payment) => {
     const query = searchQuery.toLowerCase();
     return (
@@ -1182,7 +1096,6 @@ export default function ReceivePaymentPage() {
       payment.month?.toLowerCase().includes(query)
     );
   });
-
   const columns = [
     { key: 'userId', header: 'User ID' },
     { key: 'customer', header: 'User' },
@@ -1227,7 +1140,6 @@ export default function ReceivePaymentPage() {
       },
     },
   ];
-
   if (loading) {
     return (
       <Layout>
@@ -1237,7 +1149,6 @@ export default function ReceivePaymentPage() {
       </Layout>
     );
   }
-
   return (
     <Layout>
       <div className="space-y-5">
@@ -1259,7 +1170,6 @@ export default function ReceivePaymentPage() {
             Receive Payment
           </button>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
@@ -1290,7 +1200,6 @@ export default function ReceivePaymentPage() {
               </div>
             </div>
           </div>
-
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -1309,7 +1218,6 @@ export default function ReceivePaymentPage() {
               </div>
             </div>
           </div>
-
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-5">
             <div className="flex items-center justify-between">
               <div className="flex-1">
@@ -1319,7 +1227,6 @@ export default function ReceivePaymentPage() {
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   Rs. {totalCollected.toLocaleString()}
                 </p>
-
                 <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
@@ -1346,13 +1253,11 @@ export default function ReceivePaymentPage() {
             </div>
           </div>
         </div>
-
         <SearchBar
           placeholder="Search by user ID, user or month..."
           value={searchQuery}
           onChange={setSearchQuery}
         />
-
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
             <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
@@ -1375,13 +1280,10 @@ export default function ReceivePaymentPage() {
               ]}
               onAction={(item, action) => {
                 if (action !== 'pdf') return;
-
                 const customer = customers.find(
                   (c) => String(c._id) === String(item.customerId)
                 );
-
                 const area = resolveAreaName(customer?.area, areaLookup);
-
                 const monthlyFee = parseFloat(String(customer?.monthlyFee)) || 0;
                 const customerPayments = payments.filter(
                   (p) => String(p.customerId) === String(item.customerId) && !p.isNoPayment
@@ -1390,14 +1292,12 @@ export default function ReceivePaymentPage() {
                   monthlyFee,
                   customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
                 );
-
                 const currentAlloc = allocs.find((a) => a.month === item.month);
                 const previousBalance = allocs
                   .filter((a) => compareMonths(a.month, item.month) < 0 && !a.isPaid)
                   .reduce((sum, a) => sum + a.remaining, 0);
                 const currentBalance = currentAlloc ? currentAlloc.remaining : monthlyFee;
                 const totalBalance = previousBalance + currentBalance;
-
                 downloadReceipt({
                   title: 'Payment Receipt',
                   receiptNo: item.receipt,
@@ -1422,7 +1322,6 @@ export default function ReceivePaymentPage() {
                   remainingBalance: Math.max(0, totalBalance - (item.amount || 0)),
                   isNoPayment: item.isNoPayment,
                 });
-
                 toast.success(`Receipt downloaded for ${item.customer}`);
               }}
               accordionTitle="customer"
@@ -1431,10 +1330,14 @@ export default function ReceivePaymentPage() {
             />
           </div>
         </div>
-
         <ReceivePaymentModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          initialCustomerId={initialCustomerId}
+          onClose={() => {
+            setIsModalOpen(false);
+            setInitialCustomerId('');
+            window.history.replaceState({}, '', window.location.pathname);
+          }}
           onSuccess={() => {
             fetchAllData();
           }}
