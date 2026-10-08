@@ -1595,21 +1595,30 @@ const resolveIspName = (
         })
       ),
     },
-    {
-      name: 'package',
-      label: 'Package',
-      type: 'select',
-      required: true,
-      searchable: true,
-      options: packages.map(
-        (p) => ({
+
+{
+  name: 'package',
+  label: 'Package',
+  type: 'select',
+  required: true,
+  searchable: true,
+  placeholder:
+    isps.length > 0
+      ? 'Select ISP first'
+      : 'Select Package',
+  disabledUntil:
+    isps.length > 0 ? 'isp' : undefined,
+  options:
+    isps.length > 0
+      ? []
+      : packages.map((p: any) => ({
           label: `${p.name} - Rs. ${Number(
             p.sellingPrice || 0
           ).toLocaleString()}`,
           value: p.name,
-        })
-      ),
-    },
+        })),
+},
+
     {
       name: 'activationDate',
       label: 'Activation Date',
@@ -1711,6 +1720,43 @@ const resolveDynamicOptions = (
   fieldName: string,
   formData: Record<string, any>
 ) => {
+  
+if (fieldName === 'package') {
+  // Preserve existing behavior when no ISPs are configured.
+  if (isps.length === 0) {
+    return packages.map((p: any) => ({
+      label: `${p.name} - Rs. ${Number(
+        p.sellingPrice || 0
+      ).toLocaleString()}`,
+      value: p.name,
+    }));
+  }
+
+  const selectedIsp = String(formData.isp || '')
+    .trim()
+    .toLowerCase();
+
+  if (!selectedIsp) {
+    return [];
+  }
+
+  return packages
+    .filter((pkg: any) => {
+      // Resolve ObjectId, populated ISP object, or ISP name.
+      const packageIsp = resolveIspName(pkg.isp, isps)
+        .trim()
+        .toLowerCase();
+
+      return packageIsp === selectedIsp;
+    })
+    .map((pkg: any) => ({
+      label: `${pkg.name} - Rs. ${Number(
+        pkg.sellingPrice || 0
+      ).toLocaleString()}`,
+      value: pkg.name,
+    }));
+}
+
   if (fieldName !== 'area') {
     return [];
   }

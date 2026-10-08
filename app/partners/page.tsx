@@ -1603,19 +1603,30 @@ const resolveIspName = (
               },
             ],
     },
-    {
-      name: 'package',
-      label: 'Package',
-      type: 'select',
-      required: true,
-      searchable: true,
-      options: packages.map((p) => ({
-        label: `${p.name} - Rs. ${Number(
-          p.sellingPrice || 0
-        ).toLocaleString()}`,
-        value: p.name,
-      })),
-    },
+
+{
+  name: 'package',
+  label: 'Package',
+  type: 'select',
+  required: true,
+  searchable: true,
+  placeholder:
+    isps.length > 0
+      ? 'Select ISP first'
+      : 'Select Package',
+  disabledUntil:
+    isps.length > 0 ? 'isp' : undefined,
+  options:
+    isps.length > 0
+      ? []
+      : packages.map((p: any) => ({
+          label: `${p.name} - Rs. ${Number(
+            p.sellingPrice || 0
+          ).toLocaleString()}`,
+          value: p.name,
+        })),
+},
+
     {
       name: 'activationDate',
       label: 'Activation Date',
@@ -1686,6 +1697,45 @@ const resolveDynamicOptions = (
   fieldName: string,
   formData: Record<string, any>
 ) => {
+  
+  // Filter packages according to the selected ISP.
+  if (fieldName === 'package') {
+    const allOptions = packages.map((p: any) => ({
+      label: `${p.name} - Rs. ${Number(
+        p.sellingPrice || 0
+      ).toLocaleString()}`,
+      value: p.name,
+    }));
+
+    // No ISPs configured: preserve existing behavior.
+    if (isps.length === 0) {
+      return allOptions;
+    }
+
+    const selectedIsp = String(formData.isp || '')
+      .trim()
+      .toLowerCase();
+
+    if (!selectedIsp) {
+      return [];
+    }
+
+    return packages
+      .filter((pkg: any) => {
+        const packageIsp = resolveIspName(pkg.isp, isps)
+          .trim()
+          .toLowerCase();
+
+        return packageIsp === selectedIsp;
+      })
+      .map((pkg: any) => ({
+        label: `${pkg.name} - Rs. ${Number(
+          pkg.sellingPrice || 0
+        ).toLocaleString()}`,
+        value: pkg.name,
+      }));
+  }
+
   if (fieldName !== 'area') {
     return [];
   }
