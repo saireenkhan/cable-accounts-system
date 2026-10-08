@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const customerSchema = new mongoose.Schema(
@@ -11,6 +12,15 @@ const customerSchema = new mongoose.Schema(
     customerId: {
       type: String,
       trim: true,
+    },
+    customerIdKey: {
+      type: String,
+      select: false,
+    },
+    ispKey: {
+      type: String,
+      select: false,
+      default: '',
     },
     name: {
       type: String,
@@ -35,20 +45,16 @@ const customerSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    area: {
-      type: String,
-      trim: true,
-      default: '',
-    },
-
-    // ✅ NEW — ISP as a plain name string, matching how the form
-    // sends it (options value = isp.name).
+area: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Area',
+  default: null,
+},
     isp: {
       type: String,
       trim: true,
       default: '',
     },
-
     package: {
       type: String,
     },
@@ -76,6 +82,12 @@ const customerSchema = new mongoose.Schema(
   }
 );
 
-customerSchema.index({ tenantId: 1, customerId: 1 }, { unique: true });
+customerSchema.index(
+  { tenantId: 1, ispKey: 1, customerIdKey: 1 },
+  {
+    unique: true,
+    name: 'tenant_isp_userid_unique',
+  }
+);
 
 module.exports = mongoose.model('Customer', customerSchema);

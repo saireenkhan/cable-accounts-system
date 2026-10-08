@@ -9,6 +9,7 @@ import {
   Wifi,
   Eye,
   CreditCard,
+  DollarSignIcon,
   UserCheck,
   UserX,
   UserMinus,
@@ -2225,7 +2226,7 @@ const resolveDynamicOptions = (
                 {
                   value: 'receive-payment',
                   icon: (
-                    <CreditCard className="h-3 w-3" />
+                    <DollarSignIcon className="h-3 w-3" />
                   ),
                 },
                 {

@@ -484,15 +484,15 @@ function ReceivePaymentModal({
         setIsSubmittingNoPayment(false);
         return;
       }
-      const payload = {
-        customer: customerObj.name,
-        month: selectedMonth,
-        amount: 0,
-        paymentMethod: 'None',
-        paymentDate: paymentDate,
-        remarks: notes || 'No payment received',
-        isNoPayment: true,
-      };
+     const payload = {
+  customer: String(customerObj._id),
+  month: selectedMonth,
+  amount: 0,
+  paymentMethod: 'None',
+  paymentDate: paymentDate,
+  remarks: notes || 'No payment received',
+  isNoPayment: true,
+};
       const response = await api.post('/payments', payload);
       if (response.data.success) {
         toast.success(`No payment recorded for ${customerObj.name} - ${selectedMonth}`);

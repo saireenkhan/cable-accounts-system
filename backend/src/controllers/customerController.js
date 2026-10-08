@@ -3,7 +3,11 @@ const AreaModel = require('../models/Area');
 const PaymentModel = require('../models/Payment');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
+const normalizeId = (value) =>
+  String(value ?? '').trim().toLowerCase();
 
+const normalizeIsp = (value) =>
+  String(value ?? '').trim().toLowerCase();
 // ============================================================
 // HELPER: Calculate expiry date
 // One calendar month after activation date
@@ -104,6 +108,7 @@ exports.getCustomer = async (req, res) => {
 // ============================================================
 // CREATE customer
 // ============================================================
+
 exports.createCustomer = async (req, res) => {
   const Area = tenantScope(AreaModel, req);
   const Customer = tenantScope(CustomerModel, req);
@@ -116,7 +121,7 @@ exports.createCustomer = async (req, res) => {
       cnic,
       address,
       area,
-         isp,
+      isp,
       package: pkg,
       discount,
       monthlyFee,
@@ -126,7 +131,11 @@ exports.createCustomer = async (req, res) => {
 
     console.log('📝 Creating customer with data:', req.body);
 
-    if (!customerId) {
+    // Validate required fields
+    const userIdKey = normalizeId(customerId);
+    const ispKey = normalizeIsp(isp);
+
+    if (!userIdKey) {
       return res.status(400).json({
         success: false,
         message: 'User ID is required',
@@ -140,15 +149,20 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    const existingCustomerId = await Customer.findOne({ customerId });
+    // Check duplicate User ID within the same ISP
+    const existingCustomerId = await Customer.findOne({
+      customerIdKey: userIdKey,
+      ispKey: ispKey,
+    });
 
     if (existingCustomerId) {
       return res.status(400).json({
         success: false,
-        message: `User ID "${customerId}" already exists. Please use a different ID.`,
+        message: `User ID "${customerId}" already exists for this ISP.`,
       });
     }
 
+    // Find or create area
     let areaDoc = null;
 
     if (area) {
@@ -163,6 +177,7 @@ exports.createCustomer = async (req, res) => {
       }
     }
 
+    // Validate discount
     const parsedDiscount = parseFloat(discount) || 0;
 
     if (parsedDiscount < 0) {
@@ -172,6 +187,7 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
+    // Calculate expiry date
     let parsedActivationDate = null;
     let calculatedExpiryDate = null;
 
@@ -188,25 +204,26 @@ exports.createCustomer = async (req, res) => {
       calculatedExpiryDate = calculateExpiryDate(parsedActivationDate);
     }
 
+    // Create customer
     const customer = await Customer.create({
       customerId,
+      customerIdKey: userIdKey,
+      ispKey: ispKey,
       name,
       phone,
       cnic: cnic || '',
       address,
 
       area: areaDoc ? areaDoc._id : null,
-       isp: isp || '',    
+      isp: isp || '',
       package: pkg,
 
       discount: parsedDiscount,
-
       monthlyFee: parseFloat(monthlyFee) || 0,
 
       status: status || 'active',
 
       activationDate: parsedActivationDate,
-
       expiryDate: calculatedExpiryDate,
 
       createdBy: req.user ? req.user.id : null,
@@ -218,20 +235,19 @@ exports.createCustomer = async (req, res) => {
 
     console.log('✅ Customer created:', populatedCustomer.customerId);
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       customer: populatedCustomer,
       message: 'Customer created successfully',
     });
+
   } catch (error) {
     console.error('❌ Create customer error:', error);
 
     if (error.code === 11000) {
-      const field = Object.keys(error.keyValue)[0];
-
       return res.status(400).json({
         success: false,
-        message: `Duplicate ${field}: "${error.keyValue[field]}" already exists. Please try again.`,
+        message: 'User ID already exists for this ISP, or another unique field conflicts.',
       });
     }
 
@@ -246,16 +262,14 @@ exports.createCustomer = async (req, res) => {
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message || 'Server error',
     });
   }
 };
 
-// ============================================================
-// UPDATE customer
-// ============================================================
+
 exports.updateCustomer = async (req, res) => {
   const Area = tenantScope(AreaModel, req);
   const Customer = tenantScope(CustomerModel, req);
@@ -268,7 +282,7 @@ exports.updateCustomer = async (req, res) => {
       cnic,
       address,
       area,
-      isp, 
+      isp,
       package: pkg,
       discount,
       monthlyFee,
@@ -288,7 +302,44 @@ exports.updateCustomer = async (req, res) => {
       });
     }
 
-    const update = {};
+    // Check User ID uniqueness within the same ISP and tenant.
+    const nextId =
+      customerId !== undefined
+        ? customerId
+        : existingCustomer.customerId;
+
+    const nextIsp =
+      isp !== undefined
+        ? isp
+        : existingCustomer.isp;
+
+    const nextIdKey = normalizeId(nextId);
+    const nextIspKey = normalizeIsp(nextIsp);
+
+    if (!nextIdKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required',
+      });
+    }
+
+    const duplicate = await Customer.findOne({
+      customerIdKey: nextIdKey,
+      ispKey: nextIspKey,
+      _id: { $ne: existingCustomer._id },
+    });
+
+    if (duplicate) {
+      return res.status(400).json({
+        success: false,
+        message: `User ID "${nextId}" already exists for this ISP.`,
+      });
+    }
+
+    const update = {
+      customerIdKey: nextIdKey,
+      ispKey: nextIspKey,
+    };
 
     if (customerId !== undefined) {
       update.customerId = customerId;
@@ -330,9 +381,11 @@ exports.updateCustomer = async (req, res) => {
         update.area = null;
       }
     }
-if (isp !== undefined) {     // ✅ add this
-  update.isp = isp || '';
-}
+
+    if (isp !== undefined) {
+      update.isp = isp || '';
+    }
+
     if (pkg !== undefined) {
       update.package = pkg;
     }
@@ -378,15 +431,18 @@ if (isp !== undefined) {     // ✅ add this
         }
 
         update.activationDate = parsedActivationDate;
-
         update.expiryDate = calculateExpiryDate(parsedActivationDate);
       }
     }
 
-    const customer = await Customer.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-      runValidators: true,
-    })
+    const customer = await Customer.findByIdAndUpdate(
+      req.params.id,
+      update,
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
       .populate('area', 'name')
       .populate('createdBy', 'name');
 
@@ -439,11 +495,6 @@ if (isp !== undefined) {     // ✅ add this
   }
 };
 
-// ============================================================
-// DELETE customer
-// Cascade: also deletes every payment that belongs to this
-// customer so they disappear from Receive Payments.
-// ============================================================
 exports.deleteCustomer = async (req, res) => {
   const Customer = tenantScope(CustomerModel, req);
   const Payment = tenantScope(PaymentModel, req);
@@ -458,24 +509,14 @@ exports.deleteCustomer = async (req, res) => {
       });
     }
 
-const mongoId = customer._id;
-const businessId = customer.customerId || '';
+    const mongoId = customer._id;
 
-// Only match fields that are ObjectId-typed in the Payment schema.
-// `customer` is an ObjectId, so we can NEVER pass a name string here —
-// Mongoose will throw a CastError before running the query.
-const orConditions = [
-  { customer: mongoId },
-  { customerId: mongoId },
-];
-
-// If your schema also has a `customerId` string field holding the
-// business code (e.g. "USR-001"), we can safely match that as a string.
-if (businessId) {
-  orConditions.push({ customerId: businessId });
-}
-
-const deleteResult = await Payment.deleteMany({ $or: orConditions });
+    // Only match payments by the unique MongoDB customer reference.
+    // Do not match the displayed customerId because different ISPs
+    // may have customers with the same User ID.
+    const deleteResult = await Payment.deleteMany({
+      customer: mongoId,
+    });
 
     await Customer.findByIdAndDelete(req.params.id);
 
@@ -483,16 +524,17 @@ const deleteResult = await Payment.deleteMany({ $or: orConditions });
       `🗑️ Deleted customer "${customer.name}" (${customer.customerId}) and ${deleteResult.deletedCount} related payment(s)`
     );
 
-    res.json({
+    return res.json({
       success: true,
       message: `Customer deleted. ${deleteResult.deletedCount} related payment(s) also removed.`,
       deletedPayments: deleteResult.deletedCount,
     });
+
   } catch (error) {
     console.error('❌ Delete customer error:', error);
     logger.error(`Delete customer error: ${error.message}`);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message || 'Server error',
     });

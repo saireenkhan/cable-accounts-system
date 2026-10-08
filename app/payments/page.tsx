@@ -537,15 +537,14 @@ function ReceivePartnerPaymentModal({
         return;
       }
 
-      const payload = {
-        partner: customerObj.name,
-        month: selectedMonth,
-        amount: receivedAmount,
-        paymentMethod: paymentMethod,
-        paymentDate: paymentDate,
-        remarks: notes,
-      };
-
+const payload = {
+  partner: String(customerObj._id),
+  month: selectedMonth,
+  amount: receivedAmount,
+  paymentMethod: paymentMethod,
+  paymentDate: paymentDate,
+  remarks: notes,
+};
       const response = await api.post('/partner-payments', payload);
 
       if (response.data.success) {
@@ -584,15 +583,15 @@ function ReceivePartnerPaymentModal({
         return;
       }
 
-      const payload = {
-        partner: customerObj.name,
-        month: selectedMonth,
-        amount: 0,
-        paymentMethod: 'None',
-        paymentDate: paymentDate,
-        remarks: notes || 'No payment received',
-        isNoPayment: true,
-      };
+const payload = {
+  partner: String(customerObj._id),
+  month: selectedMonth,
+  amount: 0,
+  paymentMethod: 'None',
+  paymentDate: paymentDate,
+  remarks: notes || 'No payment received',
+  isNoPayment: true,
+};
 
       const response = await api.post('/partner-payments', payload);
 
