@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -26,6 +25,7 @@ import {
 
 interface HeaderProps {
   onMenuClick: () => void;
+  mode?: 'company' | 'master';
 }
 
 const VIEWED_NOTIFICATIONS_KEY = 'smart-recovery-viewed-notifications';
@@ -180,7 +180,11 @@ function getSourceIcon(source: NotificationSource) {
   );
 }
 
-export default function Header({ onMenuClick }: HeaderProps) {
+export default function Header({
+  onMenuClick,
+  mode = 'company',
+}: HeaderProps) {
+  const isMaster = mode === 'master';
   const router = useRouter();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -205,30 +209,62 @@ export default function Header({ onMenuClick }: HeaderProps) {
   // LOAD USER
   // ============================================================
   useEffect(() => {
-    const loadUser = () => {
+    let active = true;
+
+    const loadUser = async () => {
+      if (isMaster) {
+        const token = localStorage.getItem('sr_master_token');
+        if (!token) {
+          if (active) setUser(null);
+          return;
+        }
+
+        try {
+          const response = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL || '/api'}/master/me`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+              cache: 'no-store',
+            }
+          );
+          if (!response.ok) throw new Error('Master session unavailable');
+          const data = await response.json();
+          if (active) setUser(data.user || null);
+        } catch {
+          if (active) setUser(null);
+        }
+        return;
+      }
+
       try {
         const raw = sessionStorage.getItem('user');
-
-        if (raw) {
-          setUser(JSON.parse(raw));
-        }
-      } catch {}
+        if (active) setUser(raw ? JSON.parse(raw) : null);
+      } catch {
+        if (active) setUser(null);
+      }
     };
 
-    loadUser();
-
-    window.addEventListener('user-updated', loadUser);
-
+    void loadUser();
+    const eventName = isMaster ? 'master-user-updated' : 'user-updated';
+    window.addEventListener(eventName, loadUser);
     return () => {
-      window.removeEventListener('user-updated', loadUser);
+      active = false;
+      window.removeEventListener(eventName, loadUser);
     };
-  }, [menuOpen]);
+  }, [isMaster]);
 
+  // ============================================================
   // ============================================================
   // LOAD NOTIFICATIONS
   // ============================================================
   useEffect(() => {
     let cancelled = false;
+
+    if (isMaster) {
+      setNotificationCount(0);
+      setHeaderNotifications([]);
+      return () => { cancelled = true; };
+    }
 
     const loadNotifications = async () => {
       try {
@@ -364,7 +400,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
         handleStorage
       );
     };
-  }, []);
+  }, [isMaster]);
 
   // ============================================================
   // CLOSE DROPDOWNS ON OUTSIDE CLICK / ESCAPE
@@ -505,11 +541,16 @@ export default function Header({ onMenuClick }: HeaderProps) {
   // LOGOUT
   // ============================================================
   const handleLogout = () => {
+    setMenuOpen(false);
+    if (isMaster) {
+      localStorage.removeItem('sr_master_token');
+      toast.success('Master logged out');
+      router.replace('/login');
+      return;
+    }
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
-
     toast.success('Logged out');
-
     router.replace('/');
   };
 
@@ -534,8 +575,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
           </button>
 
           <h1 className="text-lg text-[#d6b138] dark:text-[#d6b138] hidden sm:block truncate">
-            {user?.tenantName ||
-              'Cable Management System'}
+            {isMaster
+              ? 'Smart Recovery - Master Control Panel'
+              : user?.tenantName || 'Cable Management System'}
           </h1>
         </div>
 
@@ -545,6 +587,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
           {/* ======================================================
               NOTIFICATIONS
           ====================================================== */}
+          {!isMaster && (
           <div
             className="relative"
             ref={notificationRef}
@@ -693,6 +736,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
               </div>
             )}
           </div>
+          )}
 
           {/* ======================================================
               USER MENU
@@ -751,12 +795,14 @@ export default function Header({ onMenuClick }: HeaderProps) {
                 <button
                   onClick={() => {
                     setMenuOpen(false);
-                    router.push('/profile');
+router.push(
+  isMaster ? '/master-profile' : '/profile'
+);
                   }}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <UserCircle className="h-4 w-4" />
-                  My Profile
+                  {isMaster ? 'Master Profile' : 'My Profile'}
                 </button>
 
                 <button

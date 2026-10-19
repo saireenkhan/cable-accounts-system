@@ -30,6 +30,7 @@ const dealerAreaRoutes = require('./routes/dealerAreaRoutes');
 const partnerAreaRoutes = require('./routes/partnerAreaRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
 const promiseRoutes = require('./routes/promiseRoutes');
+const masterRoutes = require('./routes/masterRoutes');
 // ============================================================
 // PROCESS ERROR HANDLERS
 // ============================================================
@@ -207,7 +208,7 @@ app.use(
   '/api/partners',
   partnerRoutes
 );
-
+app.use('/api/master', masterRoutes);
 // ============================================================
 // ERROR HANDLER
 // ============================================================

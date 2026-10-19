@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -8,6 +9,7 @@ import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const router = useRouter();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,56 +21,163 @@ export default function LoginPage() {
     setError('');
     setIsLoading(true);
 
+    const credentials = {
+      email: email.trim().toLowerCase(),
+      password,
+    };
+
     try {
-      const response = await api.post('/auth/login', { email, password });
+      // ==========================================
+      // STEP 1: CHECK MASTER ADMIN LOGIN FIRST
+      // ==========================================
 
-      if (response.data.success) {
-        const { token, user } = response.data;
+      try {
+        const masterResponse = await api.post(
+          '/master/login',
+          credentials
+        );
 
-        sessionStorage.setItem('token', token);
-        sessionStorage.setItem('user', JSON.stringify(user));
+        const masterData = masterResponse.data;
 
-        toast.success('Login successful!');
-        router.replace('/dashboard');
-      } else {
-        setError('Invalid email or password');
+        if (
+          masterData.success &&
+          masterData.token &&
+          masterData.user?.role === 'superadmin'
+        ) {
+          // Clear previous company session
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('user');
+
+          // Save Master JWT
+          localStorage.setItem(
+            'sr_master_token',
+            masterData.token
+          );
+
+          toast.success(
+            'Welcome to Master Control Panel!'
+          );
+
+          // Redirect Master to separate dashboard
+          router.replace('/master-dashboard');
+          return;
+        }
+
+        throw new Error('Unexpected Master login response');
+      } catch (masterError: any) {
+        const masterStatus = masterError.response?.status;
+
+        // Only fall back to company login if
+        // Master credentials were rejected.
+        if (masterStatus !== 401) {
+          throw masterError;
+        }
       }
+
+      // ==========================================
+      // STEP 2: NORMAL COMPANY LOGIN
+      // ==========================================
+
+      const response = await api.post(
+        '/auth/login',
+        credentials
+      );
+
+      if (
+        !response.data.success ||
+        !response.data.token
+      ) {
+        throw new Error('Invalid email or password');
+      }
+
+      const { token, user } = response.data;
+
+      // Extra safety: Master must never be
+      // redirected into the company dashboard.
+      if (user?.role === 'superadmin') {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
+
+        localStorage.setItem(
+          'sr_master_token',
+          token
+        );
+
+        toast.success(
+          'Welcome to Master Control Panel!'
+        );
+
+        router.replace('/master-dashboard');
+        return;
+      }
+
+      // ==========================================
+      // STEP 3: COMPANY USER SESSION
+      // ==========================================
+
+      localStorage.removeItem('sr_master_token');
+
+      sessionStorage.setItem('token', token);
+      sessionStorage.setItem(
+        'user',
+        JSON.stringify(user)
+      );
+
+      toast.success('Login successful!');
+
+      router.replace('/dashboard');
+
     } catch (err: any) {
       const status = err.response?.status;
-      const message =
-        err.response?.data?.message || 'Invalid email or password';
 
-      if (status === 429) {
-        setError('Too many attempts. Please wait a minute and try again.');
-        toast.error('Too many attempts. Please wait a minute.');
-      } else {
-        setError(message);
-        toast.error(message);
-      }
+      const message =
+        status === 429
+          ? 'Too many attempts. Please wait a minute and try again.'
+          : status === 401
+          ? 'Invalid email or password'
+          : err.response?.data?.message ||
+            err.message ||
+            'Login failed';
+
+      setError(message);
+      toast.error(message);
+
     } finally {
       setIsLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 p-4">
       <div className="w-full max-w-md">
+
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-[#d6b138]  mb-4">
-            <span className="text-white font-bold text-2xl">SR</span>
+          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-[#d6b138] mb-4">
+            <span className="text-white font-bold text-2xl">
+              SR
+            </span>
           </div>
+
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
             Smart-Recovery
           </h1>
+
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
             Sign in to manage your cable business
           </p>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-gray-800/50 border border-gray-100 dark:border-gray-700 p-6 md:p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
+
             {error && (
               <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm flex items-start gap-2">
-                <span className="text-lg mt-0.5">⚠️</span>
+                <span className="text-lg mt-0.5">
+                  ⚠️
+                </span>
                 <span>{error}</span>
               </div>
             )}
@@ -77,12 +186,16 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Email Address
               </label>
+
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 required
                 disabled={isLoading}
+                autoComplete="username"
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:opacity-50"
               />
             </div>
@@ -91,18 +204,34 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Password
               </label>
+
               <div className="relative">
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type={
+                    showPassword
+                      ? 'text'
+                      : 'password'
+                  }
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) =>
+                    setPassword(e.target.value)
+                  }
                   required
                   disabled={isLoading}
+                  autoComplete="current-password"
                   className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pr-12 disabled:opacity-50"
                 />
+
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() =>
+                    setShowPassword(!showPassword)
+                  }
+                  aria-label={
+                    showPassword
+                      ? 'Hide password'
+                      : 'Show password'
+                  }
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? (
@@ -139,8 +268,7 @@ export default function LoginPage() {
               )}
             </button>
 
-            <div className="text-center text-xs text-gray-400 dark:text-gray-500 border-t border-gray-200 dark:border-gray-700 pt-4">
-            </div>
+            <div className="text-center text-xs text-gray-400 dark:text-gray-500 border-t border-gray-200 dark:border-gray-700 pt-4" />
           </form>
         </div>
 
