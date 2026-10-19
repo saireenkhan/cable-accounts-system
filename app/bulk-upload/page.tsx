@@ -118,6 +118,11 @@ export default function BulkUploadPage() {
   const [target, setTarget] = useState<TargetType>('customers');
   const [file, setFile] = useState<File | null>(null);
   const [selectedArea, setSelectedArea] = useState('');
+  const [isps, setIsps] = useState<{ _id: string; name: string }[]>([]);
+  const [selectedISP, setSelectedISP] = useState('');
+  const [ispsLoading, setIspsLoading] = useState(true);
+  const [ispLoadFailed, setIspLoadFailed] = useState(false);
+  const hasISPs = isps.length > 0;
   const [areas, setAreas] = useState<any[]>([]);
   const [areasLoading, setAreasLoading] = useState(true);
 
@@ -140,28 +145,61 @@ export default function BulkUploadPage() {
     setFile(null);
     setResult(null);
     setSelectedPartner('');
+    setSelectedISP('');
   }, [target]);
 
-  // ✅ Fetch areas based on target
+  // Load ISP configuration before loading areas.
   useEffect(() => {
-    const fetchAreas = async () => {
-      setAreasLoading(true);
-      setSelectedArea('');
+    let active = true;
+    (async () => {
+      try {
+        const res = await api.get('/isps');
+        if (!active) return;
+        if (!res.data.success || !Array.isArray(res.data.isps)) {
+          throw new Error('Invalid ISP response');
+        }
+        setIsps(res.data.isps);
+        setIspLoadFailed(false);
+      } catch (error) {
+        console.error('Failed to load ISPs:', error);
+        if (active) {
+          setIspLoadFailed(true);
+          toast.error('Unable to check ISP configuration');
+        }
+      } finally {
+        if (active) setIspsLoading(false);
+      }
+    })();
+    return () => { active = false; };
+  }, []);
+
+  // Filter areas by selected ISP only when the tenant has ISPs.
+  useEffect(() => {
+    if (ispsLoading || ispLoadFailed) return;
+    let active = true;
+    setSelectedArea('');
+    setAreas([]);
+    if (hasISPs && !selectedISP) {
+      setAreasLoading(false);
+      return;
+    }
+    setAreasLoading(true);
+    (async () => {
       try {
         const endpoint = target === 'customers' ? '/areas' : '/partner-areas';
-        const res = await api.get(endpoint);
-        if (res.data.success) {
-          setAreas(res.data.areas || []);
-        }
-      } catch (err) {
-        console.error('Failed to fetch areas:', err);
-        toast.error('Failed to load areas');
+        const res = await api.get(endpoint, {
+          params: hasISPs ? { isp: selectedISP } : {},
+        });
+        if (active) setAreas(res.data.success && Array.isArray(res.data.areas) ? res.data.areas : []);
+      } catch (error) {
+        console.error('Failed to fetch areas:', error);
+        if (active) toast.error('Failed to load areas');
       } finally {
-        setAreasLoading(false);
+        if (active) setAreasLoading(false);
       }
-    };
-    fetchAreas();
-  }, [target]);
+    })();
+    return () => { active = false; };
+  }, [target, selectedISP, ispsLoading, ispLoadFailed, hasISPs]);
 
   // ✅ NEW — fetch master partner list (only for partners target)
   useEffect(() => {
@@ -231,6 +269,14 @@ export default function BulkUploadPage() {
   };
 
   const handleUpload = async () => {
+    if (ispsLoading || ispLoadFailed) {
+      toast.error('ISP configuration is not available');
+      return;
+    }
+    if (hasISPs && !selectedISP) {
+      toast.error('Please select an ISP first');
+      return;
+    }
     if (!selectedArea) {
       toast.error('Please select an area first');
       return;
@@ -251,6 +297,7 @@ export default function BulkUploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('area', selectedArea);
+      if (hasISPs) formData.append('isp', selectedISP);
 
       // ✅ NEW — send partner only when target is partners
       if (target === 'partners') {
@@ -452,6 +499,31 @@ export default function BulkUploadPage() {
           </div>
         </div>
 
+        {/* ISP is optional only when no ISPs are configured */}
+        {!ispsLoading && !ispLoadFailed && hasISPs && (
+          <div className="rounded-xl border border-[#d6b138]/60 bg-white p-5 dark:bg-gray-800 dark:border-gray-700">
+            <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">
+              Select ISP <span className="text-red-500">*</span>
+            </h2>
+            <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+              Areas will be filtered by the selected ISP.
+            </p>
+            <select
+              value={selectedISP}
+              onChange={(e) => { setSelectedISP(e.target.value); setSelectedArea(''); }}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 dark:bg-gray-700 dark:text-white dark:border-gray-600"
+            >
+              <option value="">-- Select ISP --</option>
+              {isps.map((isp) => <option key={isp._id} value={isp.name}>{isp.name}</option>)}
+            </select>
+          </div>
+        )}
+        {(ispsLoading || ispLoadFailed) && (
+          <div className="rounded-xl border bg-white p-4 text-sm text-amber-700 dark:bg-gray-800">
+            {ispsLoading ? 'Checking ISP configuration...' : 'Unable to load ISP configuration. Refresh the page to retry.'}
+          </div>
+        )}
+
         {/* STEP 1 — AREA SELECTOR */}
         <div
           className={cn(
@@ -488,6 +560,8 @@ export default function BulkUploadPage() {
               <Loader2 className="h-4 w-4 animate-spin" />
               Loading {areaLabel.toLowerCase()}s...
             </div>
+          ) : hasISPs && !selectedISP ? (
+            <p className="text-sm text-gray-500">Select an ISP above to load areas.</p>
           ) : areas.length === 0 ? (
             <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg text-sm text-amber-800 dark:text-amber-300 flex items-start gap-2">
               <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
@@ -618,7 +692,7 @@ export default function BulkUploadPage() {
         )}
 
         {/* REST OF PAGE */}
-        {(!selectedArea || (target === 'partners' && !selectedPartner)) ? (
+        {(ispsLoading || ispLoadFailed || (hasISPs && !selectedISP) || !selectedArea || (target === 'partners' && !selectedPartner)) ? (
           <div className="bg-gray-50 dark:bg-gray-900/50 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center">
             <MapPin className="h-10 w-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 dark:text-gray-400 font-medium">
