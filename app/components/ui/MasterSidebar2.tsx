@@ -36,8 +36,8 @@ const menuItems = [
     title: 'MANAGEMENT',
     items: [
       {
-        label: 'Create Company & Admin',
-        href: '/master/admins/new',
+        label: 'Create Admin',
+        href: '/create-admin',
         icon: UserPlus,
         enabled: true,
       },
@@ -91,10 +91,10 @@ export default function MasterSidebar2() {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('sr_master_token');
-    router.replace('/master/login');
-  };
+const handleLogout = () => {
+  localStorage.removeItem('sr_master_token');
+  router.replace('/');
+};
 
   return (
     <>

@@ -1,5 +1,7 @@
+
 const express = require('express');
 const router = express.Router();
+
 const {
   login,
   getMe,
@@ -9,14 +11,56 @@ const {
   verifyPassword,
   updateTenantName,
 } = require('../controllers/authController');
-const { protect } = require('../middleware/auth');
+
+const {
+  protect,
+  authorize,
+  requireTenant,
+} = require('../middleware/auth');
+
+// ============================================
+// 1. PUBLIC COMPANY LOGIN
+// ============================================
+// POST /api/auth/login
 
 router.post('/login', login);
-router.get('/me', protect, getMe);
-router.put('/me', protect, updateMe);
-router.put('/password', protect, updatePassword);
-router.put('/avatar', protect, updateAvatar);
-router.post('/verify-password', protect, verifyPassword);
-router.put('/tenant/name', protect, updateTenantName);
+
+// ============================================
+// 2. AUTHENTICATED USER PROFILE
+// ============================================
+// All routes below require valid JWT
+// ============================================
+
+router.use(protect);
+
+// GET /api/auth/me
+router.get('/me', getMe);
+
+// PUT /api/auth/me
+router.put('/me', updateMe);
+
+// PUT /api/auth/password
+router.put('/password', updatePassword);
+
+// PUT /api/auth/avatar
+router.put('/avatar', updateAvatar);
+
+// POST /api/auth/verify-password
+router.post('/verify-password', verifyPassword);
+
+// ============================================
+// 3. COMPANY ADMINISTRATION
+// ============================================
+// Only a company administrator can update
+// their own company's name.
+// ============================================
+
+// PUT /api/auth/tenant/name
+router.put(
+  '/tenant/name',
+  requireTenant,
+  authorize('admin'),
+  updateTenantName
+);
 
 module.exports = router;

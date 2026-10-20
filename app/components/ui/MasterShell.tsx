@@ -26,7 +26,7 @@ export default function MasterShell({
       const token = localStorage.getItem('sr_master_token');
 
       if (!token) {
-        router.replace('/login');
+        router.replace('/');
         return;
       }
 
@@ -57,7 +57,7 @@ export default function MasterShell({
       } catch {
         if (!cancelled) {
           localStorage.removeItem('sr_master_token');
-          router.replace('/login');
+          router.replace('/');
         }
       }
     };

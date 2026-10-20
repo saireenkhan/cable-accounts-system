@@ -1,251 +1,510 @@
+
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
 
+// ============================================
+// GENERATE JWT
+// ============================================
+
 const generateToken = (id, tenantId) => {
-  return jwt.sign({ id, tenantId: tenantId || null }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE || '30d',
-  });
+  return jwt.sign(
+    {
+      id: id.toString(),
+      tenantId: tenantId ? tenantId.toString() : null,
+    },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.JWT_EXPIRE || '30d',
+    }
+  );
 };
 
-// Helper: attach tenantName to a user object
-async function attachTenantName(user) {
-  let tenantName = null;
-  if (user.tenantId) {
-    const t = await Tenant.findById(user.tenantId).lean();
-    if (t) tenantName = t.name;
-  }
-  return tenantName;
+// ============================================
+// USER RESPONSE HELPER
+// ============================================
+
+function formatUser(user, tenantName = null) {
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    tenantId: user.tenantId || null,
+    tenantName,
+    phone: user.phone || '',
+    address: user.address || '',
+    avatar: user.avatar || '',
+  };
 }
+
+// ============================================
+// TENANT HELPER
+// ============================================
+
+async function getActiveTenant(user) {
+  if (!user.tenantId) {
+    return null;
+  }
+
+  return Tenant.findById(user.tenantId);
+}
+
+async function attachTenantName(user) {
+  const tenant = await getActiveTenant(user);
+
+  return tenant ? tenant.name : null;
+}
+
+// ============================================
+// 1. COMPANY ADMIN / STAFF LOGIN
+// ============================================
+// Uses existing tenant login route
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
-    if (typeof email !== 'string' || typeof password !== 'string') {
-      return res.status(400).json({ message: 'Invalid credentials' });
+    if (
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required',
+      });
     }
 
-    const user = await User.findOne({ email }).select('+password');
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+    }).select('+password');
+
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
+    }
+
+    // Master accounts use the separate Master login
+    if (user.role === 'superadmin') {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
     }
 
     const isMatch = await user.comparePassword(password);
+
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid email or password',
+      });
     }
 
-    user.lastLogin = new Date();
-    await user.save();
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your user account has been disabled',
+      });
+    }
 
-    const tenantName = await attachTenantName(user);
+    // Validate company association
+    if (!user.tenantId) {
+      return res.status(403).json({
+        success: false,
+        message: 'No company is linked to this account',
+      });
+    }
 
-    res.json({
+    const tenant = await getActiveTenant(user);
+
+    if (!tenant) {
+      return res.status(403).json({
+        success: false,
+        message: 'Company account not found',
+      });
+    }
+
+    if (!tenant.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your company account has been disabled',
+      });
+    }
+
+    // Update login activity without saving password again
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          lastLogin: new Date(),
+        },
+      }
+    );
+
+    const token = generateToken(
+      user._id,
+      tenant._id
+    );
+
+    return res.status(200).json({
       success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        tenantId: user.tenantId || null,
-        tenantName,
-        phone: user.phone || '',
-        address: user.address || '',
-        avatar: user.avatar || '',
-      },
-      token: generateToken(user._id, user.tenantId),
+      message: 'Login successful',
+      user: formatUser(user, tenant.name),
+      token,
     });
   } catch (error) {
     logger.error(`Login error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
+
+// ============================================
+// 2. GET CURRENT USER
+// ============================================
 
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
 
     const tenantName = await attachTenantName(user);
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        tenantId: user.tenantId || null,
-        tenantName,
-        phone: user.phone || '',
-        address: user.address || '',
-        avatar: user.avatar || '',
-      },
+      user: formatUser(user, tenantName),
     });
   } catch (error) {
     logger.error(`getMe error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
 
-// Update name, phone, address
+// ============================================
+// 3. UPDATE PROFILE
+// ============================================
+
 exports.updateMe = async (req, res) => {
   try {
-    const { name, phone, address } = req.body;
+    const { name, phone, address } = req.body || {};
 
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
 
-    if (name !== undefined) user.name = String(name).trim();
-    if (phone !== undefined) user.phone = String(phone).trim();
-    if (address !== undefined) user.address = String(address).trim();
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    if (name !== undefined) {
+      if (
+        typeof name !== 'string' ||
+        !name.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid name is required',
+        });
+      }
+
+      user.name = name.trim();
+    }
+
+    if (phone !== undefined) {
+      user.phone = String(phone).trim();
+    }
+
+    if (address !== undefined) {
+      user.address = String(address).trim();
+    }
 
     await user.save();
 
     const tenantName = await attachTenantName(user);
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        tenantId: user.tenantId || null,
-        tenantName,
-        phone: user.phone || '',
-        address: user.address || '',
-        avatar: user.avatar || '',
-      },
+      user: formatUser(user, tenantName),
     });
   } catch (error) {
     logger.error(`updateMe error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
 
-// Change password
+// ============================================
+// 4. CHANGE PASSWORD
+// ============================================
+
 exports.updatePassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body || {};
 
-    if (typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
-      return res.status(400).json({ message: 'Both passwords are required' });
+    if (
+      typeof currentPassword !== 'string' ||
+      typeof newPassword !== 'string' ||
+      !currentPassword
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both passwords are required',
+      });
     }
 
-    if (newPassword.length < 6) {
-      return res
-        .status(400)
-        .json({ message: 'New password must be at least 6 characters' });
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters',
+      });
     }
 
-    const user = await User.findById(req.user.id).select('+password');
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (newPassword.length > 128) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password cannot exceed 128 characters',
+      });
+    }
 
-    const isMatch = await user.comparePassword(currentPassword);
+    const user = await User.findById(req.user.id)
+      .select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    const isMatch = await user.comparePassword(
+      currentPassword
+    );
+
     if (!isMatch) {
-      return res.status(401).json({ message: 'Current password is incorrect' });
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect',
+      });
     }
 
     user.password = newPassword;
+
+    // Existing User model hashes password on save
     await user.save();
 
-    res.json({ success: true, message: 'Password updated' });
+    return res.status(200).json({
+      success: true,
+      message: 'Password updated',
+    });
   } catch (error) {
     logger.error(`updatePassword error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
 
-// Update avatar (stores file as base64 in DB)
+// ============================================
+// 5. UPDATE AVATAR
+// ============================================
+
 exports.updateAvatar = async (req, res) => {
   try {
-    const { avatar } = req.body;
+    const { avatar } = req.body || {};
 
-    if (!avatar || typeof avatar !== 'string' || !avatar.startsWith('data:image/')) {
-      return res.status(400).json({ message: 'Invalid image data' });
+    if (
+      !avatar ||
+      typeof avatar !== 'string' ||
+      !avatar.startsWith('data:image/')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid image data',
+      });
     }
 
     if (avatar.length > 2_800_000) {
-      return res.status(400).json({ message: 'Image too large (max ~2MB)' });
+      return res.status(400).json({
+        success: false,
+        message: 'Image too large (max ~2MB)',
+      });
     }
 
     const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
 
     user.avatar = avatar;
+
     await user.save();
 
-    res.json({ success: true, avatar: user.avatar });
+    return res.status(200).json({
+      success: true,
+      avatar: user.avatar,
+    });
   } catch (error) {
     logger.error(`updateAvatar error: ${error.message}`);
-    res.status(500).json({ message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
 
-// Verify current password (for live validation on profile page)
+// ============================================
+// 6. VERIFY CURRENT PASSWORD
+// ============================================
+
 exports.verifyPassword = async (req, res) => {
   try {
-    const { password } = req.body;
-    if (typeof password !== 'string' || !password) {
-      return res.status(400).json({ success: false, message: 'Password required' });
+    const { password } = req.body || {};
+
+    if (
+      typeof password !== 'string' ||
+      !password
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password required',
+      });
     }
 
-    const user = await User.findById(req.user.id).select('+password');
+    const user = await User.findById(req.user.id)
+      .select('+password');
+
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
     }
 
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await user.comparePassword(
+      password
+    );
+
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Incorrect password' });
+      return res.status(401).json({
+        success: false,
+        message: 'Incorrect password',
+      });
     }
 
-    res.json({ success: true });
+    return res.status(200).json({
+      success: true,
+    });
   } catch (error) {
     logger.error(`verifyPassword error: ${error.message}`);
-    res.status(500).json({ success: false, message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };
 
-// Update the current tenant's name
+// ============================================
+// 7. UPDATE COMPANY NAME
+// ============================================
+
 exports.updateTenantName = async (req, res) => {
   try {
-    const { companyName } = req.body;
+    const { companyName } = req.body || {};
 
-    if (!companyName || !String(companyName).trim()) {
+    if (
+      typeof companyName !== 'string' ||
+      !companyName.trim()
+    ) {
       return res.status(400).json({
         success: false,
         message: 'Company name is required',
       });
     }
 
-    const tenantId = req.user.tenantId;
-    if (!tenantId) {
+    if (companyName.trim().length > 120) {
       return res.status(400).json({
         success: false,
-        message: 'No tenant linked to this account',
+        message: 'Company name cannot exceed 120 characters',
       });
     }
 
-    const tenant = await Tenant.findByIdAndUpdate(
-      tenantId,
-      { name: String(companyName).trim() },
-      { new: true }
+    if (
+      !req.user ||
+      req.user.role !== 'admin' ||
+      !req.tenantId
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only company administrators can update company details',
+      });
+    }
+
+    const tenant = await Tenant.findOneAndUpdate(
+      {
+        _id: req.tenantId,
+        isActive: true,
+      },
+      {
+        $set: {
+          name: companyName.trim(),
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
     );
 
     if (!tenant) {
       return res.status(404).json({
         success: false,
-        message: 'Tenant not found',
+        message: 'Active company not found',
       });
     }
 
-    res.json({ success: true, tenant });
+    return res.status(200).json({
+      success: true,
+      tenant,
+    });
   } catch (error) {
     logger.error(`updateTenantName error: ${error.message}`);
-    res.status(500).json({ success: false, message: 'Server error' });
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error',
+    });
   }
 };

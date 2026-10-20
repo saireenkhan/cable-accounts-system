@@ -540,19 +540,22 @@ export default function Header({
   // ============================================================
   // LOGOUT
   // ============================================================
-  const handleLogout = () => {
-    setMenuOpen(false);
-    if (isMaster) {
-      localStorage.removeItem('sr_master_token');
-      toast.success('Master logged out');
-      router.replace('/login');
-      return;
-    }
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
-    toast.success('Logged out');
+const handleLogout = () => {
+  setMenuOpen(false);
+
+  if (isMaster) {
+    localStorage.removeItem('sr_master_token');
+    toast.success('Master logged out');
     router.replace('/');
-  };
+    return;
+  }
+
+  // Existing company logout remains unchanged
+  sessionStorage.removeItem('token');
+  sessionStorage.removeItem('user');
+  toast.success('Logged out');
+  router.replace('/');
+};
 
   const initial = (
     user?.name || 'A'
