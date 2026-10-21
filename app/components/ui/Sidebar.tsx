@@ -1,7 +1,6 @@
 
 'use client';
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -261,6 +260,95 @@ export function Sidebar({
   const pathname = usePathname();
   const isMobile = useMediaQuery('(max-width: 768px)');
 
+const [allowedPages, setAllowedPages] = useState<string[]>([]);
+const [permissionsLoading, setPermissionsLoading] = useState(true);
+const [permissionsError, setPermissionsError] = useState('');
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadPackagePermissions() {
+    setPermissionsLoading(true);
+    setPermissionsError('');
+
+    try {
+      const token =
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('sr_token') ||
+        localStorage.getItem('token');
+
+      if (!token) {
+        throw new Error('Tenant login required');
+      }
+
+      const apiBase = (
+        process.env.NEXT_PUBLIC_API_URL || '/api'
+      ).replace(/\/$/, '');
+
+      const response = await fetch(
+        `${apiBase}/tenant-package/me`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          cache: 'no-store',
+        }
+      );
+
+      const contentType =
+        response.headers.get('content-type') || '';
+
+      if (!contentType.includes('application/json')) {
+        throw new Error('Package API returned a non-JSON response');
+      }
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(
+          data.message || 'Failed to load package permissions'
+        );
+      }
+
+      if (!Array.isArray(data.allowedPages)) {
+        throw new Error('Invalid package permissions response');
+      }
+
+      if (!cancelled) {
+        setAllowedPages(data.allowedPages);
+      }
+    } catch (error) {
+      if (!cancelled) {
+        setAllowedPages([]);
+        setPermissionsError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to load package permissions'
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setPermissionsLoading(false);
+      }
+    }
+  }
+
+  void loadPackagePermissions();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
+const visibleMenuItems = useMemo(() => {
+  const permitted = new Set(allowedPages);
+
+  return menuItems.filter(item =>
+    permitted.has(item.href)
+  );
+}, [allowedPages]);
+
   // Only ONE section can be open at a time
   const [expanded, setExpanded] =
     useState<SidebarSection | null>(activeSection);
@@ -270,7 +358,7 @@ export function Sidebar({
   ======================================================= */
 
   useEffect(() => {
-    const match = menuItems.find(
+   const match = visibleMenuItems.find(
       (item) =>
         pathname === item.href ||
         pathname?.startsWith(item.href + '/')
@@ -416,11 +504,22 @@ export function Sidebar({
         ================================================= */}
 
         <nav className="flex-1 overflow-y-auto py-4 px-3">
+          {permissionsLoading && (
+  <p className="px-3 py-3 text-sm text-slate-400">
+    Loading permitted pages...
+  </p>
+)}
+
+{permissionsError && (
+  <p className="px-3 py-3 text-sm text-red-400">
+    {permissionsError}
+  </p>
+)}
 
           {sectionOrder.map((section) => {
-            const items = menuItems.filter(
-              (item) => item.section === section
-            );
+const items = visibleMenuItems.filter(
+  (item) => item.section === section
+);
 
             if (items.length === 0) {
               return null;

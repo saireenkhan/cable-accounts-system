@@ -31,6 +31,8 @@ const partnerAreaRoutes = require('./routes/partnerAreaRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
 const promiseRoutes = require('./routes/promiseRoutes');
 const masterRoutes = require('./routes/masterRoutes');
+const masterPackageRoutes = require("./routes/masterPackageRoutes");
+const tenantPackageRoutes = require('./routes/tenantPackageRoutes');
 // ============================================================
 // PROCESS ERROR HANDLERS
 // ============================================================
@@ -209,6 +211,9 @@ app.use(
   partnerRoutes
 );
 app.use('/api/master', masterRoutes);
+
+app.use("/api/master/packages", masterPackageRoutes);
+app.use('/api/tenant-package', tenantPackageRoutes);
 // ============================================================
 // ERROR HANDLER
 // ============================================================

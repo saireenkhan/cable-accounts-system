@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Building2,
   UserPlus,
+  Blocks,
   Users,
   CreditCard,
   ShieldCheck,
@@ -39,6 +40,12 @@ const menuItems = [
         label: 'Create Admin',
         href: '/create-admin',
         icon: UserPlus,
+        enabled: true,
+      },
+        {
+        label: 'Packages',
+        href: '/master-packages',
+        icon: Blocks,
         enabled: true,
       },
       {

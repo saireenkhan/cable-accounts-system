@@ -8,33 +8,37 @@ const router = express.Router();
 const requireMaster = require('../middleware/requireMaster');
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
-
-// ======================================================
-// CONFIGURATION
-// ======================================================
-
-const PLANS = [
-  'standard',
-  'starter',
-  'business',
-  'professional',
-  'enterprise',
-];
+const MasterPackage = require('../models/MasterPackage');
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const fail = (res, status, message) => {
+function fail(res, status, message) {
   return res.status(status).json({
     success: false,
     message,
   });
-};
+}
 
-const adminQuery = (id) => ({
-  _id: id,
-  role: 'admin',
-  tenantId: { $ne: null },
-});
+function isValidId(id) {
+  return mongoose.isValidObjectId(id);
+}
+
+function adminQuery(id) {
+  return {
+    _id: id,
+    role: 'admin',
+    tenantId: { $ne: null },
+  };
+}
+
+async function resolvePackage(id) {
+  if (!isValidId(id)) return null;
+
+  return MasterPackage.findOne({
+    _id: id,
+    isActive: true,
+  });
+}
 
 function formatAdmin(admin) {
   const company =
@@ -58,6 +62,7 @@ function formatAdmin(admin) {
           name: company.name,
           ownerEmail: company.ownerEmail,
           plan: company.plan,
+          masterPackageId: company.masterPackageId,
           isActive: company.isActive,
         }
       : null,
@@ -79,11 +84,7 @@ router.post('/login', async (req, res) => {
       !email.trim() ||
       !password
     ) {
-      return fail(
-        res,
-        400,
-        'Email and password are required'
-      );
+      return fail(res, 400, 'Email and password are required');
     }
 
     const user = await User.findOne({
@@ -93,15 +94,8 @@ router.post('/login', async (req, res) => {
       isActive: true,
     }).select('+password');
 
-    if (
-      !user ||
-      !(await user.comparePassword(password))
-    ) {
-      return fail(
-        res,
-        401,
-        'Invalid Master credentials'
-      );
+    if (!user || !(await user.comparePassword(password))) {
+      return fail(res, 401, 'Invalid Master credentials');
     }
 
     if (!process.env.JWT_SECRET) {
@@ -132,23 +126,15 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Master login:', error);
-
-    return fail(
-      res,
-      500,
-      'Master login failed'
-    );
+    return fail(res, 500, 'Master login failed');
   }
 });
 
-// ======================================================
-// PROTECT ALL ROUTES BELOW
-// ======================================================
-
+// Protect every route below.
 router.use(requireMaster);
 
 // ======================================================
-// VERIFY MASTER SESSION
+// VERIFY MASTER
 // GET /api/master/me
 // ======================================================
 
@@ -165,23 +151,15 @@ router.get('/me', (req, res) => {
 });
 
 // ======================================================
-// MASTER DASHBOARD
+// DASHBOARD
 // GET /api/master/dashboard
 // ======================================================
 
 router.get('/dashboard', async (req, res) => {
   try {
-    const [
-      companies,
-      activeCompanies,
-      admins,
-    ] = await Promise.all([
+    const [companies, activeCompanies, admins] = await Promise.all([
       Tenant.countDocuments(),
-
-      Tenant.countDocuments({
-        isActive: true,
-      }),
-
+      Tenant.countDocuments({ isActive: true }),
       User.countDocuments({
         role: 'admin',
         tenantId: { $ne: null },
@@ -198,12 +176,7 @@ router.get('/dashboard', async (req, res) => {
     });
   } catch (error) {
     console.error('Master dashboard:', error);
-
-    return fail(
-      res,
-      500,
-      'Failed to load dashboard'
-    );
+    return fail(res, 500, 'Failed to load dashboard');
   }
 });
 
@@ -218,17 +191,13 @@ router.get('/companies', async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    const companyIds = companies.map(
-      (company) => company._id
-    );
+    const companyIds = companies.map(company => company._id);
 
     const admins = await User.find({
       tenantId: { $in: companyIds },
       role: 'admin',
     })
-      .select(
-        'name email isActive tenantId'
-      )
+      .select('name email isActive tenantId')
       .lean();
 
     const adminsByTenant = new Map();
@@ -245,27 +214,19 @@ router.get('/companies', async (req, res) => {
 
     return res.json({
       success: true,
-      companies: companies.map((company) => ({
+      companies: companies.map(company => ({
         ...company,
-        admins:
-          adminsByTenant.get(
-            String(company._id)
-          ) || [],
+        admins: adminsByTenant.get(String(company._id)) || [],
       })),
     });
   } catch (error) {
     console.error('Get companies:', error);
-
-    return fail(
-      res,
-      500,
-      'Failed to load companies'
-    );
+    return fail(res, 500, 'Failed to load companies');
   }
 });
 
 // ======================================================
-// CREATE COMPANY + ADMIN
+// CREATE COMPANY AND ADMIN
 // POST /api/master/companies
 // ======================================================
 
@@ -280,7 +241,7 @@ router.post('/companies', async (req, res) => {
       adminName,
       adminEmail,
       adminPassword,
-      plan = 'standard',
+      masterPackageId,
     } = req.body || {};
 
     if (
@@ -294,65 +255,46 @@ router.post('/companies', async (req, res) => {
       !adminName.trim() ||
       !adminEmail.trim()
     ) {
-      return fail(
-        res,
-        400,
-        'All required fields must be provided'
-      );
+      return fail(res, 400, 'All required fields must be provided');
     }
 
     if (companyName.trim().length > 120) {
-      return fail(
-        res,
-        400,
-        'Company name is too long'
-      );
+      return fail(res, 400, 'Company name is too long');
     }
 
     if (
       !EMAIL_REGEX.test(ownerEmail.trim()) ||
       !EMAIL_REGEX.test(adminEmail.trim())
     ) {
-      return fail(
-        res,
-        400,
-        'Invalid email address'
-      );
+      return fail(res, 400, 'Invalid email address');
     }
 
     if (
       adminPassword.length < 8 ||
       adminPassword.length > 128
     ) {
+      return fail(res, 400, 'Password must be 8 to 128 characters');
+    }
+
+    // Validate actual package stored in MongoDB.
+    const selectedPackage = await resolvePackage(masterPackageId);
+
+    if (!selectedPackage) {
       return fail(
         res,
         400,
-        'Password must be 8 to 128 characters'
+        'Please select a valid active subscription package'
       );
     }
 
-    if (!PLANS.includes(plan)) {
-      return fail(
-        res,
-        400,
-        'Invalid subscription plan'
-      );
-    }
-
-    const normalizedEmail = adminEmail
-      .trim()
-      .toLowerCase();
+    const normalizedEmail = adminEmail.trim().toLowerCase();
 
     const existingAdmin = await User.exists({
       email: normalizedEmail,
     });
 
     if (existingAdmin) {
-      return fail(
-        res,
-        409,
-        'Administrator email already exists'
-      );
+      return fail(res, 409, 'Administrator email already exists');
     }
 
     const slugBase =
@@ -366,17 +308,17 @@ router.post('/companies', async (req, res) => {
       .toString()
       .slice(-10)}`;
 
+    // Assign the selected Master Package to the tenant.
     createdCompany = await Tenant.create({
       name: companyName.trim(),
       slug,
-      ownerEmail: ownerEmail
-        .trim()
-        .toLowerCase(),
-      plan,
+      ownerEmail: ownerEmail.trim().toLowerCase(),
+      plan: selectedPackage.name.trim().toLowerCase(),
+      masterPackageId: selectedPackage._id,
       isActive: true,
     });
 
-    // User model should hash passwords on save.
+    // User model hashes the password on save.
     createdAdmin = await User.create({
       name: adminName.trim(),
       email: normalizedEmail,
@@ -388,14 +330,14 @@ router.post('/companies', async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message:
-        'Company and administrator created successfully',
+      message: 'Company and administrator created successfully',
       company: {
         id: createdCompany._id,
         name: createdCompany.name,
         slug: createdCompany.slug,
         ownerEmail: createdCompany.ownerEmail,
         plan: createdCompany.plan,
+        masterPackageId: createdCompany.masterPackageId,
         isActive: createdCompany.isActive,
       },
       admin: {
@@ -410,30 +352,20 @@ router.post('/companies', async (req, res) => {
   } catch (error) {
     console.error('Create company:', error);
 
-    // Best-effort cleanup after a failed creation.
+    // Clean up incomplete company creation.
     if (createdAdmin) {
       try {
-        await User.findByIdAndDelete(
-          createdAdmin._id
-        );
+        await User.findByIdAndDelete(createdAdmin._id);
       } catch (cleanupError) {
-        console.error(
-          'Admin cleanup:',
-          cleanupError
-        );
+        console.error('Admin cleanup:', cleanupError);
       }
     }
 
     if (createdCompany) {
       try {
-        await Tenant.findByIdAndDelete(
-          createdCompany._id
-        );
+        await Tenant.findByIdAndDelete(createdCompany._id);
       } catch (cleanupError) {
-        console.error(
-          'Company cleanup:',
-          cleanupError
-        );
+        console.error('Company cleanup:', cleanupError);
       }
     }
 
@@ -448,7 +380,7 @@ router.post('/companies', async (req, res) => {
 });
 
 // ======================================================
-// GET ALL ADMINS
+// GET ALL ADMINISTRATORS
 // GET /api/master/admins
 // ======================================================
 
@@ -458,12 +390,10 @@ router.get('/admins', async (req, res) => {
       role: 'admin',
       tenantId: { $ne: null },
     })
-      .select(
-        'name email phone address isActive tenantId createdAt'
-      )
+      .select('name email phone address isActive tenantId createdAt')
       .populate(
         'tenantId',
-        'name ownerEmail plan isActive'
+        'name ownerEmail plan masterPackageId isActive'
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -474,50 +404,31 @@ router.get('/admins', async (req, res) => {
     });
   } catch (error) {
     console.error('Get admins:', error);
-
-    return fail(
-      res,
-      500,
-      'Failed to load administrators'
-    );
+    return fail(res, 500, 'Failed to load administrators');
   }
 });
 
 // ======================================================
-// VIEW ADMIN
+// VIEW ADMINISTRATOR
 // GET /api/master/admins/:id
 // ======================================================
 
 router.get('/admins/:id', async (req, res) => {
   try {
-    if (
-      !mongoose.isValidObjectId(req.params.id)
-    ) {
-      return fail(
-        res,
-        400,
-        'Invalid administrator ID'
-      );
+    if (!isValidId(req.params.id)) {
+      return fail(res, 400, 'Invalid administrator ID');
     }
 
-    const admin = await User.findOne(
-      adminQuery(req.params.id)
-    )
-      .select(
-        'name email phone address isActive tenantId createdAt'
-      )
+    const admin = await User.findOne(adminQuery(req.params.id))
+      .select('name email phone address isActive tenantId createdAt')
       .populate(
         'tenantId',
-        'name ownerEmail plan isActive'
+        'name ownerEmail plan masterPackageId isActive'
       )
       .lean();
 
     if (!admin) {
-      return fail(
-        res,
-        404,
-        'Administrator not found'
-      );
+      return fail(res, 404, 'Administrator not found');
     }
 
     return res.json({
@@ -526,98 +437,57 @@ router.get('/admins/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('View admin:', error);
-
-    return fail(
-      res,
-      500,
-      'Failed to load administrator'
-    );
+    return fail(res, 500, 'Failed to load administrator');
   }
 });
 
 // ======================================================
-// EDIT ADMIN + COMPANY
+// EDIT ADMINISTRATOR AND COMPANY
 // PATCH /api/master/admins/:id
 // ======================================================
 
 router.patch('/admins/:id', async (req, res) => {
   try {
-    if (
-      !mongoose.isValidObjectId(req.params.id)
-    ) {
-      return fail(
-        res,
-        400,
-        'Invalid administrator ID'
-      );
+    if (!isValidId(req.params.id)) {
+      return fail(res, 400, 'Invalid administrator ID');
     }
 
-    const admin = await User.findOne(
-      adminQuery(req.params.id)
-    );
+    const admin = await User.findOne(adminQuery(req.params.id));
 
     if (!admin) {
-      return fail(
-        res,
-        404,
-        'Administrator not found'
-      );
+      return fail(res, 404, 'Administrator not found');
     }
 
-    const company = await Tenant.findById(
-      admin.tenantId
-    );
+    const company = await Tenant.findById(admin.tenantId);
 
     if (!company) {
-      return fail(
-        res,
-        404,
-        'Linked company not found'
-      );
+      return fail(res, 404, 'Linked company not found');
     }
 
     const body = req.body || {};
 
-    // ------------------------------
-    // ADMIN NAME
-    // ------------------------------
-
+    // Administrator name
     if (body.name !== undefined) {
       if (
         typeof body.name !== 'string' ||
         !body.name.trim()
       ) {
-        return fail(
-          res,
-          400,
-          'Invalid administrator name'
-        );
+        return fail(res, 400, 'Invalid administrator name');
       }
 
       admin.name = body.name.trim();
     }
 
-    // ------------------------------
-    // ADMIN EMAIL
-    // ------------------------------
-
+    // Administrator email
     if (body.email !== undefined) {
       if (
         typeof body.email !== 'string' ||
-        !EMAIL_REGEX.test(
-          body.email.trim()
-        )
+        !EMAIL_REGEX.test(body.email.trim())
       ) {
-        return fail(
-          res,
-          400,
-          'Invalid administrator email'
-        );
+        return fail(res, 400, 'Invalid administrator email');
       }
 
-      const email = body.email
-        .trim()
-        .toLowerCase();
+      const email = body.email.trim().toLowerCase();
 
       const existing = await User.exists({
         email,
@@ -625,61 +495,33 @@ router.patch('/admins/:id', async (req, res) => {
       });
 
       if (existing) {
-        return fail(
-          res,
-          409,
-          'Email already registered'
-        );
+        return fail(res, 409, 'Email already registered');
       }
 
       admin.email = email;
     }
 
-    // ------------------------------
-    // PHONE AND ADDRESS
-    // ------------------------------
-
-    for (const field of [
-      'phone',
-      'address',
-    ]) {
+    // Phone and address
+    for (const field of ['phone', 'address']) {
       if (body[field] !== undefined) {
-        if (
-          typeof body[field] !== 'string'
-        ) {
-          return fail(
-            res,
-            400,
-            `Invalid ${field}`
-          );
+        if (typeof body[field] !== 'string') {
+          return fail(res, 400, `Invalid ${field}`);
         }
 
         admin[field] = body[field].trim();
       }
     }
 
-    // ------------------------------
-    // ADMIN STATUS
-    // ------------------------------
-
+    // Administrator status
     if (body.isActive !== undefined) {
-      if (
-        typeof body.isActive !== 'boolean'
-      ) {
-        return fail(
-          res,
-          400,
-          'Invalid account status'
-        );
+      if (typeof body.isActive !== 'boolean') {
+        return fail(res, 400, 'Invalid account status');
       }
 
       admin.isActive = body.isActive;
     }
 
-    // ------------------------------
-    // PASSWORD RESET
-    // ------------------------------
-
+    // Optional password reset
     if (
       body.password !== undefined &&
       body.password !== ''
@@ -689,88 +531,70 @@ router.patch('/admins/:id', async (req, res) => {
         body.password.length < 8 ||
         body.password.length > 128
       ) {
-        return fail(
-          res,
-          400,
-          'Password must be 8 to 128 characters'
-        );
+        return fail(res, 400, 'Password must be 8 to 128 characters');
       }
 
       admin.password = body.password;
     }
 
-    // ------------------------------
-    // COMPANY NAME
-    // ------------------------------
-
-    if (
-      body.companyName !== undefined
-    ) {
+    // Company name
+    if (body.companyName !== undefined) {
       if (
         typeof body.companyName !== 'string' ||
         !body.companyName.trim() ||
-        body.companyName.length > 120
+        body.companyName.trim().length > 120
       ) {
-        return fail(
-          res,
-          400,
-          'Invalid company name'
-        );
+        return fail(res, 400, 'Invalid company name');
       }
 
-      company.name =
-        body.companyName.trim();
+      company.name = body.companyName.trim();
     }
 
-    // ------------------------------
-    // COMPANY EMAIL
-    // ------------------------------
-
-    if (
-      body.ownerEmail !== undefined
-    ) {
+    // Company email
+    if (body.ownerEmail !== undefined) {
       if (
         typeof body.ownerEmail !== 'string' ||
-        !EMAIL_REGEX.test(
-          body.ownerEmail.trim()
-        )
+        !EMAIL_REGEX.test(body.ownerEmail.trim())
       ) {
+        return fail(res, 400, 'Invalid company email');
+      }
+
+      company.ownerEmail = body.ownerEmail.trim().toLowerCase();
+    }
+
+    // Change assigned subscription package.
+    if (body.masterPackageId !== undefined) {
+      const selectedPackage = await resolvePackage(
+        body.masterPackageId
+      );
+
+      if (!selectedPackage) {
         return fail(
           res,
           400,
-          'Invalid company email'
+          'Please select a valid active subscription package'
         );
       }
 
-      company.ownerEmail =
-        body.ownerEmail
-          .trim()
-          .toLowerCase();
+      company.masterPackageId = selectedPackage._id;
+      company.plan = selectedPackage.name.trim().toLowerCase();
     }
 
-    // ------------------------------
-    // SUBSCRIPTION PLAN
-    // ------------------------------
-
-    if (body.plan !== undefined) {
-      if (!PLANS.includes(body.plan)) {
-        return fail(
-          res,
-          400,
-          'Invalid subscription plan'
-        );
-      }
-
-      company.plan = body.plan;
-    }
-
+    // Save changes.
     await admin.save();
     await company.save();
 
     return res.json({
       success: true,
-      message:
-        'Company and administrator updated successfully',
+      message: 'Company and administrator updated successfully',
+      company: {
+        _id: company._id,
+        name: company.name,
+        ownerEmail: company.ownerEmail,
+        plan: company.plan,
+        masterPackageId: company.masterPackageId,
+        isActive: company.isActive,
+      },
     });
   } catch (error) {
     console.error('Edit admin:', error);
@@ -786,121 +610,83 @@ router.patch('/admins/:id', async (req, res) => {
 });
 
 // ======================================================
-// DELETE ADMIN + LINKED COMPANY
+// DELETE ADMINISTRATOR AND COMPANY
 // DELETE /api/master/admins/:id
-// ======================================================
-//
-// Deletes:
-// - Selected administrator
-// - Other company user accounts
-// - Linked company
-//
-// Does not delete:
-// - Master Superadmin
-// - Customers
-// - Invoices
-// - Payments
-// - Other tenant business data
-//
 // Requires MongoDB transaction support.
 // ======================================================
 
 router.delete('/admins/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (!mongoose.isValidObjectId(id)) {
-    return fail(
-      res,
-      400,
-      'Invalid administrator ID'
-    );
+  if (!isValidId(id)) {
+    return fail(res, 400, 'Invalid administrator ID');
   }
 
   let session;
 
   try {
     session = await mongoose.startSession();
-
     let deletedCompanyId = null;
 
-    await session.withTransaction(
-      async () => {
-        const admin = await User.findOne({
-          _id: id,
-          role: 'admin',
-          tenantId: { $ne: null },
-        }).session(session);
+    await session.withTransaction(async () => {
+      const admin = await User.findOne({
+        _id: id,
+        role: 'admin',
+        tenantId: { $ne: null },
+      }).session(session);
 
-        if (!admin) {
-          const error = new Error(
-            'Administrator not found'
-          );
-
-          error.status = 404;
-          throw error;
-        }
-
-        const company = await Tenant.findById(
-          admin.tenantId
-        ).session(session);
-
-        if (!company) {
-          const error = new Error(
-            'Linked company not found'
-          );
-
-          error.status = 404;
-          throw error;
-        }
-
-        deletedCompanyId = company._id;
-
-        // Never delete Master accounts.
-        const superadminCount =
-          await User.countDocuments({
-            tenantId: company._id,
-            role: 'superadmin',
-          }).session(session);
-
-        if (superadminCount > 0) {
-          const error = new Error(
-            'Cannot delete a company linked to a Master account'
-          );
-
-          error.status = 409;
-          throw error;
-        }
-
-        // Delete all company accounts.
-        await User.deleteMany({
-          tenantId: company._id,
-          role: { $ne: 'superadmin' },
-        }).session(session);
-
-        // Delete linked company.
-        const result = await Tenant.deleteOne({
-          _id: company._id,
-        }).session(session);
-
-        if (result.deletedCount !== 1) {
-          throw new Error(
-            'Company deletion failed'
-          );
-        }
+      if (!admin) {
+        const error = new Error('Administrator not found');
+        error.status = 404;
+        throw error;
       }
-    );
+
+      const company = await Tenant.findById(
+        admin.tenantId
+      ).session(session);
+
+      if (!company) {
+        const error = new Error('Linked company not found');
+        error.status = 404;
+        throw error;
+      }
+
+      deletedCompanyId = company._id;
+
+      const masterCount = await User.countDocuments({
+        tenantId: company._id,
+        role: 'superadmin',
+      }).session(session);
+
+      if (masterCount > 0) {
+        const error = new Error(
+          'Cannot delete a company linked to a Master account'
+        );
+        error.status = 409;
+        throw error;
+      }
+
+      await User.deleteMany({
+        tenantId: company._id,
+        role: { $ne: 'superadmin' },
+      }).session(session);
+
+      const result = await Tenant.deleteOne({
+        _id: company._id,
+      }).session(session);
+
+      if (result.deletedCount !== 1) {
+        throw new Error('Company deletion failed');
+      }
+    });
 
     return res.json({
       success: true,
-      message:
-        'Administrator and company deleted successfully',
+      message: 'Administrator and company deleted successfully',
       companyId: deletedCompanyId,
     });
   } catch (error) {
-    console.error(
-      'Delete administrator and company:',
-      error
-    );
+    console.error('Delete administrator and company:', error);
 
     const unsupported =
       /Transaction numbers are only allowed|replica set|mongos|does not support transactions/i.test(
@@ -909,8 +695,7 @@ router.delete('/admins/:id', async (req, res) => {
 
     return fail(
       res,
-      error.status ||
-        (unsupported ? 503 : 500),
+      error.status || (unsupported ? 503 : 500),
       unsupported
         ? 'MongoDB transactions require a replica set. Nothing was deleted.'
         : error.status
@@ -925,25 +710,16 @@ router.delete('/admins/:id', async (req, res) => {
 });
 
 // ======================================================
-// DELETE ORPHANED COMPANY
+// DELETE COMPANY WITHOUT ADMINISTRATOR
 // DELETE /api/master/companies/:id
-// ======================================================
-//
-// Only allows deletion if the company has NO admin.
-// Removes remaining non-superadmin company accounts.
-//
 // Requires MongoDB transaction support.
 // ======================================================
 
 router.delete('/companies/:id', async (req, res) => {
   const { id } = req.params;
 
-  if (!mongoose.isValidObjectId(id)) {
-    return fail(
-      res,
-      400,
-      'Invalid company ID'
-    );
+  if (!isValidId(id)) {
+    return fail(res, 400, 'Invalid company ID');
   }
 
   let session;
@@ -951,84 +727,62 @@ router.delete('/companies/:id', async (req, res) => {
   try {
     session = await mongoose.startSession();
 
-    await session.withTransaction(
-      async () => {
-        const company = await Tenant.findById(
-          id
-        ).session(session);
+    await session.withTransaction(async () => {
+      const company = await Tenant.findById(id).session(session);
 
-        if (!company) {
-          const error = new Error(
-            'Company not found'
-          );
-
-          error.status = 404;
-          throw error;
-        }
-
-        // This endpoint is ONLY for companies
-        // that have no administrator.
-        const adminCount =
-          await User.countDocuments({
-            tenantId: company._id,
-            role: 'admin',
-          }).session(session);
-
-        if (adminCount > 0) {
-          const error = new Error(
-            'This company has an administrator. Delete its administrator instead.'
-          );
-
-          error.status = 409;
-          throw error;
-        }
-
-        // Protect Master accounts.
-        const masterCount =
-          await User.countDocuments({
-            tenantId: company._id,
-            role: 'superadmin',
-          }).session(session);
-
-        if (masterCount > 0) {
-          const error = new Error(
-            'Cannot delete a company linked to a Master account'
-          );
-
-          error.status = 409;
-          throw error;
-        }
-
-        // Remove remaining company users.
-        await User.deleteMany({
-          tenantId: company._id,
-          role: { $ne: 'superadmin' },
-        }).session(session);
-
-        // Remove orphaned company.
-        const result = await Tenant.deleteOne({
-          _id: company._id,
-        }).session(session);
-
-        if (result.deletedCount !== 1) {
-          throw new Error(
-            'Company deletion failed'
-          );
-        }
+      if (!company) {
+        const error = new Error('Company not found');
+        error.status = 404;
+        throw error;
       }
-    );
+
+      const adminCount = await User.countDocuments({
+        tenantId: company._id,
+        role: 'admin',
+      }).session(session);
+
+      if (adminCount > 0) {
+        const error = new Error(
+          'This company has an administrator. Delete its administrator instead.'
+        );
+        error.status = 409;
+        throw error;
+      }
+
+      const masterCount = await User.countDocuments({
+        tenantId: company._id,
+        role: 'superadmin',
+      }).session(session);
+
+      if (masterCount > 0) {
+        const error = new Error(
+          'Cannot delete a company linked to a Master account'
+        );
+        error.status = 409;
+        throw error;
+      }
+
+      await User.deleteMany({
+        tenantId: company._id,
+        role: { $ne: 'superadmin' },
+      }).session(session);
+
+      const result = await Tenant.deleteOne({
+        _id: company._id,
+      }).session(session);
+
+      if (result.deletedCount !== 1) {
+        throw new Error('Company deletion failed');
+      }
+    });
 
     return res.json({
       success: true,
-      message:
-        'Orphaned company deleted successfully',
+      message: 'Orphaned company deleted successfully',
       companyId: id,
     });
   } catch (error) {
-    console.error(
-      'Delete orphaned company:',
-      error
-    );
+    console.error('Delete orphaned company:', error);
 
     const unsupported =
       /Transaction numbers are only allowed|replica set|mongos|does not support transactions/i.test(
@@ -1037,8 +791,7 @@ router.delete('/companies/:id', async (req, res) => {
 
     return fail(
       res,
-      error.status ||
-        (unsupported ? 503 : 500),
+      error.status || (unsupported ? 503 : 500),
       unsupported
         ? 'MongoDB transactions require a replica set. Nothing was deleted.'
         : error.status
@@ -1051,9 +804,5 @@ router.delete('/companies/:id', async (req, res) => {
     }
   }
 });
-
-// ======================================================
-// EXPORT MASTER ROUTES
-// ======================================================
 
 module.exports = router;
