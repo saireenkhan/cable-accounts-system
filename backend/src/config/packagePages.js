@@ -28,6 +28,11 @@ const PACKAGE_PAGES = [
   { label: "Add Partner", href: "/create-partner", section: "General" },
   { label: "WhatsApp Bot", href: "/whatsapp", section: "General" },
   { label: "Add ISP", href: "/ISP", section: "General" },
+  {
+  label: "All Users",
+  href: "/all-users",
+  section: "General",
+},
 
   { label: "Promise Management", href: "/promises", section: "Promise Management" },
   { label: "Notification", href: "/notification", section: "Notifications" },

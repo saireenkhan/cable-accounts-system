@@ -33,6 +33,7 @@ const promiseRoutes = require('./routes/promiseRoutes');
 const masterRoutes = require('./routes/masterRoutes');
 const masterPackageRoutes = require("./routes/masterPackageRoutes");
 const tenantPackageRoutes = require('./routes/tenantPackageRoutes');
+const allUsersRoutes = require('./routes/allUsersRoutes');
 // ============================================================
 // PROCESS ERROR HANDLERS
 // ============================================================
@@ -214,6 +215,7 @@ app.use('/api/master', masterRoutes);
 
 app.use("/api/master/packages", masterPackageRoutes);
 app.use('/api/tenant-package', tenantPackageRoutes);
+app.use('/api/all-users', allUsersRoutes);
 // ============================================================
 // ERROR HANDLER
 // ============================================================

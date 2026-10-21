@@ -8,6 +8,7 @@ import {
   UserRoundPlus,
   Bell,
   MessageCircle,
+  Eye,
   Handshake,
   Lock,
   MapPin,
@@ -180,6 +181,12 @@ const menuItems: MenuItem[] = [
     label: 'Bulk Upload',
     href: '/bulk-upload',
     icon: <Upload className="h-[18px] w-[18px]" />,
+    section: 'general',
+  },
+    {
+    label: 'All User',
+    href: '/all-users',
+    icon: <Eye className="h-[18px] w-[18px]" />,
     section: 'general',
   },
   {

@@ -82,6 +82,7 @@ const sectionRoutes: Record<SidebarSection, string[]> = {
     '/create-partner',
     '/whatsapp',
     '/ISP',
+      '/all-users',
   ],
 
   notify: [
