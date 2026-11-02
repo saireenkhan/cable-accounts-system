@@ -1,6 +1,7 @@
 const DealerAreaModel = require('../models/DealerArea');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
+const { ispSelectionRequired } = require('../utils/ispRequirement');
 
 /* ============================================================
    NORMALIZE ISP VALUES
@@ -212,7 +213,8 @@ exports.createDealerArea = async (
     );
 
     if (
-      normalizedIsps.length === 0
+      normalizedIsps.length === 0 &&
+      await ispSelectionRequired(req)
     ) {
       return res.status(400).json({
         success: false,
@@ -425,7 +427,8 @@ exports.updateDealerArea = async (
       );
 
       if (
-        normalizedIsps.length === 0
+        normalizedIsps.length === 0 &&
+        await ispSelectionRequired(req)
       ) {
         return res.status(400).json({
           success: false,

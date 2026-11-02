@@ -1,9 +1,13 @@
+
 const PartnerModel = require('../models/Partner');
 const PartnerAreaModel = require('../models/PartnerArea');
 const PaymentModel = require('../models/Payment');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 const PartnerPaymentModel = require('../models/PartnerPayment');
+const {
+  ispSelectionRequired,
+} = require('../utils/ispRequirement');
 
 // ============================================================
 // HELPER: Calculate expiry date (one calendar month later)
@@ -21,40 +25,71 @@ const calculateExpiryDate = (activationDate) => {
 };
 
 // ============================================================
-// HELPER: Area must exist, and (if both have an ISP) belong to it.
-// Returns an error message string, or null when valid.
+// HELPER: VALIDATE PARTNER AREA AND ISP
 // ============================================================
-const validateAreaForIsp = async (PartnerArea, area, isp) => {
+// Area must always exist.
+// ISP validation is required only when ISP records exist
+// for the current tenant.
+// ============================================================
+
+const validateAreaForIsp = async (
+  PartnerArea,
+  area,
+  isp,
+  req
+) => {
   if (!area) return null;
 
-  const areaDoc = await PartnerArea.findOne({ name: area });
+  // Area must exist in the current tenant.
+  const areaDoc = await PartnerArea.findOne({
+    name: area,
+  });
 
   if (!areaDoc) {
     return `Partner area "${area}" not found. Please create it first.`;
   }
 
+  // Check whether the tenant has ISP records.
+  const requireIsp = await ispSelectionRequired(req);
+
+  // If no ISPs exist, ISP association is not required.
+  if (!requireIsp) {
+    return null;
+  }
+
+  // If ISPs exist, ISP selection is mandatory.
+  const selectedIsp = String(isp || '').trim();
+
+  if (!selectedIsp) {
+    return 'Please select an ISP';
+  }
+
+  // Normalize the area ISP list.
   const assignedISPs = Array.isArray(areaDoc.isp)
     ? areaDoc.isp
     : [areaDoc.isp];
 
   const belongsToISP = assignedISPs.some(
     (assignedISP) =>
-      String(assignedISP || '').trim().toLowerCase() ===
-      String(isp || '').trim().toLowerCase()
+      String(assignedISP || '')
+        .trim()
+        .toLowerCase() === selectedIsp.toLowerCase()
   );
 
   if (!belongsToISP) {
-    return `Partner area "${area}" does not belong to ISP "${isp}".`;
+    return `Partner area "${area}" does not belong to ISP "${selectedIsp}".`;
   }
 
   return null;
 };
 
 // ============================================================
-// GET all partners
+// GET ALL PARTNERS
 // ============================================================
+
 exports.getPartners = async (req, res) => {
   const Partner = tenantScope(PartnerModel, req);
+
   try {
     const { search, status, area, isp, limit } = req.query;
     const filter = {};
@@ -97,15 +132,16 @@ exports.getPartners = async (req, res) => {
 };
 
 // ============================================================
-// GET single partner
+// GET SINGLE PARTNER
 // ============================================================
+
 exports.getPartner = async (req, res) => {
   const Partner = tenantScope(PartnerModel, req);
+
   try {
-    const partner = await Partner.findById(req.params.id).populate(
-      'createdBy',
-      'name'
-    );
+    const partner = await Partner.findById(
+      req.params.id
+    ).populate('createdBy', 'name');
 
     if (!partner) {
       return res.status(404).json({
@@ -129,11 +165,13 @@ exports.getPartner = async (req, res) => {
 };
 
 // ============================================================
-// CREATE partner
+// CREATE PARTNER
 // ============================================================
+
 exports.createPartner = async (req, res) => {
   const Partner = tenantScope(PartnerModel, req);
   const PartnerArea = tenantScope(PartnerAreaModel, req);
+
   try {
     const {
       partnerId,
@@ -153,7 +191,10 @@ exports.createPartner = async (req, res) => {
 
     console.log('📝 Creating partner with data:', req.body);
 
-    // Required fields
+    // --------------------------------------------------------
+    // REQUIRED FIELDS
+    // --------------------------------------------------------
+
     if (!partnerId) {
       return res.status(400).json({
         success: false,
@@ -168,11 +209,17 @@ exports.createPartner = async (req, res) => {
       });
     }
 
-    // Duplicate partner ID
-  const existingPartnerId = await Partner.findOne({
-  ispKey: String(isp || '').trim().toLowerCase(),
-  partnerIdKey: String(partnerId || '').trim().toLowerCase(),
-});
+    // --------------------------------------------------------
+    // DUPLICATE PARTNER ID
+    // --------------------------------------------------------
+
+    const existingPartnerId = await Partner.findOne({
+      ispKey: String(isp || '').trim().toLowerCase(),
+      partnerIdKey: String(partnerId || '')
+        .trim()
+        .toLowerCase(),
+    });
+
     if (existingPartnerId) {
       return res.status(400).json({
         success: false,
@@ -180,8 +227,16 @@ exports.createPartner = async (req, res) => {
       });
     }
 
-    // Area: must exist and match the chosen ISP
-    const areaError = await validateAreaForIsp(PartnerArea, area, isp);
+    // --------------------------------------------------------
+    // VALIDATE AREA AND ISP
+    // --------------------------------------------------------
+
+    const areaError = await validateAreaForIsp(
+      PartnerArea,
+      area,
+      isp,
+      req
+    );
 
     if (areaError) {
       return res.status(400).json({
@@ -190,7 +245,10 @@ exports.createPartner = async (req, res) => {
       });
     }
 
-    // Discount
+    // --------------------------------------------------------
+    // DISCOUNT
+    // --------------------------------------------------------
+
     const parsedDiscount = parseFloat(discount) || 0;
 
     if (parsedDiscount < 0) {
@@ -200,7 +258,10 @@ exports.createPartner = async (req, res) => {
       });
     }
 
-    // Activation + Expiry
+    // --------------------------------------------------------
+    // ACTIVATION AND EXPIRY
+    // --------------------------------------------------------
+
     let parsedActivationDate = null;
     let calculatedExpiryDate = null;
 
@@ -214,8 +275,14 @@ exports.createPartner = async (req, res) => {
         });
       }
 
-      calculatedExpiryDate = calculateExpiryDate(parsedActivationDate);
+      calculatedExpiryDate = calculateExpiryDate(
+        parsedActivationDate
+      );
     }
+
+    // --------------------------------------------------------
+    // CREATE PARTNER
+    // --------------------------------------------------------
 
     const partnerDoc = await Partner.create({
       partnerId,
@@ -224,7 +291,10 @@ exports.createPartner = async (req, res) => {
       cnic: cnic || '',
       address,
       area: area || '',
+
+      // Empty when no ISPs exist.
       isp: isp ? String(isp).trim() : '',
+
       partner: partner || '',
       package: pkg,
       discount: parsedDiscount,
@@ -235,12 +305,14 @@ exports.createPartner = async (req, res) => {
       createdBy: req.user ? req.user.id : null,
     });
 
-    const populatedPartner = await Partner.findById(partnerDoc._id).populate(
-      'createdBy',
-      'name'
-    );
+    const populatedPartner = await Partner.findById(
+      partnerDoc._id
+    ).populate('createdBy', 'name');
 
-    console.log('✅ Partner created:', populatedPartner.partnerId);
+    console.log(
+      '✅ Partner created:',
+      populatedPartner.partnerId
+    );
 
     res.status(201).json({
       success: true,
@@ -278,11 +350,13 @@ exports.createPartner = async (req, res) => {
 };
 
 // ============================================================
-// UPDATE partner
+// UPDATE PARTNER
 // ============================================================
+
 exports.updatePartner = async (req, res) => {
   const Partner = tenantScope(PartnerModel, req);
   const PartnerArea = tenantScope(PartnerAreaModel, req);
+
   try {
     const {
       partnerId,
@@ -303,7 +377,9 @@ exports.updatePartner = async (req, res) => {
     console.log('📝 Updating partner:', req.params.id);
     console.log('📦 Update data:', req.body);
 
-    const existingPartner = await Partner.findById(req.params.id);
+    const existingPartner = await Partner.findById(
+      req.params.id
+    );
 
     if (!existingPartner) {
       return res.status(404).json({
@@ -314,25 +390,58 @@ exports.updatePartner = async (req, res) => {
 
     const update = {};
 
-    if (partnerId !== undefined) update.partnerId = partnerId;
-    if (name !== undefined) update.name = name;
-    if (phone !== undefined) update.phone = phone;
-    if (cnic !== undefined) update.cnic = cnic;
-    if (address !== undefined) update.address = address;
-    if (status !== undefined) update.status = status;
-    if (partner !== undefined) update.partner = partner;
-    if (isp !== undefined) update.isp = String(isp || '').trim();
+    // --------------------------------------------------------
+    // BASIC FIELDS
+    // --------------------------------------------------------
 
-    // Area — must exist and match the (new or existing) ISP
+    if (partnerId !== undefined) {
+      update.partnerId = partnerId;
+    }
+
+    if (name !== undefined) {
+      update.name = name;
+    }
+
+    if (phone !== undefined) {
+      update.phone = phone;
+    }
+
+    if (cnic !== undefined) {
+      update.cnic = cnic;
+    }
+
+    if (address !== undefined) {
+      update.address = address;
+    }
+
+    if (status !== undefined) {
+      update.status = status;
+    }
+
+    if (partner !== undefined) {
+      update.partner = partner;
+    }
+
+    if (isp !== undefined) {
+      update.isp = String(isp || '').trim();
+    }
+
+    // --------------------------------------------------------
+    // AREA VALIDATION
+    // --------------------------------------------------------
+
     if (area !== undefined) {
       if (area) {
         const effectiveIsp =
-          isp !== undefined ? isp : existingPartner.isp;
+          isp !== undefined
+            ? isp
+            : existingPartner.isp;
 
         const areaError = await validateAreaForIsp(
           PartnerArea,
           area,
-          effectiveIsp
+          effectiveIsp,
+          req
         );
 
         if (areaError) {
@@ -348,43 +457,70 @@ exports.updatePartner = async (req, res) => {
       }
     }
 
-    if (pkg !== undefined) update.package = pkg;
+    if (pkg !== undefined) {
+      update.package = pkg;
+    }
+
+    // --------------------------------------------------------
+    // DISCOUNT
+    // --------------------------------------------------------
 
     if (discount !== undefined) {
       const parsedDiscount = parseFloat(discount);
 
-      if (Number.isNaN(parsedDiscount) || parsedDiscount < 0) {
+      if (
+        Number.isNaN(parsedDiscount) ||
+        parsedDiscount < 0
+      ) {
         return res.status(400).json({
           success: false,
-          message: 'Discount must be a valid non-negative number.',
+          message:
+            'Discount must be a valid non-negative number.',
         });
       }
 
       update.discount = parsedDiscount;
     }
 
+    // --------------------------------------------------------
+    // MONTHLY FEE
+    // --------------------------------------------------------
+
     if (monthlyFee !== undefined) {
       const parsedMonthlyFee = parseFloat(monthlyFee);
 
-      if (Number.isNaN(parsedMonthlyFee) || parsedMonthlyFee < 0) {
+      if (
+        Number.isNaN(parsedMonthlyFee) ||
+        parsedMonthlyFee < 0
+      ) {
         return res.status(400).json({
           success: false,
-          message: 'Monthly fee must be a valid non-negative number.',
+          message:
+            'Monthly fee must be a valid non-negative number.',
         });
       }
 
       update.monthlyFee = parsedMonthlyFee;
     }
 
-    // Activation + Expiry
+    // --------------------------------------------------------
+    // ACTIVATION AND EXPIRY
+    // --------------------------------------------------------
+
     if (activationDate !== undefined) {
       if (!activationDate) {
         update.activationDate = null;
         update.expiryDate = null;
       } else {
-        const parsedActivationDate = new Date(activationDate);
+        const parsedActivationDate = new Date(
+          activationDate
+        );
 
-        if (Number.isNaN(parsedActivationDate.getTime())) {
+        if (
+          Number.isNaN(
+            parsedActivationDate.getTime()
+          )
+        ) {
           return res.status(400).json({
             success: false,
             message: 'Invalid activation date.',
@@ -392,9 +528,16 @@ exports.updatePartner = async (req, res) => {
         }
 
         update.activationDate = parsedActivationDate;
-        update.expiryDate = calculateExpiryDate(parsedActivationDate);
+
+        update.expiryDate = calculateExpiryDate(
+          parsedActivationDate
+        );
       }
     }
+
+    // --------------------------------------------------------
+    // UPDATE PARTNER
+    // --------------------------------------------------------
 
     const partnerDoc = await Partner.findByIdAndUpdate(
       req.params.id,
@@ -405,7 +548,10 @@ exports.updatePartner = async (req, res) => {
       }
     ).populate('createdBy', 'name');
 
-    console.log('✅ Partner updated:', partnerDoc.partnerId);
+    console.log(
+      '✅ Partner updated:',
+      partnerDoc.partnerId
+    );
 
     res.json({
       success: true,
@@ -448,16 +594,22 @@ exports.updatePartner = async (req, res) => {
 };
 
 // ============================================================
-// DELETE partner
-// Cascade: also deletes every partner-payment that belongs
-// to this partner so they disappear from Receive Partner Payments.
+// DELETE PARTNER
 // ============================================================
+// Cascade deletes related partner payments.
+// ============================================================
+
 exports.deletePartner = async (req, res) => {
   const Partner = tenantScope(PartnerModel, req);
-  const PartnerPayment = tenantScope(PartnerPaymentModel, req);
+  const PartnerPayment = tenantScope(
+    PartnerPaymentModel,
+    req
+  );
 
   try {
-    const partner = await Partner.findById(req.params.id);
+    const partner = await Partner.findById(
+      req.params.id
+    );
 
     if (!partner) {
       return res.status(404).json({
@@ -466,9 +618,10 @@ exports.deletePartner = async (req, res) => {
       });
     }
 
-    const deleteResult = await PartnerPayment.deleteMany({
-      partner: partner._id,
-    });
+    const deleteResult =
+      await PartnerPayment.deleteMany({
+        partner: partner._id,
+      });
 
     await Partner.findByIdAndDelete(req.params.id);
 
@@ -493,15 +646,26 @@ exports.deletePartner = async (req, res) => {
 };
 
 // ============================================================
-// GET dashboard stats
+// GET DASHBOARD STATS
 // ============================================================
+
 exports.getPartnerDashboardStats = async (req, res) => {
   const Partner = tenantScope(PartnerModel, req);
   const Payment = tenantScope(PaymentModel, req);
+
   try {
-    const totalPartners = await Partner.countDocuments();
-    const activePartners = await Partner.countDocuments({ status: 'active' });
-    const expiredPartners = await Partner.countDocuments({ status: 'expired' });
+    const totalPartners =
+      await Partner.countDocuments();
+
+    const activePartners =
+      await Partner.countDocuments({
+        status: 'active',
+      });
+
+    const expiredPartners =
+      await Partner.countDocuments({
+        status: 'expired',
+      });
 
     const partners = await Partner.find();
 
@@ -510,17 +674,24 @@ exports.getPartnerDashboardStats = async (req, res) => {
       0
     );
 
-    const payments = await Payment.find({ isNoPayment: { $ne: true } });
+    const payments = await Payment.find({
+      isNoPayment: { $ne: true },
+    });
 
     const totalCollection = payments.reduce(
       (sum, p) => sum + (p.amount || 0),
       0
     );
 
-    const outstanding = Math.max(0, totalBilling - totalCollection);
+    const outstanding = Math.max(
+      0,
+      totalBilling - totalCollection
+    );
 
     const recoveryRate =
-      totalBilling > 0 ? (totalCollection / totalBilling) * 100 : 0;
+      totalBilling > 0
+        ? (totalCollection / totalBilling) * 100
+        : 0;
 
     res.json({
       success: true,
@@ -535,7 +706,9 @@ exports.getPartnerDashboardStats = async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error(`Partner dashboard stats error: ${error.message}`);
+    logger.error(
+      `Partner dashboard stats error: ${error.message}`
+    );
 
     res.status(500).json({
       success: false,

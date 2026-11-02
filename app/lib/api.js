@@ -1,3 +1,4 @@
+
 import axios from 'axios';
 
 const isLocalhost =
@@ -18,7 +19,6 @@ const api = axios.create({
 
 // ============================================================
 // REQUEST INTERCEPTOR
-// Attach JWT token to every API request
 // ============================================================
 
 api.interceptors.request.use(
@@ -27,67 +27,40 @@ api.interceptors.request.use(
       const token = sessionStorage.getItem('token');
 
       if (token) {
-        config.headers = config.headers || {};
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
 
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // ============================================================
 // RESPONSE INTERCEPTOR
-// DEBUG VERSION
 // ============================================================
+
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error('🔴 FULL API ERROR OBJECT:', error);
+    const status = error?.response?.status;
+    const url = error?.config?.url || '';
 
-    console.error('🔴 API ERROR DETAILS:', {
-      message: error?.message,
-      name: error?.name,
-      code: error?.code,
+    // Master login 401 is an expected response when
+    // normal company credentials are supplied.
+    // The Login page handles the fallback.
+    if (status === 401 && url.includes('/master/login')) {
+      return Promise.reject(error);
+    }
 
-      status: error?.response?.status,
-      statusText: error?.response?.statusText,
-
-      url: error?.config?.url,
-      method: error?.config?.method,
-
-      responseData: error?.response?.data,
-      responseHeaders: error?.response?.headers,
-
-      requestData: error?.config?.data,
-
-      isAxiosError: axios.isAxiosError(error),
-    });
-
-    if (error?.response?.status === 401) {
-      console.error('🔴 401 REQUEST:', {
-        url: error?.config?.url,
-        method: error?.config?.method,
-      });
-
-      console.error(
-        '🔴 RESPONSE:',
-        error?.response?.data
+    // Handle real API errors without dumping
+    // full AxiosError objects into the console.
+    if (status && status !== 401) {
+      console.warn(
+        `API request failed (${status}):`,
+        url,
+        error?.response?.data?.message || error.message
       );
-
-      console.error(
-        '🔴 TOKEN EXISTS:',
-        typeof window !== 'undefined'
-          ? !!sessionStorage.getItem('token')
-          : false
-      );
-
-      // Do NOT remove token or redirect while debugging.
     }
 
     return Promise.reject(error);

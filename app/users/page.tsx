@@ -221,112 +221,95 @@ function isMonthPaid(
   );
   return monthTotal >= monthlyFee;
 }
-function isCurrentMonthFullyPaid(
-  user: any,
-  payments: any[]
-): boolean {
-  return isMonthPaid(
-    user,
-    payments,
-    getCurrentMonth()
+// ============================================================
+// MONTHLY EXPIRY — ONLY EXPIRY/STATUS LOGIC
+// The activation day anchors every monthly deadline.
+// A billing month is cleared only after its full fee is paid.
+// ============================================================
+const parseLocalBillingDate = (value: any): Date | null => {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = Number(match[1]);
+      const month = Number(match[2]) - 1;
+      const day = Number(match[3]);
+      const result = new Date(year, month, day);
+      return result.getFullYear() === year &&
+        result.getMonth() === month && result.getDate() === day
+        ? result : null;
+    }
+  }
+  const date = toDateSafe(value);
+  return date ? new Date(date.getFullYear(), date.getMonth(), date.getDate()) : null;
+};
+
+const billingDeadline = (activation: Date, offset: number): Date => {
+  const firstOfMonth = new Date(
+    activation.getFullYear(), activation.getMonth() + offset, 1
   );
+  const lastDay = new Date(
+    firstOfMonth.getFullYear(), firstOfMonth.getMonth() + 1, 0
+  ).getDate();
+  return new Date(
+    firstOfMonth.getFullYear(), firstOfMonth.getMonth(),
+    Math.min(activation.getDate(), lastDay)
+  );
+};
+
+function getMonthlyExpiry(user: any, payments: any[], today = getToday()) {
+  const activation = parseLocalBillingDate(user.activationDate);
+  if (!activation) {
+    return { expiry: parseLocalBillingDate(user.expiryDate), paid: false };
+  }
+
+  const fee = Number(user.monthlyFeeRaw ?? 0);
+  const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startMonth = new Date(activation.getFullYear(), activation.getMonth() + 1, 1);
+  const currentMonth = new Date(todayDay.getFullYear(), todayDay.getMonth(), 1);
+  const monthsElapsed = (currentMonth.getFullYear() - startMonth.getFullYear()) * 12 +
+    currentMonth.getMonth() - startMonth.getMonth();
+
+  // Include the next billing month: early payments must be recognized.
+  // The first unpaid month determines the next deadline.
+  const maxOffset = Math.max(1, monthsElapsed + 2);
+  for (let offset = 1; offset <= maxOffset; offset++) {
+    const deadline = billingDeadline(activation, offset);
+    const billingMonth = `${MONTHS[deadline.getMonth()]} ${deadline.getFullYear()}`;
+    if (fee <= 0 || !isMonthPaid(user, payments, billingMonth)) {
+      return { expiry: deadline, paid: false };
+    }
+  }
+
+  // Advance one month beyond the fully paid range.
+  return { expiry: billingDeadline(activation, maxOffset + 1), paid: false };
 }
-/* ============================================================
-   PAYMENT-AWARE UPCOMING EXPIRY
-============================================================ */
-function isPaymentAwareUpcomingExpiry(
-  user: any,
-  payments: any[]
-): boolean {
-  const expiry = toDateSafe(
-    user.expiryDate
-  );
+
+function isPaymentAwareUpcomingExpiry(user: any, payments: any[]): boolean {
+  const rawStatus = String(user.statusRaw || '').toLowerCase();
+  if (rawStatus === 'inactive' || rawStatus === 'suspended') return false;
+  const { expiry } = getMonthlyExpiry(user, payments);
   if (!expiry) return false;
-  if (
-    isCurrentMonthFullyPaid(
-      user,
-      payments
-    )
-  ) {
-    return false;
-  }
-  const today = getToday();
-  const expiryDay = new Date(
-    expiry.getFullYear(),
-    expiry.getMonth(),
-    expiry.getDate()
-  );
-  if (expiryDay < today) {
-    return false;
-  }
-  const diffMs =
-    expiryDay.getTime() -
-    today.getTime();
-  const diffDays = Math.floor(
-    diffMs /
-      (1000 * 60 * 60 * 24)
-  );
-  return (
-    diffDays >= 0 &&
-    diffDays <= 7
-  );
+  const days = Math.round((Date.UTC(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()) -
+    Date.UTC(getToday().getFullYear(), getToday().getMonth(), getToday().getDate())) / 86400000);
+  return days >= 1 && days <= 7;
 }
-/* ============================================================
-   EFFECTIVE STATUS
-============================================================ */
-function computeEffectiveStatus(
-  user: any,
-  payments: any[]
-): string {
-  const rawStatus = String(
-    user.statusRaw || ''
-  ).toLowerCase();
-  if (
-    rawStatus === 'inactive' ||
-    rawStatus === 'suspended'
-  ) {
-    return rawStatus === 'inactive'
-      ? 'Inactive'
-      : 'Suspended';
-  }
-  if (
-    isCurrentMonthFullyPaid(
-      user,
-      payments
-    )
-  ) {
-    return 'Active';
-  }
-  const expiry = toDateSafe(
-    user.expiryDate
-  );
-  if (!expiry) {
-    return effectiveStatus(user);
-  }
+
+function computeEffectiveStatus(user: any, payments: any[]): string {
+  const rawStatus = String(user.statusRaw || '').toLowerCase();
+  if (rawStatus === 'inactive') return 'Inactive';
+  if (rawStatus === 'suspended') return 'Suspended';
+
+  const { expiry } = getMonthlyExpiry(user, payments);
+  if (!expiry) return effectiveStatus(user);
   const today = getToday();
-  const expiryDay = new Date(
-    expiry.getFullYear(),
-    expiry.getMonth(),
-    expiry.getDate()
-  );
-  if (expiryDay < today) {
-    return 'Expired';
-  }
-  const diffMs =
-    expiryDay.getTime() -
-    today.getTime();
-  const diffDays = Math.floor(
-    diffMs /
-      (1000 * 60 * 60 * 24)
-  );
-  if (
-    diffDays >= 0 &&
-    diffDays <= 7
-  ) {
-    return 'Upcoming Expiry';
-  }
-  return effectiveStatus(user);
+  if (expiry <= today) return 'Expired';
+  const days = Math.round((Date.UTC(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()) -
+    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  if (days <= 7) return 'Upcoming Expiry';
+  return 'Active';
 }
+
 /* ============================================================
    VIEW FIELD
 ============================================================ */
@@ -1367,11 +1350,18 @@ const resolveIspName = (
             dateInput(
               c.activationDate
             );
-          const expiry = c.expiryDate
-            ? dateInput(c.expiryDate)
-            : expiryDate(
-                activation
-              );
+          // Display the next unpaid billing deadline, not the original stored date.
+          const expiry = getMonthlyExpiry({
+            activationDate: activation,
+            expiryDate: c.expiryDate,
+            monthlyFeeRaw: Number(c.monthlyFee || 0),
+            id: c._id,
+            customerId: c.customerId || 'N/A',
+            name: c.name || '',
+          }, paymentList).expiry;
+          const expiryDisplay = expiry
+            ? `${expiry.getFullYear()}-${String(expiry.getMonth() + 1).padStart(2, '0')}-${String(expiry.getDate()).padStart(2, '0')}`
+            : (c.expiryDate ? dateInput(c.expiryDate) : expiryDate(activation));
           const user = {
             id: c._id,
             customerId:
@@ -1413,7 +1403,7 @@ const resolveIspName = (
             activationDate:
               activation,
             expiryDate:
-              expiry,
+              expiryDisplay,
             statusRaw:
               c.status || 'active',
           };

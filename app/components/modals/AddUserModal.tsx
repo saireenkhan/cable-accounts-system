@@ -140,6 +140,32 @@ const defaultFields: Field[] = [
   },
 ];
 
+// Convert backend validation responses into actionable modal messages.
+// Keep the original response available in DevTools for diagnosis.
+function getApiFailureMessage(error: any): string {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+  const details: string[] = [];
+  if (typeof data === 'string' && data.trim()) details.push(data.trim());
+  if (data && typeof data === 'object') {
+    for (const key of ['message', 'error', 'detail']) {
+      if (typeof data[key] === 'string' && data[key].trim()) details.push(data[key].trim());
+    }
+    const errors = data.errors;
+    const values = Array.isArray(errors) ? errors :
+      errors && typeof errors === 'object' ? Object.values(errors) : [];
+    for (const entry of values) {
+      const value = typeof entry === 'string' ? entry : entry && typeof entry === 'object' ? entry.message || entry.msg : null;
+      if (typeof value === 'string' && value.trim()) details.push(value.trim());
+    }
+  }
+  const unique = [...new Set(details)];
+  return unique.length ? unique.join(' — ') :
+    status ? `Request rejected by server (HTTP ${status}). Check backend validation logs.` :
+    error?.request ? 'Backend did not respond. Check your connection and backend server.' :
+    error?.message || 'Unable to save record.';
+}
+
 const colorMap = {
   blue:
     'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800',
@@ -689,12 +715,66 @@ export function AddUserModal({
 
   const maxRetries = 3;
 
+  // ISP availability is checked once each time the shared modal opens.
+  // Unknown/error states are not treated as an empty ISP list.
+  const [ispStatus, setIspStatus] = useState<
+    'loading' | 'empty' | 'available' | 'error'
+  >('loading');
+
+  const isISPField = useCallback((field: Field): boolean => {
+    const name = field.name.trim().toLowerCase();
+    const label = field.label.trim().toLowerCase();
+    return (
+      /^(isp|ispid|isp_id|ispids|isp_ids|isps)$/.test(name) ||
+      /^(?:(?:select|choose|assign)\s+)?isps?(?:\s+name)?\s*\*?$/.test(label)
+    );
+  }, []);
+
+  const hasISPField = useMemo(
+    () => (fields?.length ? fields : defaultFields).some(isISPField),
+    [fields, isISPField]
+  );
+
+  useEffect(() => {
+    if (!isOpen || !hasISPField) return;
+
+    let active = true;
+    setIspStatus('loading');
+
+    const fetchISPAvailability = async () => {
+      try {
+        // This uses the same API instance as the existing form submission.
+        // Change '/isps' only if your router mounts the ISP endpoint elsewhere.
+        const response = await api.get('/isps');
+        if (!active) return;
+        if (!response.data?.success || !Array.isArray(response.data?.isps)) {
+          throw new Error('Invalid ISP list response');
+        }
+        setIspStatus(response.data.isps.length > 0 ? 'available' : 'empty');
+      } catch (error) {
+        if (!active) return;
+        console.error('Could not load ISP availability:', error);
+        setIspStatus('error');
+      }
+    };
+
+    void fetchISPAvailability();
+    return () => { active = false; };
+  }, [isOpen, hasISPField]);
+
   const finalFields = useMemo(() => {
     return fields &&
       fields.length > 0
       ? fields
       : defaultFields;
   }, [fields]);
+
+  // Keep all original fields for initialization/dependencies;
+  // filter only the visible fields and required-field validation.
+  const visibleFields = useMemo(() =>
+    finalFields.filter((field) => !(ispStatus === 'empty' && isISPField(field))),
+    [finalFields, ispStatus, isISPField]
+  );
 
   // ======================================================
   // INITIALIZE FORM
@@ -1319,31 +1399,14 @@ export function AddUserModal({
 
         return response;
       } catch (error: any) {
-        console.error(
-          '❌ AddUserModal API ERROR:',
-          {
-            status:
-              error?.response
-                ?.status,
-
-            responseData:
-              error?.response
-                ?.data,
-
-            responseHeaders:
-              error?.response
-                ?.headers,
-
-            message:
-              error?.message,
-
-            method,
-
-            endpoint,
-
-            payload,
-          }
-        );
+        // In Next.js dev mode console.error can open a disruptive error overlay.
+        // The API validation details are displayed in the modal instead.
+        console.warn('AddUserModal request rejected', {
+          endpoint,
+          method,
+          status: error?.response?.status,
+          responseData: error?.response?.data,
+        });
 
         if (
           isDuplicateReceiptError(
@@ -1391,8 +1454,16 @@ export function AddUserModal({
   ) => {
     e.preventDefault();
 
+    // Do not mistake network/API failures for a genuinely empty ISP list.
+    if (hasISPField && (ispStatus === 'loading' || ispStatus === 'error')) {
+      setApiError(ispStatus === 'loading'
+        ? 'Checking ISP availability. Please try again.'
+        : 'Could not check ISP availability. Reopen the modal and try again.');
+      return;
+    }
+
     const missingFields =
-      finalFields.filter(
+      visibleFields.filter(
         (f) => {
           if (!f.required) {
             return false;
@@ -1651,6 +1722,20 @@ export function AddUserModal({
         }
       }
 
+      // Remove optional ISP values AFTER transformData as well, so a page's
+      // transform cannot inadvertently put an empty ISP value back.
+      if (ispStatus === 'empty' && hasISPField) {
+        for (const field of finalFields) {
+          if (isISPField(field)) delete payload[field.name];
+        }
+        // Canonical ISP keys may also be injected by transformData.
+        for (const key of Object.keys(payload)) {
+          if (/^(isp|ispid|isp_id|ispids|isp_ids|isps)$/i.test(key)) {
+            delete payload[key];
+          }
+        }
+      }
+
       // ======================================================
       // FINAL REQUEST LOG
       // ======================================================
@@ -1716,72 +1801,13 @@ export function AddUserModal({
         toast.error(message);
       }
     } catch (error: any) {
-      console.error(
-        '❌ Full Error:',
-        error
-      );
+      const message = isDuplicateReceiptError(error)
+        ? 'Duplicate receipt number. Please use a different receipt number.'
+        : getApiFailureMessage(error);
 
-      let message =
-        'Failed to add record';
-
-      if (
-        isDuplicateReceiptError(
-          error
-        )
-      ) {
-        message =
-          'Duplicate receipt number. Please try again with a different date or contact support.';
-      } else if (
-        error?.response?.data
-          ?.message
-      ) {
-        message =
-          error.response.data
-            .message;
-      } else if (
-        error?.response?.data
-          ?.errors
-      ) {
-        const errors =
-          Object.values(
-            error.response
-              .data.errors
-          )
-            .map((item: any) =>
-              typeof item ===
-              'string'
-                ? item
-                : item?.message ||
-                  JSON.stringify(
-                    item
-                  )
-            )
-            .join(', ');
-
-        message =
-          errors ||
-          'Validation failed';
-      } else if (
-        typeof error
-          ?.response?.data ===
-        'string'
-      ) {
-        message =
-          error.response.data;
-      } else if (
-        error?.response
-      ) {
-        message = `Server error: ${error.response.status}`;
-      } else if (
-        error?.request
-      ) {
-        message =
-          'No response from server. Please check if backend is running.';
-      } else {
-        message =
-          error?.message ||
-          'Failed to add record';
-      }
+      // A 400 response cannot be made successful by hiding the ISP field.
+      // If the server says ISP is required, fix the target model/controller.
+      console.warn('Save failed:', { endpoint, status: error?.response?.status, message });
 
       setApiError(message);
       toast.error(message);
@@ -1879,7 +1905,7 @@ export function AddUserModal({
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {finalFields.map(
+            {visibleFields.map(
               (field) => {
                 if (
                   field.name ===
@@ -2219,7 +2245,7 @@ export function AddUserModal({
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || (hasISPField && ispStatus === 'loading')}
               className={cn(
                 'px-4 py-1.5 text-sm text-white rounded-md font-medium transition-colors disabled:opacity-70',
                 buttonColorMap[

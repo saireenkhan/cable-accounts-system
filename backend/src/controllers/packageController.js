@@ -1,6 +1,7 @@
 
 const mongoose = require('mongoose');
 const PackageModel = require('../models/Package');
+const ISPModel = require('../models/ISP');
 const logger = require('../utils/logger');
 const tenantScope = require('../utils/tenantScope');
 
@@ -8,20 +9,46 @@ const tenantScope = require('../utils/tenantScope');
 // HELPERS
 // ============================================================
 
-// Accept an ISP ObjectId or an object containing _id.
-// Each package stores exactly ONE ISP.
+// Normalize ISP values.
+// Supports string, ObjectId, object with _id, or single-item array.
 const normalizeIsp = (value) => {
-  if (value && typeof value === 'object') {
-    return String(value._id || value.id || '');
+  if (Array.isArray(value)) {
+    value = value.find(Boolean) || null;
   }
 
-  return String(value || '').trim();
+  if (value && typeof value === 'object') {
+    return String(value._id || value.id || '').trim();
+  }
+
+  return String(value ?? '').trim();
 };
 
-const validateIsp = (value) => {
+// Check ISP availability within the current tenant.
+const getISPState = async (req) => {
+  const ISP = tenantScope(ISPModel, req);
+
+  const hasISPs = Boolean(await ISP.exists({}));
+
+  return { ISP, hasISPs };
+};
+
+const validateIsp = async (value, req) => {
+  const ISP = tenantScope(ISPModel, req);
+
+  const hasISPs = Boolean(await ISP.exists({}));
+
   const isp = normalizeIsp(value);
 
-  if (!isp) {
+  // No ISP records: ISP is optional
+  if (!hasISPs && !isp) {
+    return {
+      valid: true,
+      isp: null,
+    };
+  }
+
+  // ISP records exist: ISP is required
+  if (hasISPs && !isp) {
     return {
       valid: false,
       message: 'Please select an ISP',
@@ -35,14 +62,27 @@ const validateIsp = (value) => {
     };
   }
 
-  return { valid: true, isp };
+  const existingISP = await ISP.findById(isp);
+
+  if (!existingISP) {
+    return {
+      valid: false,
+      message: 'Selected ISP not found',
+    };
+  }
+
+  return {
+    valid: true,
+    isp: existingISP._id,
+  };
 };
 
+// Handle package errors.
 const handlePackageError = (res, error, action) => {
   logger.error(`${action} package error: ${error.message}`);
 
   if (error.code === 11000) {
-    return res.status(400).json({
+    return res.status(409).json({
       success: false,
       message:
         'A package with this name already exists for this ISP',
@@ -50,7 +90,7 @@ const handlePackageError = (res, error, action) => {
   }
 
   if (error.name === 'ValidationError') {
-    const messages = Object.values(error.errors).map(
+    const messages = Object.values(error.errors || {}).map(
       (e) => e.message
     );
 
@@ -63,13 +103,13 @@ const handlePackageError = (res, error, action) => {
   if (error.name === 'CastError') {
     return res.status(400).json({
       success: false,
-      message: 'Invalid package ID',
+      message: 'Invalid package ID or field value',
     });
   }
 
   return res.status(500).json({
     success: false,
-    message: error.message || 'Server error',
+    message: 'Server error',
   });
 };
 
@@ -77,6 +117,7 @@ const handlePackageError = (res, error, action) => {
 // GET ALL PACKAGES
 // GET /api/packages
 // ============================================================
+
 exports.getPackages = async (req, res) => {
   const Package = tenantScope(PackageModel, req);
 
@@ -84,7 +125,7 @@ exports.getPackages = async (req, res) => {
     const packages = await Package.find()
       .sort({ createdAt: -1 });
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       packages,
     });
@@ -93,7 +134,7 @@ exports.getPackages = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: 'Server error',
+      message: 'Failed to fetch packages',
     });
   }
 };
@@ -101,15 +142,8 @@ exports.getPackages = async (req, res) => {
 // ============================================================
 // CREATE PACKAGE
 // POST /api/packages
-// Body: {
-//   isp,
-//   name,
-//   bandwidth,
-//   sellingPrice,
-//   purchasePrice,
-//   description
-// }
 // ============================================================
+
 exports.createPackage = async (req, res) => {
   const Package = tenantScope(PackageModel, req);
 
@@ -123,8 +157,11 @@ exports.createPackage = async (req, res) => {
       description,
     } = req.body;
 
-    // Validate ISP
-    const ispValidation = validateIsp(isp);
+    // --------------------------------------------------------
+    // VALIDATE ISP
+    // --------------------------------------------------------
+
+    const ispValidation = await validateIsp(isp, req);
 
     if (!ispValidation.valid) {
       return res.status(400).json({
@@ -135,7 +172,10 @@ exports.createPackage = async (req, res) => {
 
     const selectedIsp = ispValidation.isp;
 
-    // Validate package name
+    // --------------------------------------------------------
+    // VALIDATE PACKAGE NAME
+    // --------------------------------------------------------
+
     if (!name || !String(name).trim()) {
       return res.status(400).json({
         success: false,
@@ -147,11 +187,18 @@ exports.createPackage = async (req, res) => {
       .trim()
       .toUpperCase();
 
-    // Validate prices
+    // --------------------------------------------------------
+    // VALIDATE PRICES
+    // --------------------------------------------------------
+
     const sell = Number(sellingPrice);
     const cost = Number(purchasePrice);
 
     if (
+      sellingPrice === '' ||
+      sellingPrice == null ||
+      purchasePrice === '' ||
+      purchasePrice == null ||
       !Number.isFinite(sell) ||
       !Number.isFinite(cost) ||
       sell <= 0 ||
@@ -164,19 +211,26 @@ exports.createPackage = async (req, res) => {
       });
     }
 
-    // Duplicate name is restricted WITHIN the selected ISP.
+    // --------------------------------------------------------
+    // CHECK DUPLICATE PACKAGE
+    // --------------------------------------------------------
+
     const existingPackage = await Package.findOne({
       name: normalizedName,
       isp: selectedIsp,
     });
 
     if (existingPackage) {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
         message:
           `Package "${normalizedName}" already exists for this ISP`,
       });
     }
+
+    // --------------------------------------------------------
+    // CREATE PACKAGE
+    // --------------------------------------------------------
 
     const pkg = await Package.create({
       isp: selectedIsp,
@@ -184,13 +238,16 @@ exports.createPackage = async (req, res) => {
       sellingPrice: sell,
       purchasePrice: cost,
       profit: sell - cost,
+
       bandwidth:
         bandwidth && String(bandwidth).trim()
           ? String(bandwidth).trim()
           : 'N/A',
+
       description: description
         ? String(description).trim()
         : '',
+
       isActive: true,
     });
 
@@ -199,6 +256,7 @@ exports.createPackage = async (req, res) => {
       package: pkg,
       message: 'Package created successfully',
     });
+
   } catch (error) {
     return handlePackageError(res, error, 'Create');
   }
@@ -208,6 +266,7 @@ exports.createPackage = async (req, res) => {
 // UPDATE PACKAGE
 // PUT /api/packages/:id
 // ============================================================
+
 exports.updatePackage = async (req, res) => {
   const Package = tenantScope(PackageModel, req);
 
@@ -222,12 +281,20 @@ exports.updatePackage = async (req, res) => {
       isActive,
     } = req.body;
 
+    // --------------------------------------------------------
+    // VALIDATE PACKAGE ID
+    // --------------------------------------------------------
+
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid package ID',
       });
     }
+
+    // --------------------------------------------------------
+    // FIND EXISTING PACKAGE
+    // --------------------------------------------------------
 
     const existing = await Package.findById(req.params.id);
 
@@ -239,10 +306,18 @@ exports.updatePackage = async (req, res) => {
     }
 
     const update = {};
+    const ispState = await getISPState(req);
 
-    // ISP is updated only when provided.
+    // --------------------------------------------------------
+    // UPDATE ISP
+    // --------------------------------------------------------
+
     if (isp !== undefined) {
-      const ispValidation = validateIsp(isp);
+      const ispValidation = await validateIsp(
+        isp,
+        req,
+        ispState
+      );
 
       if (!ispValidation.valid) {
         return res.status(400).json({
@@ -252,7 +327,28 @@ exports.updatePackage = async (req, res) => {
       }
 
       update.isp = ispValidation.isp;
+
+    } else if (!ispState.hasISPs) {
+      // No ISP records exist.
+      // Permit editing an unassigned package without ISP.
+      // Preserve any previous association rather than
+      // silently deleting existing information.
+      if (!existing.isp) {
+        update.isp = null;
+      }
+
+    } else if (!existing.isp) {
+      // ISP records now exist.
+      // An unassigned package must select one.
+      return res.status(400).json({
+        success: false,
+        message: 'Please select an ISP',
+      });
     }
+
+    // --------------------------------------------------------
+    // UPDATE NAME
+    // --------------------------------------------------------
 
     if (name !== undefined) {
       if (!String(name).trim()) {
@@ -262,17 +358,33 @@ exports.updatePackage = async (req, res) => {
         });
       }
 
-      update.name = String(name).trim().toUpperCase();
+      update.name = String(name)
+        .trim()
+        .toUpperCase();
     }
 
+    // --------------------------------------------------------
+    // UPDATE BANDWIDTH
+    // --------------------------------------------------------
+
     if (bandwidth !== undefined) {
-      update.bandwidth = String(bandwidth).trim() || 'N/A';
+      update.bandwidth =
+        String(bandwidth || '').trim() || 'N/A';
     }
+
+    // --------------------------------------------------------
+    // UPDATE SELLING PRICE
+    // --------------------------------------------------------
 
     if (sellingPrice !== undefined) {
       const val = Number(sellingPrice);
 
-      if (!Number.isFinite(val) || val <= 0) {
+      if (
+        sellingPrice === '' ||
+        sellingPrice === null ||
+        !Number.isFinite(val) ||
+        val <= 0
+      ) {
         return res.status(400).json({
           success: false,
           message: 'Selling price must be greater than 0',
@@ -282,10 +394,19 @@ exports.updatePackage = async (req, res) => {
       update.sellingPrice = val;
     }
 
+    // --------------------------------------------------------
+    // UPDATE PURCHASE PRICE
+    // --------------------------------------------------------
+
     if (purchasePrice !== undefined) {
       const val = Number(purchasePrice);
 
-      if (!Number.isFinite(val) || val <= 0) {
+      if (
+        purchasePrice === '' ||
+        purchasePrice === null ||
+        !Number.isFinite(val) ||
+        val <= 0
+      ) {
         return res.status(400).json({
           success: false,
           message: 'Purchase price must be greater than 0',
@@ -295,35 +416,53 @@ exports.updatePackage = async (req, res) => {
       update.purchasePrice = val;
     }
 
+    // --------------------------------------------------------
+    // UPDATE DESCRIPTION
+    // --------------------------------------------------------
+
     if (description !== undefined) {
-      update.description = String(description || '').trim();
+      update.description = String(
+        description || ''
+      ).trim();
     }
+
+    // --------------------------------------------------------
+    // UPDATE STATUS
+    // --------------------------------------------------------
 
     if (isActive !== undefined) {
       update.isActive = Boolean(isActive);
     }
 
-    // Check duplicates using the FINAL ISP and name.
+    // --------------------------------------------------------
+    // CHECK DUPLICATES USING FINAL NAME AND ISP
+    // --------------------------------------------------------
+
     const finalName = update.name || existing.name;
-    const finalIsp = update.isp || existing.isp;
 
-    if (finalIsp) {
-      const duplicate = await Package.findOne({
-        name: finalName,
-        isp: finalIsp,
-        _id: { $ne: existing._id },
+    const finalIsp =
+      update.isp !== undefined
+        ? update.isp
+        : existing.isp ?? null;
+
+    const duplicate = await Package.findOne({
+      name: finalName,
+      isp: finalIsp,
+      _id: { $ne: existing._id },
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message:
+          `Package "${finalName}" already exists for this ISP`,
       });
-
-      if (duplicate) {
-        return res.status(400).json({
-          success: false,
-          message:
-            `Package "${finalName}" already exists for this ISP`,
-        });
-      }
     }
 
-    // Recalculate profit when prices change.
+    // --------------------------------------------------------
+    // RECALCULATE PROFIT
+    // --------------------------------------------------------
+
     if (
       update.sellingPrice !== undefined ||
       update.purchasePrice !== undefined
@@ -341,6 +480,10 @@ exports.updatePackage = async (req, res) => {
       update.profit = newSell - newCost;
     }
 
+    // --------------------------------------------------------
+    // SAVE UPDATE
+    // --------------------------------------------------------
+
     const pkg = await Package.findByIdAndUpdate(
       req.params.id,
       { $set: update },
@@ -350,11 +493,19 @@ exports.updatePackage = async (req, res) => {
       }
     );
 
-    return res.json({
+    if (!pkg) {
+      return res.status(404).json({
+        success: false,
+        message: 'Package not found',
+      });
+    }
+
+    return res.status(200).json({
       success: true,
       package: pkg,
       message: 'Package updated successfully',
     });
+
   } catch (error) {
     return handlePackageError(res, error, 'Update');
   }
@@ -364,10 +515,18 @@ exports.updatePackage = async (req, res) => {
 // DELETE PACKAGE
 // DELETE /api/packages/:id
 // ============================================================
+
 exports.deletePackage = async (req, res) => {
   const Package = tenantScope(PackageModel, req);
 
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid package ID',
+      });
+    }
+
     const pkg = await Package.findByIdAndDelete(
       req.params.id
     );
@@ -379,10 +538,11 @@ exports.deletePackage = async (req, res) => {
       });
     }
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: 'Package deleted successfully',
     });
+
   } catch (error) {
     return handlePackageError(res, error, 'Delete');
   }

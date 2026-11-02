@@ -1,1048 +1,774 @@
-const csv = require('csv-parser');
 
+'use strict';
+
+const csv = require('csv-parser');
 const { Readable } = require('stream');
+const mongoose = require('mongoose');
 
 const Customer = require('../models/Customer');
-
 const Partner = require('../models/Partner');
-
 const PartnerArea = require('../models/PartnerArea');
 const Area = require('../models/Area');
 const resolveUploadArea = require('../utils/resolveUploadArea');
-
 const logger = require('../utils/logger');
 
-
-
+// ============================================================
+// SECURITY CONFIGURATION
 // ============================================================
 
-// SHARED CONFIG
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ROWS = 10000;
+const MAX_CELL_BYTES = 2048;
 
-// ============================================================
-
-const REQUIRED_HEADERS = ['customerId', 'name', 'phone', 'address'];
-
-const OPTIONAL_HEADERS = [
-
-  'package',
-
-  'discount',
-
-  'monthlyFee',
-
-  'status',
-
-  'activationDate',
-
+const REQUIRED_HEADERS = [
+  'customerId',
+  'name',
+  'phone',
+  'address',
 ];
 
+const OPTIONAL_HEADERS = [
+  'package',
+  'discount',
+  'monthlyFee',
+  'status',
+  'activationDate',
+];
 
+const ALLOWED_HEADERS = [
+  ...REQUIRED_HEADERS,
+  ...OPTIONAL_HEADERS,
+];
 
-const DEFAULTS = {
+const VALID_STATUSES = new Set([
+  'active',
+  'inactive',
+  'suspended',
+  'expired',
+]);
 
-  package: '',
+const normalizeKey = (value) =>
+  String(value || '').trim().toUpperCase();
 
-  discount: 0,
-
-  monthlyFee: 0,
-
-  status: 'active',
-
-  activationDate: null,
-
-};
-
-
-
-const VALID_STATUSES = ['active', 'inactive', 'suspended', 'expired'];
-
-
+const badControls =
+  /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
 
 // ============================================================
-
-// SHARED HELPERS
-
+// ERROR HANDLING
 // ============================================================
 
-const parseCSVFromBuffer = (buffer) => {
+class InputError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.name = 'InputError';
+    this.status = status;
+  }
+}
 
-  return new Promise((resolve, reject) => {
-
-    const rows = [];
-
-    let headers = null;
-
-
-
-    Readable.from(buffer)
-
-      .pipe(csv())
-
-      .on('headers', (h) => {
-
-        headers = h.map((x) =>
-
-          String(x)
-
-            .replace(/^\uFEFF/, '')
-
-            .replace(/^\s+|\s+$/g, '')
-
-        );
-
-      })
-
-      .on('data', (data) => {
-
-        const cleaned = {};
-
-        Object.keys(data).forEach((key) => {
-
-          const cleanKey = String(key)
-
-            .replace(/^\uFEFF/, '')
-
-            .replace(/^\s+|\s+$/g, '');
-
-          cleaned[cleanKey] = data[key];
-
-        });
-
-        rows.push(cleaned);
-
-      })
-
-      .on('end', () => resolve({ headers, rows }))
-
-      .on('error', reject);
-
-  });
-
-};
-
-
-
-const validateHeaders = (headers) => {
-
-  if (!headers || headers.length === 0) {
-
-    return { ok: false, message: 'CSV file has no header row' };
-
+function rowError(error) {
+  if (error && error.code === 11000) {
+    return 'ID already exists';
   }
 
-
-
-  const missingRequired = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
-
-  if (missingRequired.length > 0) {
-
-    return {
-
-      ok: false,
-
-      message: `Missing required columns: ${missingRequired.join(
-
-        ', '
-
-      )}. Expected at least: ${REQUIRED_HEADERS.join(',')}`,
-
-    };
-
+  if (error instanceof InputError) {
+    return error.message;
   }
 
-
-
-  const allowed = [...REQUIRED_HEADERS, ...OPTIONAL_HEADERS];
-
-  const unknown = headers.filter((h) => !allowed.includes(h));
-
-  if (unknown.length > 0) {
-
-    return {
-
-      ok: false,
-
-      message: `Unknown columns: ${unknown.join(
-
-        ', '
-
-      )}. Allowed: ${allowed.join(',')}`,
-
-    };
-
+  if (error && error.name === 'ValidationError') {
+    return 'Record failed model validation';
   }
 
+  return 'Could not save record';
+}
 
-
-  const firstRequired = headers.slice(0, REQUIRED_HEADERS.length);
-
-  const orderOk = REQUIRED_HEADERS.every((h, i) => firstRequired[i] === h);
-
-  if (!orderOk) {
-
-    return {
-
-      ok: false,
-
-      message: `Required columns must be in this order: ${REQUIRED_HEADERS.join(
-
-        ','
-
-      )}. Got: ${firstRequired.join(',')}`,
-
-    };
-
+function handleError(res, error, context) {
+  if (error instanceof InputError) {
+    return res.status(error.status).json({
+      success: false,
+      message: error.message,
+    });
   }
 
-
-
-  return { ok: true };
-
-};
-
-
-
-const parseNumber = (val, fallback = 0) => {
-
-  if (val === undefined || val === null || val === '') return fallback;
-
-  const n = parseFloat(
-
-    String(val)
-
-      .replace(/,/g, '')
-
-      .replace(/Rs\.?/i, '')
-
-      .trim()
-
+  logger.error(
+    `${context}: ${
+      error && error.message
+        ? error.message
+        : 'Unknown error'
+    }`
   );
 
-  return isNaN(n) ? fallback : n;
+  return res.status(500).json({
+    success: false,
+    message: 'Server error during bulk upload',
+  });
+}
 
-};
+// ============================================================
+// INPUT VALIDATION
+// ============================================================
 
+function textField(value, label, max, required = true) {
+  if (typeof value !== 'string') {
+    throw new InputError(`${label} must be text`);
+  }
 
+  const text = value.trim();
 
-const parseDate = (val) => {
+  if (
+    (required && !text) ||
+    text.length > max ||
+    badControls.test(text)
+  ) {
+    throw new InputError(
+      `Invalid ${label} (maximum ${max} characters)`
+    );
+  }
 
-  if (val === undefined || val === null || String(val).trim() === '') {
+  return text;
+}
 
+function requestField(req, key, required = true) {
+  const value = req.body && req.body[key];
+
+  if (value == null && !required) {
+    return '';
+  }
+
+  return textField(value, key, 150, required);
+}
+
+function tenantFromRequest(req) {
+  if (
+    !req.tenantId ||
+    !mongoose.isValidObjectId(req.tenantId)
+  ) {
+    throw new InputError(
+      'Tenant not found. Please log in again.',
+      403
+    );
+  }
+
+  return req.tenantId;
+}
+
+// ============================================================
+// FINANCIAL VALIDATION
+// ============================================================
+
+function parseMoney(value, label) {
+  if (
+    value === undefined ||
+    value === null ||
+    String(value).trim() === ''
+  ) {
+    return 0;
+  }
+
+  const raw = String(value)
+    .trim()
+    .replace(/,/g, '')
+    .replace(/^Rs\.?\s*/i, '');
+
+  if (!/^\d+(?:\.\d{1,2})?$/.test(raw)) {
+    throw new InputError(`Invalid ${label}`);
+  }
+
+  const number = Number(raw);
+
+  if (
+    !Number.isFinite(number) ||
+    number > 10000000
+  ) {
+    throw new InputError(
+      `${label} exceeds allowed range`
+    );
+  }
+
+  return number;
+}
+
+// ============================================================
+// DATE VALIDATION
+// ============================================================
+
+function parseDate(value) {
+  if (
+    value == null ||
+    String(value).trim() === ''
+  ) {
     return null;
-
   }
 
-  const d = new Date(String(val).trim());
+  const raw = String(value).trim();
 
-  return isNaN(d.getTime()) ? null : d;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    throw new InputError(
+      'Invalid activationDate (expected YYYY-MM-DD)'
+    );
+  }
 
-};
+  const date = new Date(
+    `${raw}T00:00:00.000Z`
+  );
 
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== raw
+  ) {
+    throw new InputError(
+      'Invalid activationDate (expected YYYY-MM-DD)'
+    );
+  }
 
+  return date;
+}
 
-const addOneMonth = (date) => {
-
+function addOneMonth(date) {
+  // Preserves your existing expiry-date logic.
   const d = new Date(date);
-
   d.setMonth(d.getMonth() + 1);
-
   return d;
+}
 
-};
+// ============================================================
+// PHONE VALIDATION
+// ============================================================
 
+function normalizePhone(value) {
+  let phone = textField(
+    value,
+    'phone',
+    30
+  );
 
-
-const normalizePhone = (phone) => {
-
-  let p = String(phone || '').trim();
-
-  if (/^[1-9]\d{9}$/.test(p)) {
-
-    p = '0' + p;
-
+  if (/^[1-9]\d{9}$/.test(phone)) {
+    phone = `0${phone}`;
   }
 
-  return p;
+  if (!/^[0-9+()\s-]{7,30}$/.test(phone)) {
+    throw new InputError('Invalid phone');
+  }
 
-};
-
-
-
-// ============================================================
-
-// CUSTOMER BULK UPLOAD
-
-// POST /api/customers/bulk-upload
+  return phone;
+}
 
 // ============================================================
+// CSV HEADER VALIDATION
+// ============================================================
 
-exports.bulkUpload = async (req, res) => {
+function validateHeaders(headers) {
+  if (!headers || !headers.length) {
+    throw new InputError(
+      'CSV file has no header row'
+    );
+  }
 
-  const tenantId = req.tenantId;
+  const normalized = headers.map((header) =>
+    String(header)
+      .replace(/^\uFEFF/, '')
+      .trim()
+  );
 
-  if (!tenantId) {
+  if (
+    new Set(normalized).size !==
+    normalized.length
+  ) {
+    throw new InputError(
+      'CSV contains duplicate column names'
+    );
+  }
 
-    return res.status(400).json({
+  const missing = REQUIRED_HEADERS.filter(
+    (header) => !normalized.includes(header)
+  );
 
-      success: false,
+  if (missing.length) {
+    throw new InputError(
+      `Missing required columns: ${missing.join(', ')}`
+    );
+  }
 
-      message: 'Tenant not found. Please log in again.',
+  const unknown = normalized.filter(
+    (header) => !ALLOWED_HEADERS.includes(header)
+  );
 
+  if (unknown.length) {
+    throw new InputError(
+      `Unknown columns: ${unknown.join(', ')}`
+    );
+  }
+
+  const validOrder = REQUIRED_HEADERS.every(
+    (header, index) => normalized[index] === header
+  );
+
+  if (!validOrder) {
+    throw new InputError(
+      `Required columns must be in this order: ${
+        REQUIRED_HEADERS.join(',')
+      }`
+    );
+  }
+
+  return normalized;
+}
+
+// ============================================================
+// CSV FILE VALIDATION
+// ============================================================
+
+function validateFile(req) {
+  if (!req.file) {
+    throw new InputError('No file uploaded');
+  }
+
+  if (!Buffer.isBuffer(req.file.buffer)) {
+    throw new InputError(
+      'CSV upload must use memory storage'
+    );
+  }
+
+  if (!req.file.buffer.length) {
+    throw new InputError('CSV file is empty');
+  }
+
+  if (req.file.buffer.length > MAX_FILE_BYTES) {
+    throw new InputError(
+      'CSV file exceeds 10 MB',
+      413
+    );
+  }
+
+  if (
+    req.file.originalname &&
+    !/\.csv$/i.test(req.file.originalname)
+  ) {
+    throw new InputError(
+      'Only .csv files are allowed'
+    );
+  }
+
+  if (req.file.buffer.includes(0)) {
+    throw new InputError(
+      'Invalid CSV file content'
+    );
+  }
+}
+
+// ============================================================
+// SECURE CSV PARSER
+// ============================================================
+
+function parseCSVFromBuffer(buffer) {
+  return new Promise((resolve, reject) => {
+    const rows = [];
+    let headers;
+    let settled = false;
+
+    const source = Readable.from([buffer]);
+
+    const parser = csv({
+      strict: true,
+      maxRowBytes: 64 * 1024,
+      mapHeaders: ({ header }) =>
+        String(header)
+          .replace(/^\uFEFF/, '')
+          .trim(),
     });
 
-  }
-
-
-
-  try {
-
-    if (!req.file) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: 'No file uploaded',
-
-      });
-
-    }
-
-
-
-    const selectedArea = String(req.body.area || '').trim();
-
-    if (!selectedArea) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: 'Please select an area before uploading',
-
-      });
-
-    }
-
-
-
-    const uploadContext = await resolveUploadArea(req, Area);
-    if (!uploadContext.ok) {
-      return res.status(400).json({ success: false, message: uploadContext.message });
-    }
-
-    const { headers, rows } = await parseCSVFromBuffer(req.file.buffer);
-
-
-
-    console.log('📋 Customer CSV headers:', headers);
-
-    console.log('📊 Customer CSV rows:', rows.length);
-
-    console.log('📍 Target area:', selectedArea);
-
-    console.log('📍 Tenant:', tenantId);
-
-
-
-    const headerCheck = validateHeaders(headers);
-
-    if (!headerCheck.ok) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: headerCheck.message,
-
-      });
-
-    }
-
-
-
-    if (rows.length === 0) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: 'CSV file has no data rows',
-
-      });
-
-    }
-
-
-
-    const inserted = [];
-
-    const skipped = [];
-
-    const errors = [];
-
-
-
-    // ✅ Only check duplicates WITHIN THIS TENANT
-
-    const existingIds = new Set();
-
-    const existingDocs = await Customer.find(
-
-      { tenantId },
-
-      { customerId: 1 }
-
-    ).lean();
-
-    existingDocs.forEach((d) =>
-
-      existingIds.add(String(d.customerId).trim())
-
-    );
-
-
-
-    for (let i = 0; i < rows.length; i++) {
-
-      const row = rows[i];
-
-      const rowNum = i + 2;
-
-
-
+    const fail = (error) => {
+      if (settled) return;
+
+      settled = true;
+
+      source.unpipe(parser);
+      source.destroy();
+      parser.destroy();
+
+      reject(
+        error instanceof InputError
+          ? error
+          : new InputError(
+              'Malformed or invalid CSV file'
+            )
+      );
+    };
+
+    parser.on('headers', (receivedHeaders) => {
       try {
+        headers = validateHeaders(receivedHeaders);
+      } catch (error) {
+        fail(error);
+      }
+    });
 
-        const missing = REQUIRED_HEADERS.filter(
+    parser.on('data', (row) => {
+      if (settled) return;
 
-          (h) => row[h] === undefined || String(row[h]).trim() === ''
-
+      if (rows.length >= MAX_ROWS) {
+        return fail(
+          new InputError(
+            `CSV exceeds ${MAX_ROWS} rows`
+          )
         );
-
-        if (missing.length > 0) {
-
-          errors.push(`Row ${rowNum}: missing ${missing.join(', ')}`);
-
-          skipped.push(rowNum);
-
-          continue;
-
-        }
-
-
-
-        const customerId = String(row.customerId).trim();
-
-
-
-        if (existingIds.has(customerId)) {
-
-          errors.push(
-
-            `Row ${rowNum}: customerId "${customerId}" already exists`
-
-          );
-
-          skipped.push(rowNum);
-
-          continue;
-
-        }
-
-
-
-        const pkg =
-
-          row.package !== undefined
-
-            ? String(row.package).trim()
-
-            : DEFAULTS.package;
-
-        const discount = parseNumber(row.discount, DEFAULTS.discount);
-
-        const monthlyFee = parseNumber(row.monthlyFee, DEFAULTS.monthlyFee);
-
-        let status =
-
-          row.status !== undefined
-
-            ? String(row.status).trim().toLowerCase()
-
-            : DEFAULTS.status;
-
-
-
-        if (!VALID_STATUSES.includes(status)) {
-
-          status = DEFAULTS.status;
-
-        }
-
-
-
-        const parsedActivation = parseDate(row.activationDate);
-
-        const activationDate = parsedActivation || new Date();
-
-
-
-        if (
-
-          row.activationDate !== undefined &&
-
-          String(row.activationDate).trim() !== '' &&
-
-          !parsedActivation
-
-        ) {
-
-          errors.push(
-
-            `Row ${rowNum}: invalid activationDate "${row.activationDate}" (expected YYYY-MM-DD)`
-
-          );
-
-          skipped.push(rowNum);
-
-          continue;
-
-        }
-
-
-
-        const expiryDate = addOneMonth(activationDate);
-
-
-
-        const doc = {
-
-          tenantId,   // ✅ ADDED
-
-          customerId,
-
-          name: String(row.name).trim(),
-
-          phone: normalizePhone(row.phone),
-
-          address: String(row.address).trim(),
-
-          area: selectedArea,
-            ...(uploadContext.ispEnabled ? { isp: uploadContext.ispName } : {}),
-
-          package: pkg,
-
-          discount: Math.max(0, discount),
-
-          monthlyFee: Math.max(0, monthlyFee),
-
-          status,
-
-          activationDate,
-
-          expiryDate,
-
-        };
-
-
-
-        await Customer.create(doc);
-
-        inserted.push(customerId);
-
-        existingIds.add(customerId);
-
-      } catch (err) {
-
-        errors.push(`Row ${rowNum}: ${err.message}`);
-
-        skipped.push(rowNum);
-
       }
 
-    }
+      for (const [key, value] of Object.entries(row)) {
+        if (
+          !headers ||
+          !headers.includes(key) ||
+          typeof value !== 'string' ||
+          Buffer.byteLength(value, 'utf8') >
+            MAX_CELL_BYTES
+        ) {
+          return fail(
+            new InputError(
+              'Invalid CSV column or oversized cell'
+            )
+          );
+        }
+      }
 
-
-
-    console.log(`\n📊 Customer bulk upload summary:`);
-
-    console.log(`   Tenant:     "${tenantId}"`);
-
-    console.log(`   Area:       "${selectedArea}"`);
-
-    console.log(`   Total rows: ${rows.length}`);
-
-    console.log(`   Inserted:   ${inserted.length}`);
-
-    console.log(`   Skipped:    ${skipped.length}`);
-
-
-
-    res.json({
-
-      success: true,
-
-      area: selectedArea,
-            ...(uploadContext.ispEnabled ? { isp: uploadContext.ispName } : {}),
-
-      total: rows.length,
-
-      inserted: inserted.length,
-
-      skipped: skipped.length,
-
-      insertedIds: inserted.slice(0, 100),
-
-      errors: errors.slice(0, 100),
-
-      message: `Imported ${inserted.length} of ${rows.length} customers into "${selectedArea}". ${skipped.length} skipped.`,
-
+      rows.push(row);
     });
 
-  } catch (error) {
+    parser.on('error', fail);
+    source.on('error', fail);
 
-    logger.error(`Customer bulk upload error: ${error.message}`);
+    parser.on('end', () => {
+      if (settled) return;
 
-    console.error('❌ Customer bulk upload error:', error);
+      settled = true;
 
+      if (!rows.length) {
+        return reject(
+          new InputError(
+            'CSV file has no data rows'
+          )
+        );
+      }
 
-
-    res.status(500).json({
-
-      success: false,
-
-      message: error.message || 'Server error during bulk upload',
-
+      resolve({
+        headers,
+        rows,
+      });
     });
 
-  }
-
-};
-
-
+    source.pipe(parser);
+  });
+}
 
 // ============================================================
-
-// PARTNER BULK UPLOAD
-
-// POST /api/partners/bulk-upload
-
+// CUSTOMER / PARTNER ROW VALIDATION
 // ============================================================
 
-exports.bulkUploadPartners = async (req, res) => {
+function buildFields(row) {
+  const customerId = textField(
+    row.customerId,
+    'customerId',
+    50
+  );
 
-  const tenantId = req.tenantId;
-
-  if (!tenantId) {
-
-    return res.status(400).json({
-
-      success: false,
-
-      message: 'Tenant not found. Please log in again.',
-
-    });
-
+  if (!/^[a-zA-Z0-9_-]+$/.test(customerId)) {
+    throw new InputError(
+      'Invalid customerId characters'
+    );
   }
 
+  const name = textField(
+    row.name,
+    'name',
+    120
+  );
 
+  const phone = normalizePhone(row.phone);
 
+  const address = textField(
+    row.address,
+    'address',
+    500
+  );
+
+  const pkg = textField(
+    row.package === undefined
+      ? ''
+      : row.package,
+    'package',
+    150,
+    false
+  );
+
+  const discount = parseMoney(
+    row.discount,
+    'discount'
+  );
+
+  const monthlyFee = parseMoney(
+    row.monthlyFee,
+    'monthlyFee'
+  );
+
+  const status =
+    row.status === undefined ||
+    row.status.trim() === ''
+      ? 'active'
+      : textField(
+          row.status,
+          'status',
+          20
+        ).toLowerCase();
+
+  if (!VALID_STATUSES.has(status)) {
+    throw new InputError(
+      'Invalid status'
+    );
+  }
+
+  const activationDate =
+    parseDate(row.activationDate) ||
+    new Date();
+
+  return {
+    customerId,
+    name,
+    phone,
+    address,
+    package: pkg,
+    discount,
+    monthlyFee,
+    status,
+    activationDate,
+    expiryDate: addOneMonth(activationDate),
+  };
+}
+
+// ============================================================
+// CUSTOMER AND PARTNER BULK UPLOAD
+// ============================================================
+
+async function upload(req, res, partnerMode) {
   try {
+    const tenantId = tenantFromRequest(req);
 
-    if (!req.file) {
+    validateFile(req);
 
-      return res.status(400).json({
+    const selectedArea = requestField(
+      req,
+      'area'
+    );
 
-        success: false,
+    const selectedPartner = partnerMode
+      ? requestField(req, 'partner')
+      : null;
 
-        message: 'No file uploaded',
+    // Preserve existing ISP / Area resolution.
+    const uploadContext = await resolveUploadArea(
+      req,
+      partnerMode ? PartnerArea : Area
+    );
 
-      });
-
-    }
-
-
-
-    const selectedArea = String(req.body.area || '').trim();
-
-    if (!selectedArea) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: 'Please select a partner area before uploading',
-
-      });
-
-    }
-
-
-
-    const selectedPartner = String(req.body.partner || '').trim();
-
-    if (!selectedPartner) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: 'Please select a partner before uploading',
-
-      });
-
-    }
-
-
-
-    const uploadContext = await resolveUploadArea(req, PartnerArea);
     if (!uploadContext.ok) {
-      return res.status(400).json({ success: false, message: uploadContext.message });
+      throw new InputError(
+        uploadContext.message ||
+        'Invalid area or ISP'
+      );
     }
 
-    const { headers, rows } = await parseCSVFromBuffer(req.file.buffer);
+    const isp = uploadContext.ispEnabled
+      ? textField(
+          uploadContext.ispName,
+          'ISP',
+          100
+        )
+      : '';
 
-
-
-    console.log('📋 Partner CSV headers:', headers);
-
-    console.log('📊 Partner CSV rows:', rows.length);
-
-    console.log('📍 Target partner area:', selectedArea);
-
-    console.log('📍 Target partner:', selectedPartner);
-
-    console.log('📍 Tenant:', tenantId);
-
-
-
-    const headerCheck = validateHeaders(headers);
-
-    if (!headerCheck.ok) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: headerCheck.message,
-
-      });
-
-    }
-
-
-
-    if (rows.length === 0) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: 'CSV file has no data rows',
-
-      });
-
-    }
-
-
+    const { rows } = await parseCSVFromBuffer(
+      req.file.buffer
+    );
 
     const inserted = [];
-
     const skipped = [];
-
     const errors = [];
-
     const duplicateIds = [];
 
-
-
-    // ✅ Only check duplicates WITHIN THIS TENANT
-
     const existingIds = new Set();
-
-
-
-    const [existingPartnerDocs, existingCustomerDocs] = await Promise.all([
-
-      Partner.find({ tenantId }, { partnerId: 1 }).lean(),
-
-      Customer.find({ tenantId }, { customerId: 1 }).lean(),
-
-    ]);
-
-
-
-    existingPartnerDocs.forEach((d) =>
-
-      existingIds.add(String(d.partnerId).trim().toUpperCase())
-
-    );
-
-
-
-    existingCustomerDocs.forEach((d) => {
-
-      const cid = String(d.customerId).trim().toUpperCase();
-
-      if (cid) existingIds.add(cid);
-
-    });
-
-
-
-    const customerIdSet = new Set(
-
-      existingCustomerDocs
-
-        .map((d) => String(d.customerId).trim().toUpperCase())
-
-        .filter(Boolean)
-
-    );
-
-
-
+    const existingCustomerIds = new Set();
     const seenInFile = new Set();
 
+    const ispKey = normalizeKey(isp);
 
+    // ========================================================
+    // DUPLICATE DETECTION
+    // ========================================================
 
-    for (let i = 0; i < rows.length; i++) {
+    if (partnerMode) {
+      // Original partner behavior:
+      // reject IDs already used by customers or partners
+      // within the same tenant.
 
-      const row = rows[i];
+      const [partners, customers] =
+        await Promise.all([
+          Partner.find(
+            { tenantId },
+            { partnerId: 1 }
+          ).lean(),
 
-      const rowNum = i + 2;
+          Customer.find(
+            { tenantId },
+            { customerId: 1 }
+          ).lean(),
+        ]);
 
+      for (const doc of partners) {
+        existingIds.add(
+          normalizeKey(doc.partnerId)
+        );
+      }
 
-
-      try {
-
-        const missing = REQUIRED_HEADERS.filter(
-
-          (h) => row[h] === undefined || String(row[h]).trim() === ''
-
+      for (const doc of customers) {
+        const key = normalizeKey(
+          doc.customerId
         );
 
-        if (missing.length > 0) {
-
-          errors.push(`Row ${rowNum}: missing ${missing.join(', ')}`);
-
-          skipped.push(rowNum);
-
-          continue;
-
+        if (key) {
+          existingIds.add(key);
+          existingCustomerIds.add(key);
         }
+      }
+    } else {
+      // Customer uniqueness:
+      // tenant + ISP + normalized customer ID.
 
-
-
-        const partnerId = String(row.customerId).trim();
-
-        const partnerIdUpper = partnerId.toUpperCase();
-
-
-
-        if (existingIds.has(partnerIdUpper)) {
-
-          const conflictType = customerIdSet.has(partnerIdUpper)
-
-            ? 'Customer'
-
-            : 'Partner';
-
-
-
-          duplicateIds.push(partnerId);
-
-          errors.push(
-
-            `Row ${rowNum}: ID "${partnerId}" already exists as a ${conflictType}`
-
-          );
-
-          skipped.push(rowNum);
-
-          continue;
-
+      const customers = await Customer.find(
+        {
+          tenantId,
+          ispKey,
+        },
+        {
+          customerId: 1,
+          customerIdKey: 1,
         }
+      )
+        .select('+customerIdKey')
+        .lean();
 
+      for (const doc of customers) {
+        existingIds.add(
+          normalizeKey(
+            doc.customerIdKey ||
+            doc.customerId
+          )
+        );
+      }
+    }
 
+    // ========================================================
+    // IMPORT ROWS
+    // ========================================================
 
-        if (seenInFile.has(partnerIdUpper)) {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
 
-          duplicateIds.push(partnerId);
+      let displayId = '';
 
-          errors.push(
+      try {
+        const fields = buildFields(row);
 
-            `Row ${rowNum}: Partner ID "${partnerId}" appears multiple times in this CSV`
+        displayId = fields.customerId;
 
-          );
-
-          skipped.push(rowNum);
-
-          continue;
-
-        }
-
-
-
-        const pkg =
-
-          row.package !== undefined
-
-            ? String(row.package).trim()
-
-            : DEFAULTS.package;
-
-        const discount = parseNumber(row.discount, DEFAULTS.discount);
-
-        const monthlyFee = parseNumber(row.monthlyFee, DEFAULTS.monthlyFee);
-
-        let status =
-
-          row.status !== undefined
-
-            ? String(row.status).trim().toLowerCase()
-
-            : DEFAULTS.status;
-
-
-
-        if (!VALID_STATUSES.includes(status)) {
-
-          status = DEFAULTS.status;
-
-        }
-
-
-
-        const parsedActivation = parseDate(row.activationDate);
-
-        const activationDate = parsedActivation || new Date();
-
-
+        const key = normalizeKey(displayId);
 
         if (
-
-          row.activationDate !== undefined &&
-
-          String(row.activationDate).trim() !== '' &&
-
-          !parsedActivation
-
+          existingIds.has(key) ||
+          seenInFile.has(key)
         ) {
+          if (partnerMode) {
+            duplicateIds.push(displayId);
+          }
 
-          errors.push(
+          const type =
+            partnerMode &&
+            existingCustomerIds.has(key)
+              ? 'Customer'
+              : partnerMode
+                ? 'Partner'
+                : 'Customer';
 
-            `Row ${rowNum}: invalid activationDate "${row.activationDate}" (expected YYYY-MM-DD)`
-
+          throw new InputError(
+            `ID "${displayId}" already exists${
+              partnerMode
+                ? ` as a ${type}`
+                : ''
+            }`
           );
-
-          skipped.push(rowNum);
-
-          continue;
-
         }
 
+        if (partnerMode) {
+          const {
+            customerId,
+            ...other
+          } = fields;
 
-
-        const expiryDate = addOneMonth(activationDate);
-
-
-
-        const doc = {
-
-          tenantId,   // ✅ ADDED
-
-          partnerId,
-
-          name: String(row.name).trim(),
-
-          phone: normalizePhone(row.phone),
-
-          address: String(row.address).trim(),
-
-          area: selectedArea,
-            ...(uploadContext.ispEnabled ? { isp: uploadContext.ispName } : {}),
-
-          partner: selectedPartner,
-
-          package: pkg,
-
-          discount: Math.max(0, discount),
-
-          monthlyFee: Math.max(0, monthlyFee),
-
-          status,
-
-          activationDate,
-
-          expiryDate,
-
-        };
-
-
-
-        await Partner.create(doc);
-
-        inserted.push(partnerId);
-
-        existingIds.add(partnerIdUpper);
-
-        seenInFile.add(partnerIdUpper);
-
-      } catch (err) {
-
-        if (err.code === 11000) {
-
-          const pid = String(row.customerId || '').trim();
-
-          if (pid) duplicateIds.push(pid);
-
-          errors.push(
-
-            `Row ${rowNum}: Partner ID "${row.customerId}" already exists`
-
-          );
-
+          await Partner.create({
+            tenantId,
+            partnerId: customerId,
+            ...other,
+            area: selectedArea,
+            ...(uploadContext.ispEnabled
+              ? { isp }
+              : {}),
+            partner: selectedPartner,
+          });
         } else {
+          await Customer.create({
+            tenantId,
+            ...fields,
+            area: selectedArea,
+            ...(uploadContext.ispEnabled
+              ? { isp }
+              : {}),
+          });
+        }
 
-          errors.push(`Row ${rowNum}: ${err.message}`);
+        inserted.push(displayId);
+        existingIds.add(key);
+        seenInFile.add(key);
 
+      } catch (error) {
+        if (
+          partnerMode &&
+          error &&
+          error.code === 11000 &&
+          displayId
+        ) {
+          duplicateIds.push(displayId);
         }
 
         skipped.push(rowNum);
 
+        errors.push(
+          `Row ${rowNum}: ${rowError(error)}`
+        );
       }
-
     }
 
+    // ========================================================
+    // PRESERVE EXISTING FRONTEND RESPONSE
+    // ========================================================
 
-
-    console.log(`\n📊 Partner bulk upload summary:`);
-
-    console.log(`   Tenant:     "${tenantId}"`);
-
-    console.log(`   Area:       "${selectedArea}"`);
-
-    console.log(`   Partner:    "${selectedPartner}"`);
-
-    console.log(`   Total rows: ${rows.length}`);
-
-    console.log(`   Inserted:   ${inserted.length}`);
-
-    console.log(`   Skipped:    ${skipped.length}`);
-
-    console.log(`   Duplicates: ${duplicateIds.length}`);
-
-
-
-    res.json({
-
+    return res.json({
       success: true,
 
       area: selectedArea,
-            ...(uploadContext.ispEnabled ? { isp: uploadContext.ispName } : {}),
 
-      partner: selectedPartner,
+      ...(uploadContext.ispEnabled
+        ? { isp }
+        : {}),
+
+      ...(partnerMode
+        ? { partner: selectedPartner }
+        : {}),
 
       total: rows.length,
 
@@ -1052,162 +778,135 @@ exports.bulkUploadPartners = async (req, res) => {
 
       insertedIds: inserted.slice(0, 100),
 
-      duplicateIds: Array.from(new Set(duplicateIds)).slice(0, 100),
+      ...(partnerMode
+        ? {
+            duplicateIds: [
+              ...new Set(duplicateIds),
+            ].slice(0, 100),
+          }
+        : {}),
 
       errors: errors.slice(0, 100),
 
-      message: `Imported ${inserted.length} of ${rows.length} partners into "${selectedArea}". ${skipped.length} skipped.`,
-
+      message:
+        `Imported ${inserted.length} of ` +
+        `${rows.length} ` +
+        `${partnerMode ? 'partners' : 'customers'} ` +
+        `into "${selectedArea}". ` +
+        `${skipped.length} skipped.`,
     });
 
   } catch (error) {
-
-    logger.error(`Partner bulk upload error: ${error.message}`);
-
-    console.error('❌ Partner bulk upload error:', error);
-
-
-
-    res.status(500).json({
-
-      success: false,
-
-      message: error.message || 'Server error during partner bulk upload',
-
-    });
-
+    return handleError(
+      res,
+      error,
+      partnerMode
+        ? 'Partner bulk upload'
+        : 'Customer bulk upload'
+    );
   }
-
-};
-
-
+}
 
 // ============================================================
-
-// CUSTOMER SAMPLE CSV
-
+// EXISTING CONTROLLER EXPORTS
 // ============================================================
 
-exports.downloadSample = (req, res) => {
+exports.bulkUpload = (req, res) =>
+  upload(req, res, false);
 
-  const formatDate = (d) => {
+exports.bulkUploadPartners = (req, res) =>
+  upload(req, res, true);
 
-    const yyyy = d.getFullYear();
+// ============================================================
+// SAMPLE CSV DOWNLOADS
+// ============================================================
 
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
+function formatDate(date) {
+  return (
+    `${date.getFullYear()}-` +
+    `${String(date.getMonth() + 1).padStart(2, '0')}-` +
+    `${String(date.getDate()).padStart(2, '0')}`
+  );
+}
 
-    const dd = String(d.getDate()).padStart(2, '0');
-
-    return `${yyyy}-${mm}-${dd}`;
-
-  };
-
-
-
+function sendSample(res, prefix, filename) {
   const today = new Date();
 
-  const tomorrow = new Date(today);
-
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const dayAfter = new Date(today);
-
-  dayAfter.setDate(dayAfter.getDate() + 2);
-
-
-
   const lines = [
-
     'customerId,name,phone,address,package,discount,monthlyFee,status,activationDate',
-
-    `USR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active,${formatDate(today)}`,
-
-    `USR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active,${formatDate(tomorrow)}`,
-
-    `USR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`,
-
   ];
 
-
-
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-
-  res.setHeader(
-
-    'Content-Disposition',
-
-    'attachment; filename="customer-import-sample.csv"'
-
-  );
-
-
-
-  res.send('\uFEFF' + lines.join('\r\n'));
-
-};
-
-
-
-// ============================================================
-
-// PARTNER SAMPLE CSV
-
-// ============================================================
-
-exports.downloadPartnerSample = (req, res) => {
-
-  const formatDate = (d) => {
-
-    const yyyy = d.getFullYear();
-
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-
-    const dd = String(d.getDate()).padStart(2, '0');
-
-    return `${yyyy}-${mm}-${dd}`;
-
-  };
-
-
-
-  const today = new Date();
-
-  const tomorrow = new Date(today);
-
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const dayAfter = new Date(today);
-
-  dayAfter.setDate(dayAfter.getDate() + 2);
-
-
-
-  const lines = [
-
-    'customerId,name,phone,address,package,discount,monthlyFee,status,activationDate',
-
-    `PTR-001,John Doe,0300-1234567,"House 5, Street 3",BASIC,0,1500,active,${formatDate(today)}`,
-
-    `PTR-002,Jane Smith,0321-9876543,"Flat B-12, Block 1",PREMIUM,500,3500,active,${formatDate(tomorrow)}`,
-
-    `PTR-003,Ahmed Khan,0333-5555555,"Shop 12, Main Market",STANDARD,0,2500,active,${formatDate(dayAfter)}`,
-
+  const samples = [
+    [
+      '001',
+      'John Doe',
+      '0300-1234567',
+      'House 5, Street 3',
+      'BASIC',
+      0,
+      1500,
+    ],
+    [
+      '002',
+      'Jane Smith',
+      '0321-9876543',
+      'Flat B-12, Block 1',
+      'PREMIUM',
+      500,
+      3500,
+    ],
+    [
+      '003',
+      'Ahmed Khan',
+      '0333-5555555',
+      'Shop 12, Main Market',
+      'STANDARD',
+      0,
+      2500,
+    ],
   ];
 
+  samples.forEach(
+    ([id, name, phone, address, pkg, discount, fee], i) => {
+      const date = new Date(today);
 
+      date.setDate(
+        date.getDate() + i
+      );
 
-  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-
-  res.setHeader(
-
-    'Content-Disposition',
-
-    'attachment; filename="partner-import-sample.csv"'
-
+      lines.push(
+        `${prefix}-${id},${name},${phone},` +
+        `"${address}",${pkg},${discount},` +
+        `${fee},active,${formatDate(date)}`
+      );
+    }
   );
 
+  res.setHeader(
+    'Content-Type',
+    'text/csv; charset=utf-8'
+  );
 
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="${filename}"`
+  );
 
-  res.send('\uFEFF' + lines.join('\r\n'));
+  return res.send(
+    '\uFEFF' + lines.join('\r\n')
+  );
+}
 
-};
+exports.downloadSample = (req, res) =>
+  sendSample(
+    res,
+    'USR',
+    'customer-import-sample.csv'
+  );
+
+exports.downloadPartnerSample = (req, res) =>
+  sendSample(
+    res,
+    'PTR',
+    'partner-import-sample.csv'
+  );

@@ -7,10 +7,11 @@ const packageSchema = new mongoose.Schema({
     required: false,
     index: true,
   },
-  isp: {
+isp: {
   type: mongoose.Schema.Types.ObjectId,
   ref: 'ISP',
-  required: true,
+  required: false,
+  default: null,
 },
   name: {
     type: String,

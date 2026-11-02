@@ -1162,8 +1162,8 @@ export default function PartnerAreasPage() {
       );
 
     if (
-      normalizedIsps.length ===
-      0
+      isps.length > 0 &&
+      normalizedIsps.length === 0
     ) {
       throw new Error(
         'At least one ISP is required.'
