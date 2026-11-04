@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Handshake,
   PlusCircle,
@@ -34,18 +34,69 @@ import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 import AddPaymentPromiseModal from './add/AddPaymentPromiseModal';
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
 function displayDate(input: any): string {
   if (!input) return '—';
   const d = new Date(input);
   if (isNaN(d.getTime())) return '—';
-  return `${String(d.getDate()).padStart(2, '0')} ${
-    MONTHS[d.getMonth()]
-  } ${d.getFullYear()}`;
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+// Date display only: keep the selected value in YYYY-MM-DD for existing APIs.
+function DateDDMMYYYYInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+  className: string;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const shownDate = match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+
+  const openCalendar = () => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    try {
+      if (typeof picker.showPicker === 'function') {
+        picker.showPicker();
+        return;
+      }
+    } catch {}
+    picker.focus();
+    picker.click();
+  };
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={shownDate}
+        placeholder="DD/MM/YYYY"
+        readOnly
+        onClick={openCalendar}
+        className={`${className} pr-10 cursor-pointer`}
+      />
+      <input
+        ref={pickerRef}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        tabIndex={-1}
+        aria-label="Select date"
+        className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+      <button
+        type="button"
+        onClick={openCalendar}
+        aria-label="Open calendar"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+      >
+        <CalendarDays className="h-4 w-4" />
+      </button>
+    </div>
+  );
 }
 
 function resolveName(val: any, fallback = '—'): string {
@@ -520,10 +571,9 @@ function PromisesPageContent() {
             <option value="Broken">Broken</option>
           </select>
 
-          <input
-            type="date"
+          <DateDDMMYYYYInput
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
+            onChange={setDateFilter}
             className="px-3 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm"
           />
 

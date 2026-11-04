@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import { SearchBar } from '@/app/components/ui/SearchBar';
 import { DataTable } from '@/app/components/ui/DataTable';
@@ -32,6 +32,7 @@ export default function AttendancePage() {
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split('T')[0]
   );
+  const datePickerRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [staffList, setStaffList] = useState<any[]>([]);
@@ -729,12 +730,33 @@ const generateMonthPDF = () => {
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-400 dark:text-gray-500" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none transition-all"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                value={selectedDate.split('-').reverse().join('/')}
+                placeholder="dd/mm/yyyy"
+                readOnly
+                onClick={() => datePickerRef.current?.showPicker?.()}
+                className="px-3 py-2 pr-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none transition-all cursor-pointer"
+              />
+              <input
+                ref={datePickerRef}
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                tabIndex={-1}
+                aria-label="Select attendance date"
+                className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 pointer-events-none"
+              />
+              <button
+                type="button"
+                onClick={() => datePickerRef.current?.showPicker?.()}
+                aria-label="Open attendance date calendar"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+              >
+                <Calendar className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="flex-1">
             <SearchBar

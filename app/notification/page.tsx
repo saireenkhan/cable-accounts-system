@@ -17,6 +17,7 @@ import {
   DollarSign,
   Save,
   MessageCircle,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -1694,7 +1695,7 @@ function RecoveryNotificationsPageContent() {
       'en-GB',
       {
         day: '2-digit',
-        month: 'short',
+        month: '2-digit',
         year: 'numeric',
       }
     );
@@ -1852,18 +1853,36 @@ function RecoveryNotificationsPageContent() {
                 Due Date
               </label>
 
-              <input
-                type="date"
-                value={
-                  filterDueDate
-                }
-                onChange={(e) =>
-                  setFilterDueDate(
-                    e.target.value
-                  )
-                }
-                className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none"
-              />
+              <div className="relative">
+                <input
+                  type="text"
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  value={filterDueDate ? filterDueDate.split('-').reverse().join('/') : ''}
+                  placeholder="DD/MM/YYYY"
+                  className="w-full px-3 py-2 pr-10 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-[#d6b138] focus:border-transparent outline-none"
+                />
+                <CalendarDays className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-gray-400" />
+                <input
+                  type="date"
+                  aria-label="Due Date"
+                  value={
+                    filterDueDate
+                  }
+                  onChange={(e) =>
+                    setFilterDueDate(
+                      e.target.value
+                    )
+                  }
+                  onClick={(e) => {
+                    try {
+                      e.currentTarget.showPicker?.();
+                    } catch {}
+                  }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </div>
             </div>
 
           </div>

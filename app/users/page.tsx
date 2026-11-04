@@ -49,7 +49,6 @@ import {
   areaName,
   findPackage,
   dateInput,
-  displayDate,
   expiryDate,
   effectiveStatus,
   statusStyles,
@@ -97,6 +96,19 @@ const MONTHS = [
 /* ============================================================
    DATE HELPERS
 ============================================================ */
+// Display dates as DD/MM/YYYY without changing stored date values.
+const formatDateDDMMYYYY = (value: any): string => {
+  if (!value) return '—';
+  const raw = String(value);
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  }).format(date);
+};
+
 const toDateSafe = (val: any): Date | null => {
   if (!val) return null;
   if (val instanceof Date) {
@@ -543,6 +555,45 @@ function SearchableSelect({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// DD/MM/YYYY presentation; paymentDate remains YYYY-MM-DD for the API.
+function PaymentDateDisplay({ value, onChange }: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const dateRef = useRef<HTMLInputElement>(null);
+  const dateValue = value?.match(/^\d{4}-\d{2}-\d{2}$/) ? value : '';
+  const formatted = dateValue ? formatDateDDMMYYYY(dateValue) : '';
+  const openPicker = () => {
+    try { dateRef.current?.showPicker(); }
+    catch { dateRef.current?.focus(); }
+  };
+  return (
+    <div className="relative w-full">
+      <input
+        type="text"
+        value={formatted}
+        placeholder="dd/mm/yyyy"
+        readOnly
+        onClick={openPicker}
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none cursor-pointer"
+      />
+      <input
+        ref={dateRef}
+        type="date"
+        value={dateValue}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Choose payment date"
+        tabIndex={-1}
+        className="absolute right-3 top-1/2 w-6 h-6 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+      <button type="button" onClick={openPicker} aria-label="Open calendar"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500">
+        <Calendar className="h-4 w-4" />
+      </button>
     </div>
   );
 }
@@ -1069,11 +1120,9 @@ function ReceivePaymentModal({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Payment Date *
                 </label>
-                <input
-                  type="date"
+                <PaymentDateDisplay
                   value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  onChange={setPaymentDate}
                 />
               </div>
               <div>
@@ -1995,7 +2044,7 @@ if (fieldName === 'package') {
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
             <CalendarDays className="h-3 w-3" />
-            Activated: {displayDate(u.activationDate)}
+            Activated: {formatDateDDMMYYYY(u.activationDate)}
           </span>
           {u.isp && (
             <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
@@ -2551,7 +2600,7 @@ if (fieldName === 'package') {
                         <CalendarDays className="h-4 w-4" />
                       }
                       label="Activation Date"
-                      value={displayDate(
+                      value={formatDateDDMMYYYY(
                         viewingUser.activationDate
                       )}
                     />
@@ -2560,7 +2609,7 @@ if (fieldName === 'package') {
                         <CalendarDays className="h-4 w-4" />
                       }
                       label="Expiry Date"
-                      value={displayDate(
+                      value={formatDateDDMMYYYY(
                         viewingUser.expiryDate
                       )}
                       highlight={

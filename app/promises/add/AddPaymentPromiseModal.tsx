@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { X, User, Search } from 'lucide-react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { X, User, Search, CalendarDays } from 'lucide-react';
 import api from '@/app/lib/api';
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
@@ -22,6 +22,64 @@ type Props = {
   customers: Customer[];
   editingPromise?: any | null;
 };
+
+// Date display only: keep the selected value in YYYY-MM-DD for existing APIs.
+function DateDDMMYYYYInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (date: string) => void;
+  className: string;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const shownDate = match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+
+  const openCalendar = () => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    try {
+      if (typeof picker.showPicker === 'function') {
+        picker.showPicker();
+        return;
+      }
+    } catch {}
+    picker.focus();
+    picker.click();
+  };
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={shownDate}
+        placeholder="DD/MM/YYYY"
+        readOnly
+        onClick={openCalendar}
+        className={`${className} pr-10 cursor-pointer`}
+      />
+      <input
+        ref={pickerRef}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        tabIndex={-1}
+        aria-label="Select date"
+        className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+      <button
+        type="button"
+        onClick={openCalendar}
+        aria-label="Open calendar"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400"
+      >
+        <CalendarDays className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 /* ============================================================
    USER SEARCHABLE SELECT
@@ -303,10 +361,9 @@ export default function AddPaymentPromiseModal({
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-0.5">
                 Promise Date
               </label>
-              <input
-                type="date"
+              <DateDDMMYYYYInput
                 value={promiseDate}
-                onChange={(e) => setPromiseDate(e.target.value)}
+                onChange={setPromiseDate}
                 className="w-full px-2.5 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
               />
             </div>

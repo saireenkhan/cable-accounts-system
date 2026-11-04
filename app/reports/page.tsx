@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Layout from '@/app/components/ui/Layout';
 import api from '@/app/lib/api';
 
@@ -19,6 +19,7 @@ import {
   Building2,
   Download,
   FileText,
+  CalendarDays,
 } from 'lucide-react';
 
 import { cn } from '@/app/lib/utils';
@@ -28,6 +29,113 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 type ReportType = '' | 'userPayment' | 'dealerPayment';
+
+// Display dates as DD/MM/YYYY; keep the underlying form/API values ISO formatted.
+const formatDateDDMMYYYY = (value: any): string => {
+  if (!value) return '—';
+
+  const match = typeof value === 'string'
+    ? value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    : null;
+
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date);
+};
+
+function DateFormatInput({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  className: string;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const [draft, setDraft] = useState<string | null>(null);
+
+  const handleTextChange = (text: string) => {
+    setDraft(text);
+    if (!text) {
+      onChange('');
+      return;
+    }
+
+    const match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return;
+
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const parsed = new Date(year, month - 1, day);
+    if (
+      parsed.getFullYear() === year &&
+      parsed.getMonth() === month - 1 &&
+      parsed.getDate() === day
+    ) {
+      onChange(`${match[3]}-${match[2]}-${match[1]}`);
+      setDraft(null);
+    }
+  };
+
+  const openPicker = () => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    try {
+      if (typeof picker.showPicker === 'function') {
+        picker.showPicker();
+      } else {
+        picker.focus();
+        picker.click();
+      }
+    } catch {
+      picker.focus();
+    }
+  };
+
+  return (
+    <div className="relative w-full">
+      <input
+        type="text"
+        value={draft ?? (value ? formatDateDDMMYYYY(value) : '')}
+        placeholder="dd/mm/yyyy"
+        onChange={(e) => handleTextChange(e.target.value)}
+        onBlur={() => setDraft(null)}
+        className={cn(className, 'pr-10')}
+      />
+      <input
+        ref={pickerRef}
+        type="date"
+        value={value}
+        onChange={(e) => {
+          setDraft(null);
+          onChange(e.target.value);
+        }}
+        tabIndex={-1}
+        aria-label="Choose date"
+        className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+      <button
+        type="button"
+        onClick={openPicker}
+        aria-label="Open calendar"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+      >
+        <CalendarDays className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export default function ReportsPage() {
   // ============================================================
@@ -319,13 +427,13 @@ export default function ReportsPage() {
     doc.setFontSize(9);
 
     doc.text(
-      `Period: ${fromDate} to ${toDate}`,
+      `Period: ${formatDateDDMMYYYY(fromDate)} to ${formatDateDDMMYYYY(toDate)}`,
       40,
       55
     );
 
     doc.text(
-      `Generated: ${new Date().toLocaleString()}`,
+      `Generated: ${formatDateDDMMYYYY(new Date())}, ${new Date().toLocaleTimeString()}`,
       pageWidth - 40,
       35,
       {
@@ -442,9 +550,7 @@ export default function ReportsPage() {
             payment.month || '—',
 
             payment.paymentDate
-              ? new Date(
-                  payment.paymentDate
-                ).toLocaleDateString()
+              ? formatDateDDMMYYYY(payment.paymentDate)
               : '—',
 
             payment.method || '—',
@@ -497,9 +603,7 @@ export default function ReportsPage() {
             payment.month || '—',
 
             payment.paymentDate
-              ? new Date(
-                  payment.paymentDate
-                ).toLocaleDateString()
+              ? formatDateDDMMYYYY(payment.paymentDate)
               : '—',
 
             payment.paymentType === 'receive_payment'
@@ -797,12 +901,9 @@ export default function ReportsPage() {
                 From Date
               </label>
 
-              <input
-                type="date"
+              <DateFormatInput
                 value={fromDate}
-                onChange={(e) =>
-                  setFromDate(e.target.value)
-                }
+                onChange={setFromDate}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
               />
             </div>
@@ -814,12 +915,9 @@ export default function ReportsPage() {
                 To Date
               </label>
 
-              <input
-                type="date"
+              <DateFormatInput
                 value={toDate}
-                onChange={(e) =>
-                  setToDate(e.target.value)
-                }
+                onChange={setToDate}
                 className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
               />
             </div>
@@ -951,7 +1049,7 @@ export default function ReportsPage() {
                   </h2>
 
                   <p className="text-xs text-gray-500 mt-1">
-                    {fromDate} → {toDate}
+                    {formatDateDDMMYYYY(fromDate)} → {formatDateDDMMYYYY(toDate)}
                   </p>
                 </div>
 
@@ -1497,9 +1595,7 @@ function PaymentTable({
 
                     <td className="py-3 px-3 text-gray-700 dark:text-gray-300">
                       {payment.paymentDate
-                        ? new Date(
-                            payment.paymentDate
-                          ).toLocaleDateString()
+                        ? formatDateDDMMYYYY(payment.paymentDate)
                         : '—'}
                     </td>
 

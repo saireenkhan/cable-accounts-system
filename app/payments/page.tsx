@@ -38,6 +38,19 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
+// Display ISO dates as DD/MM/YYYY without timezone-related date shifts.
+const formatDate = (value: any): string => {
+  if (!value) return 'N/A';
+  const raw = String(value);
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return 'N/A';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+  }).format(parsed);
+};
+
 const parseMonth = (monthStr: string) => {
   const parts = (monthStr || '').split(' ');
   return {
@@ -275,6 +288,58 @@ function SearchableSelect({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Keep API values in YYYY-MM-DD while showing dates as DD/MM/YYYY.
+function PaymentDateInput({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const isoDate = value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '';
+  const displayDate = isoDate ? isoDate.split('-').reverse().join('/') : '';
+
+  const openCalendar = () => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    try {
+      if (typeof picker.showPicker === 'function') picker.showPicker();
+      else { picker.focus(); picker.click(); }
+    } catch { picker.focus(); }
+  };
+
+  return (
+    <div className="relative w-full">
+      <input
+        type="text"
+        value={displayDate}
+        placeholder="dd/mm/yyyy"
+        readOnly
+        onClick={openCalendar}
+        className="w-full px-3 py-2 pr-11 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+      />
+      <input
+        ref={pickerRef}
+        type="date"
+        value={isoDate}
+        onChange={(e) => onChange(e.target.value)}
+        tabIndex={-1}
+        aria-label="Select partner payment date"
+        className="absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+      <button
+        type="button"
+        aria-label="Open partner payment calendar"
+        onClick={openCalendar}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500"
+      >
+        <Calendar className="h-5 w-5" />
+      </button>
     </div>
   );
 }
@@ -917,11 +982,9 @@ const payload = {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Payment Date *
                 </label>
-                <input
-                  type="date"
+                <PaymentDateInput
                   value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  onChange={setPaymentDate}
                 />
               </div>
 
@@ -1123,13 +1186,7 @@ export default function ReceivePartnerPaymentPage() {
               '',
             isp: resolvedIsp,
             month: payment.month || 'N/A',
-            date: payment.paymentDate
-              ? new Date(payment.paymentDate).toLocaleDateString('en-PK', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })
-              : 'N/A',
+            date: formatDate(payment.paymentDate),
             method: payment.paymentMethod
               ? payment.paymentMethod.charAt(0).toUpperCase() +
                 payment.paymentMethod.slice(1)

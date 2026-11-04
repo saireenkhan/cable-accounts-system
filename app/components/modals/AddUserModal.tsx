@@ -13,6 +13,7 @@ import {
   User,
   Search,
   Check,
+    CalendarDays,
 } from 'lucide-react';
 
 import { cn } from '@/app/lib/utils';
@@ -680,6 +681,71 @@ function SearchableMultiSelect({
 // ======================================================
 // ADD USER MODAL
 // ======================================================
+
+function DateInput({
+  value,
+  onChange,
+  disabled = false,
+  readOnly = false,
+  required = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  readOnly?: boolean;
+  required?: boolean;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+
+  const isoDate =
+    typeof value === 'string'
+      ? value.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || ''
+      : '';
+
+  const displayDate = isoDate
+    ? isoDate.split('-').reverse().join('/')
+    : '';
+
+  return (
+    <div className="relative w-full">
+      <input
+        type="text"
+        value={displayDate}
+        placeholder="dd/mm/yyyy"
+        readOnly
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled && !readOnly) {
+            pickerRef.current?.showPicker?.();
+          }
+        }}
+        className="w-full px-2.5 py-1.5 pr-10 text-sm rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white cursor-pointer"
+      />
+
+      <input
+        ref={pickerRef}
+        type="date"
+        value={isoDate}
+        onChange={(e) => onChange(e.target.value)}
+        required={required}
+        disabled={disabled || readOnly}
+        tabIndex={-1}
+        aria-label="Select date"
+        className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+
+      <button
+        type="button"
+        disabled={disabled || readOnly}
+        onClick={() => pickerRef.current?.showPicker?.()}
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500 disabled:cursor-not-allowed"
+        aria-label="Open calendar"
+      >
+        <CalendarDays className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export function AddUserModal({
   isOpen,
@@ -2139,8 +2205,17 @@ export function AddUserModal({
                           )}
                         </select>
                       )
-                    ) : field.type ===
-                      'textarea' ? (
+) : field.type === 'date' ? (
+  <DateInput
+    value={String(fieldValue ?? '')}
+    onChange={(value) =>
+      handleSelectChange(field.name, value)
+    }
+    disabled={lockedByParent}
+    readOnly={isReadOnly}
+    required={field.required}
+  />
+) : field.type === 'textarea' ? (
                       <textarea
                         name={
                           field.name

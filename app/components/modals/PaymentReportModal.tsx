@@ -28,17 +28,33 @@ const money = (value: any) => {
   return `Rs. ${Number(value || 0).toLocaleString()}`;
 };
 
-const formatDate = (date: any) => {
+
+const formatDate = (date: any): string => {
   if (!date) return '—';
 
-  try {
-    return new Date(date).toLocaleDateString(
-      'en-GB'
-    );
-  } catch {
+  const raw = String(date);
+
+  // Handle ISO dates without timezone shifts
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    return `${day}/${month}/${year}`;
+  }
+
+  const parsed = new Date(date);
+
+  if (Number.isNaN(parsed.getTime())) {
     return '—';
   }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(parsed);
 };
+
 
 const formatMethod = (value: string) => {
   if (!value) return '—';
@@ -123,7 +139,7 @@ export default function PaymentReportModal({
       );
 
       doc.text(
-        `Generated: ${new Date().toLocaleString()}`,
+      `Generated: ${formatDate(new Date())} ${new Date().toLocaleTimeString('en-GB')}`,
         35,
         58
       );
@@ -282,17 +298,19 @@ export default function PaymentReportModal({
         'normal'
       );
 
-      doc.text(
-        `${
-          data.dateRange?.from ||
-          'All'
-        } to ${
-          data.dateRange?.to ||
-          'All'
-        }`,
-        110,
-        y
-      );
+  doc.text(
+  `${
+    data.dateRange?.from
+      ? formatDate(data.dateRange.from)
+      : 'All'
+  } to ${
+    data.dateRange?.to
+      ? formatDate(data.dateRange.to)
+      : 'All'
+  }`,
+  110,
+  y
+);
 
       y += 30;
 
@@ -636,13 +654,15 @@ export default function PaymentReportModal({
                   : 'Dealer Payment Report'}
               </h2>
 
-              <p className="text-xs text-slate-300">
-                {data.dateRange?.from ||
-                  'All dates'}
-                {' → '}
-                {data.dateRange?.to ||
-                  'All dates'}
-              </p>
+         <p className="text-xs text-slate-300">
+  {data.dateRange?.from
+    ? formatDate(data.dateRange.from)
+    : 'All dates'}
+  {' → '}
+  {data.dateRange?.to
+    ? formatDate(data.dateRange.to)
+    : 'All dates'}
+</p>
             </div>
           </div>
 

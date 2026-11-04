@@ -102,6 +102,17 @@ const toDateSafe = (val: any): Date | null => {
   const d = new Date(val);
   return isNaN(d.getTime()) ? null : d;
 };
+const formatDateDDMMYYYY = (value: any): string => {
+  if (!value) return displayDate(value);
+  if (typeof value === 'string') {
+    const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  }
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return displayDate(value);
+  return `${String(parsed.getDate()).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`;
+};
+
 const getToday = (): Date => {
   const now = new Date();
   return new Date(
@@ -558,6 +569,63 @@ function SearchableSelect({
     </div>
   );
 }
+function PaymentDateDDMMYYYY({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const pickerRef = useRef<HTMLInputElement>(null);
+  const isoDate = value?.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '';
+  const displayValue = isoDate ? isoDate.split('-').reverse().join('/') : '';
+
+  const openPicker = () => {
+    const picker = pickerRef.current;
+    if (!picker) return;
+    try {
+      if (typeof picker.showPicker === 'function') {
+        picker.showPicker();
+      } else {
+        picker.focus();
+        picker.click();
+      }
+    } catch {
+      picker.focus();
+    }
+  };
+
+  return (
+    <div className="relative w-full">
+      <input
+        type="text"
+        value={displayValue}
+        placeholder="dd/mm/yyyy"
+        readOnly
+        onClick={openPicker}
+        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+      />
+      <input
+        ref={pickerRef}
+        type="date"
+        value={isoDate}
+        onChange={(e) => onChange(e.target.value)}
+        tabIndex={-1}
+        aria-label="Choose payment date"
+        className="absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 opacity-0 pointer-events-none"
+      />
+      <button
+        type="button"
+        onClick={openPicker}
+        aria-label="Open payment calendar"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-500"
+      >
+        <Calendar className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 // ============ PARTNER PAYMENT MODAL ============
 function ReceivePartnerPaymentModal({
   isOpen,
@@ -1133,11 +1201,9 @@ const payload = {
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Payment Date *
                 </label>
-                <input
-                  type="date"
+                <PaymentDateDDMMYYYY
                   value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  onChange={setPaymentDate}
                 />
               </div>
               <div>
@@ -1960,7 +2026,7 @@ const resolveDynamicOptions = (
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             <CalendarDays className="h-3 w-3 text-blue-500" />
-            Activated: {displayDate(u.activationDate)}
+            Activated: {formatDateDDMMYYYY(u.activationDate)}
           </span>
           {u.isp && (
             <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
@@ -2363,12 +2429,12 @@ fetchData={() => { void fetchUsers(areas, isps); }}
                   <ViewField
                     icon={<CalendarDays className="h-4 w-4" />}
                     label="Activation Date"
-                    value={displayDate(viewingUser.activationDate)}
+                    value={formatDateDDMMYYYY(viewingUser.activationDate)}
                   />
                   <ViewField
                     icon={<CalendarDays className="h-4 w-4" />}
                     label="Expiry Date"
-                    value={displayDate(viewingUser.expiryDate)}
+                    value={formatDateDDMMYYYY(viewingUser.expiryDate)}
                     highlight={
                       viewingUser.status === 'Expired' ||
                       viewingUser.status === 'Upcoming Expiry'
