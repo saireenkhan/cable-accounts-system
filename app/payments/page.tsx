@@ -127,44 +127,97 @@ interface MonthAllocation {
   remaining: number;
   isPaid: boolean;
   overpaid: number;
+  previousBalance: number;
+  currentBalance: number;
+  paidForMonth: number;
+  deadline: Date;
 }
 
+function partnerBillingDate(value: any): Date | null {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const d = match ? new Date(+match[1], +match[2] - 1, +match[3]) : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+function partnerFirstBillingMonth(value: any): string | undefined {
+  const d = partnerBillingDate(value);
+  if (!d) return undefined;
+  const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+  return `${MONTHS[next.getMonth()]} ${next.getFullYear()}`;
+}
+function partnerBillingDay(value: any): number {
+  return partnerBillingDate(value)?.getDate() || 1;
+}
+function partnerBillingDeadline(activation: Date, offset: number): Date {
+  const first = new Date(activation.getFullYear(), activation.getMonth() + offset, 1);
+  const end = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(activation.getDate(), end));
+}
+function partnerPaymentMatches(p: any, partner: any): boolean {
+  if (p.isNoPayment) return false;
+  const normalize = (x: any) => String(x ?? '').trim().toLowerCase();
+  const mongoId = normalize(partner._id || partner.id);
+  const code = normalize(partner.partnerId || partner.customerId);
+  const object = p.partner && typeof p.partner === 'object' ? p.partner : null;
+  const ids = [object?._id, object?.id, object?.partnerId,
+    typeof p.partner === 'string' ? p.partner : null, p.partnerId, p.customerId]
+    .map(normalize).filter(Boolean);
+  if (ids.length) return ids.some((id) => id === mongoId || (!!code && id === code));
+  return normalize(object?.name || p.partnerName || p.name) === normalize(partner.name);
+}
+function partnerPaymentAmount(p: any): number {
+  for (const value of [p.amount, p.paidAmount, p.amountPaid, p.receivedAmount]) {
+    if (value !== undefined && value !== null && value !== '') {
+      const num = Number(value);
+      if (Number.isFinite(num)) return Math.max(0, num);
+    }
+  }
+  return 0;
+}
+// Each bill begins one calendar month after activation. Payments stay assigned
+// to their chosen month. No-payment months still produce outstanding charges.
 function allocatePayments(
   monthlyFee: number,
-  paymentsForPartner: { month: string; amount: number }[]
+  paymentsForPartner: { month: string; amount: number }[],
+  startMonth?: string,
+  endMonth?: string,
+  billingDay = 1,
 ): MonthAllocation[] {
-  if (!monthlyFee || monthlyFee <= 0) return [];
-
-  const byMonth: Record<string, number> = {};
-  paymentsForPartner.forEach((p) => {
-    if (!p.month) return;
-    byMonth[p.month] =
-      (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
-  });
-
-  const months = Object.keys(byMonth).sort(compareMonths);
-  if (months.length === 0) return [];
-
-  const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
-
-  let pool = totalPool;
-  const result: MonthAllocation[] = [];
-
-  for (const month of months) {
-    const applied = Math.min(pool, monthlyFee);
-    const remaining = Math.max(0, monthlyFee - applied);
-    pool -= applied;
-
-    result.push({
-      month,
-      expected: monthlyFee,
-      applied,
-      remaining,
-      isPaid: remaining === 0,
-      overpaid: 0,
-    });
+  if (!Number.isFinite(monthlyFee) || monthlyFee <= 0 || !startMonth) return [];
+  const from = parseMonth(startMonth);
+  const to = parseMonth(endMonth || `${MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`);
+  if (from.idx < 0 || to.idx < 0 || from.year < 2000 || to.year < 2000) return [];
+  const count = (to.year - from.year) * 12 + to.idx - from.idx + 1;
+  if (count <= 0 || count > 600) return [];
+  const totals: Record<string, number> = {};
+  for (const payment of paymentsForPartner) {
+    const amount = Number(payment.amount);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const month = String(payment.month || '').trim();
+    totals[month] = (totals[month] || 0) + amount;
   }
-
+  const result: MonthAllocation[] = [];
+  let debt = 0;
+  let credit = 0;
+  for (let i = 0; i < count; i++) {
+    const day = new Date(from.year, from.idx + i, 1);
+    const month = `${MONTHS[day.getMonth()]} ${day.getFullYear()}`;
+    const maxDay = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
+    const deadline = new Date(day.getFullYear(), day.getMonth(), Math.min(Math.max(1, billingDay), maxDay));
+    const paid = totals[month] || 0;
+    const creditUsed = Math.min(credit, monthlyFee);
+    credit -= creditUsed;
+    const applied = Math.min(monthlyFee - creditUsed, paid);
+    const currentBalance = Math.max(0, monthlyFee - creditUsed - applied);
+    const extra = Math.max(0, paid - applied);
+    const previousBalance = Math.max(0, debt - extra);
+    credit += Math.max(0, extra - debt);
+    result.push({ month, expected: monthlyFee, applied: applied + creditUsed,
+      remaining: currentBalance, isPaid: currentBalance === 0,
+      overpaid: credit, previousBalance, currentBalance, paidForMonth: paid, deadline });
+    // The previous month's unpaid bill is carried forward after its due date.
+    debt = previousBalance + (deadline <= new Date() || paid > 0 ? currentBalance : 0);
+  }
   return result;
 }
 
@@ -487,27 +540,21 @@ function ReceivePartnerPaymentModal({
 
       if (customer) {
         // Formatted payments carry the partner's _id in `customerId`
-        const customerPayments = payments.filter(
-          (p) =>
-            (String(p.customerId) === String(customer._id) ||
-              p.partner?._id === customer._id ||
-              p.partner === customer._id ||
-              p.partnerId === customer._id) &&
-            !p.isNoPayment
-        );
-
+        const customerPayments = payments.filter((p: any) => partnerPaymentMatches(p, customer));
         const allocs = allocatePayments(
-          customer.monthlyFee || 0,
-          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+          Number(customer.monthlyFee || 0),
+          customerPayments.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+          partnerFirstBillingMonth(customer.activationDate),
+          selectedMonth,
+          partnerBillingDay(customer.activationDate)
         );
-
         setMonthlySummary(allocs);
       }
     } else {
       setCustomerDetails(null);
       setMonthlySummary([]);
     }
-  }, [selectedCustomerId, customers, payments]);
+  }, [selectedCustomerId, selectedMonth, customers, payments]);
 
   // Reset downstream selections when ISP changes
   useEffect(() => {
@@ -542,38 +589,14 @@ function ReceivePartnerPaymentModal({
     return 'No package assigned';
   };
 
-  const getCurrentMonthBalance = () => {
-    if (!customerDetails) {
-      return { previousBalance: 0, currentBalance: 0, totalBalance: 0 };
-    }
-
-    const monthlyFee = customerDetails.monthlyFee || 0;
-    const allocs = monthlySummary || [];
-
-    const previousBalance = allocs
-      .filter((a) => compareMonths(a.month, selectedMonth) < 0 && !a.isPaid)
-      .reduce((sum, a) => sum + a.remaining, 0);
-
-    const selectedAlloc = allocs.find((a) => a.month === selectedMonth);
-    const currentBalance = selectedAlloc ? selectedAlloc.remaining : monthlyFee;
-
-    return {
-      previousBalance,
-      currentBalance,
-      totalBalance: previousBalance + currentBalance,
-    };
-  };
-
-  const { previousBalance, currentBalance, totalBalance } = getCurrentMonthBalance();
-
-  const receivedAmount = parseFloat(receiveAmount) || 0;
+  const selectedAllocation = monthlySummary.find((row) => row.month === selectedMonth);
+  const previousBalance = selectedAllocation?.previousBalance ?? 0;
+  const currentBalance = selectedAllocation?.currentBalance ?? Number(customerDetails?.monthlyFee || 0);
+  const totalBalance = previousBalance + currentBalance;
+  const receivedAmount = Math.max(0, Number(receiveAmount) || 0);
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
-
-  const selectedAllocation = (monthlySummary || []).find(
-    (a) => a.month === selectedMonth
-  );
-  const isDuplicateMonth = !!selectedAllocation?.isPaid;
-  const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
+  const isDuplicateMonth = !!selectedAllocation && totalBalance <= 0;
+  const alreadyPaidThisMonth = selectedAllocation?.paidForMonth ?? 0;
 
   const handleSubmit = async () => {
     if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
@@ -592,45 +615,69 @@ function ReceivePartnerPaymentModal({
     }
 
     setIsSubmitting(true);
+    let successful = 0;
     try {
-      const customerObj = customers.find(
-        (c) => String(c._id) === String(selectedCustomerId)
-      );
-      if (!customerObj) {
-        toast.error('Partner not found');
-        setIsSubmitting(false);
+      const customerObj = customers.find((c: any) => String(c._id) === String(selectedCustomerId));
+      if (!customerObj) throw new Error('Partner not found');
+      const wanted = Number(receiveAmount);
+      if (!Number.isFinite(wanted) || wanted <= 0 || wanted > totalBalance + 0.001) {
+        toast.error(`Enter an amount between Rs. 1 and Rs. ${totalBalance.toLocaleString()}`);
         return;
       }
-
-const payload = {
-  partner: String(customerObj._id),
-  month: selectedMonth,
-  amount: receivedAmount,
-  paymentMethod: paymentMethod,
-  paymentDate: paymentDate,
-  remarks: notes,
-};
-      const response = await api.post('/partner-payments', payload);
-
-      if (response.data.success) {
-        toast.success(
-          `Payment of Rs. ${receivedAmount.toLocaleString()} recorded for ${customerObj.name}`
-        );
-        fetchData();
-        onSuccess?.();
-        onClose();
-      } else {
-        toast.error(response.data.message || 'Failed to record payment');
+      // Refresh before saving: validation is enforced by the backend per month.
+      const response = await api.get('/partner-payments');
+      const allLatest = response?.data?.payments;
+      if (!Array.isArray(allLatest)) throw new Error('Unable to verify latest payments');
+      const related = allLatest.filter((p: any) => partnerPaymentMatches(p, customerObj));
+      const freshLedger = allocatePayments(
+        Number(customerObj.monthlyFee || 0),
+        related.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+        partnerFirstBillingMonth(customerObj.activationDate),
+        selectedMonth,
+        partnerBillingDay(customerObj.activationDate)
+      );
+      const due = freshLedger.reduce((sum, row) =>
+        sum + (compareMonths(row.month, selectedMonth) < 0
+          ? Math.max(0, row.expected - row.paidForMonth)
+          : row.month === selectedMonth ? Math.max(0, row.expected - row.paidForMonth) : 0), 0);
+      if (wanted > due + 0.001) {
+        toast.error(`Outstanding balance changed. Maximum payable is Rs. ${due.toLocaleString()}. Please refresh.`);
+        return;
       }
+      let left = wanted;
+      // Oldest unpaid invoice first. Every request stays below the monthly cap.
+      for (const row of freshLedger) {
+        if (left <= 0.001) break;
+        if (compareMonths(row.month, selectedMonth) > 0) break;
+        const monthDue = Math.max(0, row.expected - row.paidForMonth);
+        const part = Math.min(left, monthDue);
+        if (part <= 0.001) continue;
+        const saved = await api.post('/partner-payments', {
+          partner: String(customerObj._id), month: row.month,
+          amount: Math.round(part * 100) / 100,
+          paymentMethod, paymentDate, remarks: notes,
+        });
+        if (!saved?.data?.success) throw new Error(saved?.data?.message || `Failed for ${row.month}`);
+        left = Math.round((left - part) * 100) / 100;
+        successful++;
+      }
+      if (left > 0.001) throw new Error(`Rs. ${left.toLocaleString()} could not be allocated`);
+      toast.success(`Payment saved across ${successful} billing month(s)`);
+      await fetchData();
+      onSuccess?.();
+      onClose();
     } catch (error: any) {
-      console.error('❌ Error recording payment:', error);
-      toast.error(error.response?.data?.message || 'Failed to record payment');
+      console.error('Partner payment failed:', error);
+      toast.error(successful
+        ? `${successful} payment(s) saved before an error. Refresh and verify receipts before retrying.`
+        : (error?.response?.data?.message || error?.message || 'Failed to record payment'));
+      if (successful) await fetchData();
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleNoPayment = async () => {
+    const handleNoPayment = async () => {
     if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedPartner) return toast.error('Please select a partner');
     if (!selectedArea) return toast.error('Please select an area');
@@ -1180,9 +1227,9 @@ export default function ReceivePartnerPaymentPage() {
             // ✅ FIX 1b: fall back to name -> _id map
             customerId:
               payment.partner?._id ||
-              partnerObjectIdByName[
-                typeof payment.partner === 'string' ? payment.partner : ''
-              ] ||
+              (typeof payment.partner === 'string' ? payment.partner : '') ||
+              payment.partnerId ||
+              partnerObjectIdByName[partnerName] ||
               '',
             isp: resolvedIsp,
             month: payment.month || 'N/A',
@@ -1297,21 +1344,17 @@ export default function ReceivePartnerPaymentPage() {
       (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
     );
 
-    if (customerPayments.length === 0) {
-      monthStatusCounts.notpaid += 1;
-      return;
-    }
-
     const allocs = allocatePayments(
       monthlyFee,
-      customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+      customerPayments.map((p: any) => ({ month: p.month, amount: p.amount })),
+      partnerFirstBillingMonth(customer.activationDate), currentMonth, partnerBillingDay(customer.activationDate)
     );
 
     const currentAlloc = allocs.find((a) => a.month === currentMonth);
 
     if (currentAlloc) {
-      if (currentAlloc.isPaid) monthStatusCounts.paid += 1;
-      else if (currentAlloc.applied > 0) monthStatusCounts.partial += 1;
+      if (currentAlloc.isPaid && currentAlloc.previousBalance <= 0) monthStatusCounts.paid += 1;
+      else if (currentAlloc.paidForMonth > 0) monthStatusCounts.partial += 1;
       else monthStatusCounts.notpaid += 1;
     } else {
       monthStatusCounts.notpaid += 1;
@@ -1345,7 +1388,8 @@ export default function ReceivePartnerPaymentPage() {
 
     const allocs = allocatePayments(
       monthlyFee,
-      allCustomerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+      allCustomerPayments.map((p: any) => ({ month: p.month, amount: p.amount })),
+      partnerFirstBillingMonth(customer.activationDate), payment.month, partnerBillingDay(customer.activationDate)
     );
 
     const thisMonth = allocs.find((a) => a.month === payment.month);
@@ -1608,15 +1652,13 @@ export default function ReceivePartnerPaymentPage() {
                   partnerPayments.map((p: any) => ({
                     month: p.month,
                     amount: p.amount,
-                  }))
+                  })),
+                  partnerFirstBillingMonth(partner?.activationDate), item.month,
+                  partnerBillingDay(partner?.activationDate)
                 );
 
                 const currentAlloc = allocs.find((a) => a.month === item.month);
-                const previousBalance = allocs
-                  .filter(
-                    (a) => compareMonths(a.month, item.month) < 0 && !a.isPaid
-                  )
-                  .reduce((sum, a) => sum + a.remaining, 0);
+                const previousBalance = currentAlloc?.previousBalance || 0;
                 const currentBalance = currentAlloc
                   ? currentAlloc.remaining
                   : monthlyFee;

@@ -132,51 +132,31 @@ const getCurrentMonth = (): string => {
 /* ============================================================
    PAYMENT HELPERS
 ============================================================ */
-function getUserPayments(
-  user: any,
-  payments: any[]
-): any[] {
+function getUserPayments(user: any, payments: any[]): any[] {
+  const normalized = (value: any) => String(value ?? '').trim().toLowerCase();
+  const userMongoId = normalized(user.id ?? user._id);
+  const userCode = normalized(user.customerId) === 'n/a' ? '' : normalized(user.customerId);
+  const userName = normalized(user.name);
+
   return payments.filter((p) => {
     if (p.isNoPayment) return false;
-    const customer =
-      p.customer &&
-      typeof p.customer === 'object'
-        ? p.customer
-        : null;
-    const paymentCustomerId =
-      customer?._id ??
-      customer?.id ??
-      (typeof p.customer === 'string'
-        ? p.customer
-        : null);
-    const paymentCustomerCode =
-      customer?.customerId ??
-      p.customerId;
-    const hasIdentifier =
-      Boolean(paymentCustomerId) ||
-      Boolean(paymentCustomerCode);
-    if (hasIdentifier) {
-      const matchesMongoId =
-        paymentCustomerId &&
-        String(paymentCustomerId) === String(user.id);
-      const matchesCustomerId =
-        paymentCustomerCode &&
-        String(paymentCustomerCode) ===
-          String(user.customerId);
-      return (
-        Boolean(matchesMongoId) ||
-        Boolean(matchesCustomerId)
-      );
+    const customer = p.customer && typeof p.customer === 'object' ? p.customer : null;
+
+    // Payments may reference the Mongo _id, customer code, or a populated customer.
+    const ids = [
+      customer?._id, customer?.id, customer?.customerId,
+      typeof p.customer === 'string' ? p.customer : null,
+      p.customerId,
+    ].map(normalized).filter(Boolean);
+
+    if (ids.length) {
+      // Never fall back to a matching name when an explicit ID identifies
+      // a different customer. This prevents cross-account payment matches.
+      return ids.some((id) => id === userMongoId || (userCode && id === userCode));
     }
-    const paymentCustomerName =
-      customer?.name ??
-      p.customerName ??
-      p.name;
-    const matchesName =
-      paymentCustomerName &&
-      String(paymentCustomerName).trim().toLowerCase() ===
-        String(user.name).trim().toLowerCase();
-    return Boolean(matchesName);
+
+    const paymentName = normalized(customer?.name ?? p.customerName ?? p.name);
+    return Boolean(userName && paymentName === userName);
   });
 }
 function getPaymentPaidAmount(p: any): number {
@@ -271,30 +251,72 @@ const billingDeadline = (activation: Date, offset: number): Date => {
 
 function getMonthlyExpiry(user: any, payments: any[], today = getToday()) {
   const activation = parseLocalBillingDate(user.activationDate);
-  if (!activation) {
-    return { expiry: parseLocalBillingDate(user.expiryDate), paid: false };
+  const storedExpiry = parseLocalBillingDate(user.expiryDate);
+  if (!activation) return { expiry: storedExpiry, paid: false };
+
+  const fee = Number(user.monthlyFeeRaw ?? user.monthlyFee ?? 0);
+  if (!Number.isFinite(fee) || fee <= 0) {
+    return { expiry: storedExpiry ?? billingDeadline(activation, 1), paid: false };
   }
 
-  const fee = Number(user.monthlyFeeRaw ?? 0);
-  const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const startMonth = new Date(activation.getFullYear(), activation.getMonth() + 1, 1);
-  const currentMonth = new Date(todayDay.getFullYear(), todayDay.getMonth(), 1);
-  const monthsElapsed = (currentMonth.getFullYear() - startMonth.getFullYear()) * 12 +
-    currentMonth.getMonth() - startMonth.getMonth();
-
-  // Include the next billing month: early payments must be recognized.
-  // The first unpaid month determines the next deadline.
-  const maxOffset = Math.max(1, monthsElapsed + 2);
-  for (let offset = 1; offset <= maxOffset; offset++) {
-    const deadline = billingDeadline(activation, offset);
-    const billingMonth = `${MONTHS[deadline.getMonth()]} ${deadline.getFullYear()}`;
-    if (fee <= 0 || !isMonthPaid(user, payments, billingMonth)) {
-      return { expiry: deadline, paid: false };
+  // The activation period is already covered. Month 1 is the first renewal.
+  // Payment entries are credited to their selected billing month. Only an
+  // overpayment can also clear older arrears; a fully-paid later month alone
+  // must never hide an earlier outstanding monthly charge.
+  const firstOfActivation = new Date(activation.getFullYear(), activation.getMonth(), 1);
+  const monthOffset = (year: number, month: number) =>
+    (year - firstOfActivation.getFullYear()) * 12 + month - firstOfActivation.getMonth();
+  const byMonth = new Map<number, number>();
+  for (const payment of getUserPayments(user, payments)) {
+    const match = String(payment.month ?? '').trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (!match) continue;
+    const monthIndex = MONTHS.findIndex(m => m.toLowerCase() === match[1].toLowerCase());
+    if (monthIndex < 0) continue;
+    const offset = monthOffset(Number(match[2]), monthIndex);
+    if (offset < 1) continue; // Activation-month payments do not renew again.
+    const amount = getPaymentPaidAmount(payment);
+    if (Number.isFinite(amount) && amount > 0) {
+      byMonth.set(offset, (byMonth.get(offset) || 0) + amount);
     }
   }
 
-  // Advance one month beyond the fully paid range.
-  return { expiry: billingDeadline(activation, maxOffset + 1), paid: false };
+  const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const currentOffset = monthOffset(todayDay.getFullYear(), todayDay.getMonth());
+  const latestPaymentOffset = Math.max(0, ...Array.from(byMonth.keys()));
+  const lastOffset = Math.max(1, currentOffset + 2, latestPaymentOffset + 1);
+  // Prevent an accidentally invalid date from producing an unbounded loop.
+  if (lastOffset > 600) return { expiry: storedExpiry ?? billingDeadline(activation, 1), paid: false };
+
+  const balances = new Map<number, number>();
+  let advanceCredit = 0;
+  for (let offset = 1; offset <= lastOffset; offset++) {
+    const paid = byMonth.get(offset) || 0;
+    const creditUsed = Math.min(fee, advanceCredit);
+    advanceCredit -= creditUsed;
+    const charge = fee - creditUsed;
+    const applied = Math.min(charge, paid);
+    balances.set(offset, charge - applied);
+    let excess = Math.max(0, paid - applied);
+
+    // The excess from this billing period clears the oldest outstanding
+    // monthly charge rather than making earlier arrears disappear on paper.
+    for (let prior = 1; prior < offset && excess > 0; prior++) {
+      const outstanding = balances.get(prior) || 0;
+      const settled = Math.min(outstanding, excess);
+      balances.set(prior, outstanding - settled);
+      excess -= settled;
+    }
+    advanceCredit += excess;
+  }
+
+  // Show the oldest unpaid renewal deadline. If none is overdue, show the
+  // next renewal which has not yet been fully covered by payment or credit.
+  for (let offset = 1; offset <= lastOffset; offset++) {
+    if ((balances.get(offset) || 0) > 0.00001) {
+      return { expiry: billingDeadline(activation, offset), paid: false };
+    }
+  }
+  return { expiry: billingDeadline(activation, lastOffset + 1), paid: true };
 }
 
 function isPaymentAwareUpcomingExpiry(user: any, payments: any[]): boolean {
@@ -414,41 +436,116 @@ interface MonthAllocation {
   month: string;
   expected: number;
   applied: number;
-  remaining: number;
-  isPaid: boolean;
+  remaining: number; // Outstanding amount for this month only
+  isPaid: boolean; // Whether this billing month's package is fully paid
   overpaid: number;
+  previousBalance: number; // All earlier accrued dues, after any excess payment
+  currentBalance: number; // Outstanding package charge for this month
+  paidForMonth: number;
 }
+
+// Build every monthly bill, even when the customer has no payment record.
+// An unpaid older month becomes previous balance once its monthly billing
+// deadline (the customer's activation day) has arrived. A partially-paid
+// month also rolls forward because its outstanding amount is known.
+// Receipts belong to their selected billing month, not another month.
 function allocatePayments(
   monthlyFee: number,
-  paymentsForCustomer: { month: string; amount: number }[]
+  paymentsForCustomer: { month: string; amount: number }[],
+  startMonth?: string,
+  endMonth?: string,
+  billingDay = 1
 ): MonthAllocation[] {
-  if (!monthlyFee || monthlyFee <= 0) return [];
+  if (!Number.isFinite(monthlyFee) || monthlyFee <= 0) return [];
   const byMonth: Record<string, number> = {};
-  paymentsForCustomer.forEach((p) => {
-    if (!p.month) return;
-    byMonth[p.month] = (byMonth[p.month] || 0) + (parseFloat(String(p.amount)) || 0);
-  });
-  const months = Object.keys(byMonth).sort(compareMonths);
-  if (months.length === 0) return [];
-  const totalPool = months.reduce((sum, m) => sum + byMonth[m], 0);
-  let pool = totalPool;
+  for (const p of paymentsForCustomer) {
+    const parsed = parseMonth(String(p.month || '').trim());
+    const amount = Number(p.amount);
+    if (parsed.idx < 0 || parsed.year < 2000 || !Number.isFinite(amount) || amount <= 0) continue;
+    const key = `${MONTHS[parsed.idx]} ${parsed.year}`;
+    byMonth[key] = (byMonth[key] || 0) + amount;
+  }
+  const validMonth = (value?: string): boolean => {
+    if (!value) return false;
+    const parsed = parseMonth(value);
+    return parsed.idx >= 0 && parsed.year >= 2000 && Number.isFinite(parsed.year);
+  };
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const currentMonth = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
+  const paymentMonths = Object.keys(byMonth).sort(compareMonths);
+  const requestedStart = validMonth(startMonth) ? startMonth! : (paymentMonths[0] || currentMonth);
+  // Never generate renewal charges before the first post-activation billing month.
+  // Any activation-month payment is for the initial service and is not a new renewal bill.
+  const first = requestedStart;
+  const requestedEnd = validMonth(endMonth) ? endMonth! : currentMonth;
+  const last = paymentMonths.length && compareMonths(paymentMonths[paymentMonths.length - 1], requestedEnd) > 0
+    ? paymentMonths[paymentMonths.length - 1] : requestedEnd;
+  if (compareMonths(first, last) > 0) return [];
+  const from = parseMonth(first);
+  const to = parseMonth(last);
+  const numberOfMonths = (to.year - from.year) * 12 + to.idx - from.idx + 1;
+  if (numberOfMonths > 600) return [];
+
   const result: MonthAllocation[] = [];
-  for (const month of months) {
-    const applied = Math.min(pool, monthlyFee);
-    const remaining = Math.max(0, monthlyFee - applied);
-    pool -= applied;
+  let oldDebt = 0;
+  let advanceCredit = 0;
+  for (let i = 0; i < numberOfMonths; i++) {
+    const date = new Date(from.year, from.idx + i, 1);
+    const month = `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+    const paidForMonth = byMonth[month] || 0;
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const deadline = new Date(date.getFullYear(), date.getMonth(), Math.min(Math.max(1, billingDay), daysInMonth));
+    const deadlineReached = deadline <= todayOnly;
+
+    // Credit from an overpayment reduces subsequent monthly package charges.
+    const creditApplied = Math.min(monthlyFee, advanceCredit);
+    advanceCredit -= creditApplied;
+    const amountDueThisMonth = monthlyFee - creditApplied;
+    const amountAppliedThisMonth = Math.min(amountDueThisMonth, paidForMonth);
+    const currentBalance = Math.max(0, amountDueThisMonth - amountAppliedThisMonth);
+    const excess = Math.max(0, paidForMonth - amountAppliedThisMonth);
+    // Any amount paid beyond the current package settles oldest outstanding dues.
+    const previousBalance = Math.max(0, oldDebt - excess);
+    advanceCredit += Math.max(0, excess - oldDebt);
+
     result.push({
       month,
       expected: monthlyFee,
-      applied,
-      remaining,
-      isPaid: remaining === 0,
-      overpaid: 0,
+      applied: creditApplied + amountAppliedThisMonth,
+      remaining: currentBalance,
+      isPaid: currentBalance <= 0,
+      overpaid: advanceCredit,
+      previousBalance,
+      currentBalance,
+      paidForMonth,
     });
+
+    // An unpaid bill enters older dues after its billing deadline.
+    // If a partial payment already exists, its remainder also carries forward.
+    oldDebt = previousBalance + (deadlineReached || paidForMonth > 0 ? currentBalance : 0);
   }
   return result;
 }
 
+// Activation covers the initial service period. Regular monthly billing begins the following month.
+function getFirstBillingMonth(activationDate: any): string | undefined {
+  if (!activationDate) return undefined;
+  const match = String(activationDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(activationDate);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const first = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+  return `${MONTHS[first.getMonth()]} ${first.getFullYear()}`;
+}
+function getBillingDay(activationDate: any): number {
+  if (!activationDate) return 1;
+  const match = String(activationDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) return Number(match[3]);
+  const date = new Date(activationDate);
+  return Number.isNaN(date.getTime()) ? 1 : date.getDate();
+}
 function SearchableSelect({
   options,
   value,
@@ -723,16 +820,20 @@ function ReceivePaymentModal({
       const customer = customers.find((c) => String(c._id) === String(selectedCustomerId));
       setCustomerDetails(customer || null);
       if (customer) {
-        const customerPayments = payments.filter(
-          (p) =>
-            (p.customer?._id === customer._id ||
-              p.customer === customer._id ||
-              p.customerId === customer._id) &&
-            !p.isNoPayment
+        const customerPayments = payments.filter((p: any) =>
+          !p.isNoPayment && (
+            String(p.customer?._id || '') === String(customer._id) ||
+            String(p.customer || '') === String(customer._id) ||
+            String(p.customerId || '') === String(customer._id) ||
+            (customer.customerId && String(p.customerId || '') === String(customer.customerId))
+          )
         );
         const allocs = allocatePayments(
-          customer.monthlyFee || 0,
-          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount }))
+          Number(customer.monthlyFee || 0),
+          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount })),
+          getFirstBillingMonth(customer.activationDate),
+          selectedMonth,
+          getBillingDay(customer.activationDate)
         );
         setMonthlySummary(allocs);
       }
@@ -740,7 +841,7 @@ function ReceivePaymentModal({
       setCustomerDetails(null);
       setMonthlySummary([]);
     }
-  }, [selectedCustomerId, customers, payments]);
+  }, [selectedCustomerId, selectedMonth, customers, payments]);
   // ✅ Reset downstream when ISP changes (only if ISP filter is active)
   useEffect(() => {
     if (!showIspFilter) return;
@@ -769,74 +870,112 @@ function ReceivePaymentModal({
       return customerDetails.package.name || 'Unknown Package';
     return 'No package assigned';
   };
-  const getCurrentMonthBalance = () => {
-    if (!customerDetails) {
-      return { previousBalance: 0, currentBalance: 0, totalBalance: 0 };
-    }
-    const monthlyFee = customerDetails.monthlyFee || 0;
-    const allocs = monthlySummary || [];
-    const previousBalance = allocs
-      .filter((a) => compareMonths(a.month, selectedMonth) < 0 && !a.isPaid)
-      .reduce((sum, a) => sum + a.remaining, 0);
-    const selectedAlloc = allocs.find((a) => a.month === selectedMonth);
-    const currentBalance = selectedAlloc ? selectedAlloc.remaining : monthlyFee;
-    return {
-      previousBalance,
-      currentBalance,
-      totalBalance: previousBalance + currentBalance,
-    };
-  };
-  const { previousBalance, currentBalance, totalBalance } = getCurrentMonthBalance();
-  const receivedAmount = parseFloat(receiveAmount) || 0;
+  const selectedAllocation = monthlySummary.find((a) => a.month === selectedMonth);
+  const packagePrice = Number(customerDetails?.monthlyFee || 0);
+  // Carry expired older bills and known partial payments into this month.
+  const previousBalance = selectedAllocation?.previousBalance ?? 0;
+  const currentBalance = selectedAllocation?.currentBalance ?? packagePrice;
+  const totalBalance = previousBalance + currentBalance;
+  const receivedAmount = Math.max(0, parseFloat(receiveAmount) || 0);
   const remainingBalance = Math.max(0, totalBalance - receivedAmount);
-  const selectedAllocation = (monthlySummary || []).find(
-    (a) => a.month === selectedMonth
-  );
-  const isDuplicateMonth = !!selectedAllocation?.isPaid;
-  const alreadyPaidThisMonth = selectedAllocation?.applied || 0;
+  // A fully paid month can still have older dues; allow collecting those dues.
+  const isDuplicateMonth = !!selectedAllocation && totalBalance <= 0;
+  const alreadyPaidThisMonth = selectedAllocation?.paidForMonth ?? 0;
   const handleSubmit = async () => {
+    if (isSubmitting) return;
     if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedArea) return toast.error('Please select an area first');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
-    if (!receiveAmount || parseFloat(receiveAmount) <= 0)
+
+    // Never submit the complete balance as a single payment for the selected
+    // month: the API enforces each month's outstanding package charge.
+    const requested = Number(receiveAmount);
+    if (!Number.isFinite(requested) || requested <= 0) {
       return toast.error('Please enter a valid amount');
-    if (isDuplicateMonth) {
-      toast.error(
-        `${customerDetails?.name} has already fully paid for ${selectedMonth}. Duplicate entries are not allowed.`
-      );
-      return;
     }
+    if (requested > totalBalance + 0.001) {
+      return toast.error(`Maximum outstanding balance is Rs. ${totalBalance.toLocaleString()}`);
+    }
+    if (isDuplicateMonth) return toast.error('No outstanding balance to collect');
+
+    const customerObj = customers.find((c: any) => String(c._id) === String(selectedCustomerId));
+    if (!customerObj) return toast.error('User not found');
+
+    // Refresh payments immediately before posting, avoiding a stale monthly
+    // remainder if another operator has just recorded a receipt.
     setIsSubmitting(true);
+    let savedAmount = 0;
+    let savedMonths = 0;
     try {
-      const customerObj = customers.find((c) => c._id === selectedCustomerId);
-      if (!customerObj) {
-        toast.error('User not found');
-        setIsSubmitting(false);
-        return;
+      const latestResponse = await api.get('/payments');
+      const latestPayments: any[] = latestResponse.data?.payments ?? latestResponse.data?.data ?? [];
+      if (!Array.isArray(latestPayments)) throw new Error('Could not verify payment history');
+
+      const customerId = String(customerObj._id);
+      const code = String(customerObj.customerId || '').trim();
+      const matched = latestPayments.filter((p: any) => {
+        if (p.isNoPayment) return false;
+        const ids = [p.customer?._id, p.customer?.id,
+          typeof p.customer === 'string' ? p.customer : null,
+          p.customerId, p.customer?.customerId].filter(Boolean).map(String);
+        return ids.includes(customerId) || (!!code && ids.includes(code));
+      });
+
+      const fee = Number(customerObj.monthlyFee || 0);
+      if (!Number.isFinite(fee) || fee <= 0) throw new Error('Invalid customer monthly fee');
+      const eligibleMonths = monthlySummary
+        .filter((row) => compareMonths(row.month, selectedMonth) <= 0)
+        .sort((a, b) => compareMonths(a.month, b.month));
+      const allocations: { month: string; amount: number }[] = [];
+      let amountToAllocate = requested;
+      for (const row of eligibleMonths) {
+        const paidAlready = matched
+          .filter((p: any) => String(p.month || '').trim().toLowerCase() === row.month.toLowerCase())
+          .reduce((sum: number, p: any) => sum + Number(p.amount || p.paidAmount || 0), 0);
+        const available = Math.max(0, fee - paidAlready);
+        const part = Math.round(Math.min(available, amountToAllocate) * 100) / 100;
+        if (part > 0) {
+          allocations.push({ month: row.month, amount: part });
+          amountToAllocate = Math.round((amountToAllocate - part) * 100) / 100;
+        }
+        if (amountToAllocate <= 0) break;
       }
-      const payload = {
-        customer: customerObj._id,
-        month: selectedMonth,
-        amount: receivedAmount,
-        paymentMethod: paymentMethod,
-        paymentDate: paymentDate,
-        remarks: notes,
-      };
-      const response = await api.post('/payments', payload);
-      if (response.data.success) {
-        toast.success(
-          `Payment of Rs. ${receivedAmount.toLocaleString()} recorded for ${customerObj.name}`
-        );
-        fetchData();
-        onSuccess?.();
-        onClose();
-      } else {
-        toast.error(response.data.message || 'Failed to record payment');
+      if (amountToAllocate > 0.001) {
+        throw new Error(`Only Rs. ${(requested - amountToAllocate).toLocaleString()} can be allocated to the selected and earlier billing months. Refresh the page to update balances.`);
       }
+
+      // Each POST obeys the backend's per-month overpayment restriction.
+      // Note: the API is not transactional across multiple months. If an
+      // individual request fails, stop immediately and report saved amounts.
+      for (const allocation of allocations) {
+        const response = await api.post('/payments', {
+          customer: customerObj._id,
+          month: allocation.month,
+          amount: allocation.amount,
+          paymentMethod,
+          paymentDate,
+          remarks: notes || (allocations.length > 1 ? `Split payment for ${selectedMonth}` : ''),
+        });
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || `Payment failed for ${allocation.month}`);
+        }
+        savedAmount += allocation.amount;
+        savedMonths += 1;
+      }
+      toast.success(`Rs. ${savedAmount.toLocaleString()} recorded across ${savedMonths} billing month(s)`);
+      await fetchData();
+      onSuccess?.();
+      onClose();
     } catch (error: any) {
-      console.error('❌ Error recording payment:', error);
-      toast.error(error.response?.data?.message || 'Failed to record payment');
+      const reason = error?.response?.data?.message || error?.message || 'Failed to record payment';
+      if (savedMonths > 0) {
+        toast.error(`Only Rs. ${savedAmount.toLocaleString()} was saved. ${reason}. Refresh and verify receipts before retrying.`, { duration: 9000 });
+        await fetchData();
+      } else {
+        toast.error(reason);
+      }
+      console.error('Payment allocation failed:', reason);
     } finally {
       setIsSubmitting(false);
     }
@@ -1405,7 +1544,7 @@ const resolveIspName = (
             expiryDate: c.expiryDate,
             monthlyFeeRaw: Number(c.monthlyFee || 0),
             id: c._id,
-            customerId: c.customerId || 'N/A',
+            customerId: c.customerId || '',
             name: c.name || '',
           }, paymentList).expiry;
           const expiryDisplay = expiry
@@ -1529,10 +1668,7 @@ const resolveIspName = (
       'upcoming-expiry',
       'UPCOMING EXPIRIES',
       statsUsers.filter((u) =>
-        isPaymentAwareUpcomingExpiry(
-          u,
-          payments
-        )
+        u.status === 'Upcoming Expiry'
       ).length,
       Clock,
       'orange',
@@ -2004,10 +2140,7 @@ if (fieldName === 'package') {
         (
           filter ===
             'upcoming-expiry' &&
-          isPaymentAwareUpcomingExpiry(
-            u,
-            payments
-          )
+          status === 'Upcoming Expiry' 
         );
       const matchesSearch =
         u.name

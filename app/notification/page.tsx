@@ -40,6 +40,18 @@ type NotificationCategory =
 
 type SourceType = 'Customer' | 'Partner';
 
+// Keep amount logic separate from TypeScript's local category narrowing.
+const getNotificationDueAmount = (
+  category: NotificationCategory,
+  totalShortfall: number,
+  thisMonthRemaining: number,
+  monthlyFee: number
+): number => {
+  if (category === 'Partial') return totalShortfall;
+  if (category === 'Pending') return thisMonthRemaining;
+  return monthlyFee;
+};
+
 const VIEWED_NOTIFICATIONS_KEY =
   'smart-recovery-viewed-notifications';
 
@@ -435,6 +447,104 @@ function getLastPaidInfo(
   };
 }
 
+// These helpers mirror User Management and Partner Management.
+// Matching by record ID takes priority; names are only a fallback when a
+// payment has no customer/partner identifier.
+const billingMonths = [
+  'January','February','March','April','May','June',
+  'July','August','September','October','November','December'
+];
+const todayLocal = (): Date => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+};
+const parseLocalBillingDate = (value: any): Date | null => {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = Number(match[1]);
+      const month = Number(match[2]) - 1;
+      const day = Number(match[3]);
+      const result = new Date(year, month, day);
+      return result.getFullYear() === year && result.getMonth() === month && result.getDate() === day ? result : null;
+    }
+  }
+  const parsed = toDate(value);
+  return parsed ? new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) : null;
+};
+const billingDeadline = (activation: Date, offset: number): Date => {
+  const first = new Date(activation.getFullYear(), activation.getMonth() + offset, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(activation.getDate(), last));
+};
+const paymentAmount = (payment: any): number => {
+  for (const value of [payment.amount, payment.paidAmount, payment.amountPaid,
+    payment.receivedAmount, payment.amountReceived, payment.paid]) {
+    if (value !== undefined && value !== null && value !== '') {
+      const amount = parseFloat(String(value));
+      if (!Number.isNaN(amount)) return amount;
+    }
+  }
+  return 0;
+};
+const paymentsForRecord = (record: any, payments: any[], source: SourceType): any[] => {
+  const key = source === 'Customer' ? 'customer' : 'partner';
+  const codeKey = source === 'Customer' ? 'customerId' : 'partnerId';
+  return payments.filter((payment) => {
+    if (payment.isNoPayment) return false;
+    const linked = payment[key] && typeof payment[key] === 'object' ? payment[key] : null;
+    const linkedId = linked?._id ?? linked?.id ?? (typeof payment[key] === 'string' ? payment[key] : null);
+    const linkedCode = linked?.[codeKey] ?? payment[codeKey];
+    if (linkedId || linkedCode) {
+      return Boolean((linkedId && String(linkedId) === String(record._id)) ||
+        (linkedCode && String(linkedCode) === String(record[codeKey])));
+    }
+    const name = linked?.name ?? payment[source === 'Customer' ? 'customerName' : 'partnerName'] ?? payment.name;
+    return Boolean(name && String(name).trim().toLowerCase() === String(record.name || '').trim().toLowerCase());
+  });
+};
+const getMonthlyExpiry = (record: any, payments: any[], source: SourceType, today = todayLocal()): Date | null => {
+  const activation = parseLocalBillingDate(dateInput(record.activationDate));
+  if (!activation) return parseLocalBillingDate(record.expiryDate);
+  const fee = Number(record.monthlyFee || 0);
+  const startMonth = new Date(activation.getFullYear(), activation.getMonth() + 1, 1);
+  const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthsElapsed = (currentMonth.getFullYear() - startMonth.getFullYear()) * 12 +
+    currentMonth.getMonth() - startMonth.getMonth();
+  const maxOffset = Math.max(1, monthsElapsed + 2);
+  const recordPayments = paymentsForRecord(record, payments, source);
+  for (let offset = 1; offset <= maxOffset; offset++) {
+    const deadline = billingDeadline(activation, offset);
+    const billingMonth = `${billingMonths[deadline.getMonth()]} ${deadline.getFullYear()}`;
+    const total = recordPayments.filter((payment) =>
+      String(payment.month || '').trim().toLowerCase() === billingMonth.toLowerCase()
+    ).reduce((sum, payment) => sum + paymentAmount(payment), 0);
+    if (fee <= 0 || total < fee) return deadline;
+  }
+  return billingDeadline(activation, maxOffset + 1);
+};
+const paymentAwareCategory = (record: any, payments: any[], source: SourceType): {
+  category: 'Expired' | 'Upcoming Expiry' | null;
+  expiry: Date | null;
+} => {
+  const expiry = getMonthlyExpiry(record, payments, source);
+  const rawStatus = String(record.status || 'active').toLowerCase();
+  if (rawStatus === 'inactive' || rawStatus === 'suspended') {
+    return { category: null, expiry };
+  }
+  if (!expiry) {
+    const fallback = effectiveStatus({ ...record, statusRaw: record.status || 'active' });
+    return { category: fallback === 'Expired' ? 'Expired' : null, expiry };
+  }
+  const today = todayLocal();
+  // Management pages treat the expiry day itself as Expired.
+  if (expiry <= today) return { category: 'Expired', expiry };
+  const days = Math.round((Date.UTC(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()) -
+    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  return { category: days >= 1 && days <= 7 ? 'Upcoming Expiry' : null, expiry };
+};
+
 // ============================================================
 // CUSTOMER NOTIFICATIONS
 // ============================================================
@@ -451,40 +561,12 @@ const buildCustomerNotifications = (
     getCurrentMonth();
 
   customers.forEach((c) => {
-    const activation =
-      dateInput(c.activationDate);
+    const activation = dateInput(c.activationDate);
+    const expiryInfo = paymentAwareCategory(c, customerPayments, 'Customer');
+    const expiry = expiryInfo.expiry;
+    const status = expiryInfo.category;
 
-    const rawExpiry = c.expiryDate
-      ? dateInput(c.expiryDate)
-      : expiryDate(activation);
-
-    const expiry = toDate(
-      rawExpiry
-    );
-
-    const shape = {
-      ...c,
-      activationDate:
-        activation,
-      expiryDate: expiry,
-      statusRaw:
-        c.status || 'active',
-    };
-
-    const status =
-      effectiveStatus(shape);
-
-    const isUpcoming =
-      upcomingExpiry(shape);
-
-    const allPayments =
-      customerPayments.filter(
-        (p) =>
-          getCustomerNameFromPayment(
-            p
-          ) ===
-          (c.name || '').trim()
-      );
+    const allPayments = paymentsForRecord(c, customerPayments, 'Customer');
 
     const paidPayments =
       allPayments.filter(
@@ -522,30 +604,11 @@ const buildCustomerNotifications = (
       currentAlloc?.remaining ??
       monthlyFee;
 
-    let category:
-      | NotificationCategory
-      | null = null;
-
-    if (status === 'Expired') {
-      category = 'Expired';
-    } else if (isUpcoming) {
-      category =
-        'Upcoming Expiry';
-    } else if (
-      paidPayments.length === 0
-    ) {
-      category = 'Pending';
-    } else if (
-      totalShortfall > 0 &&
-      totalShortfall <
-        monthlyFee * 2
-    ) {
+    // Upcoming/expired is determined by the real expiry date.
+    // Payment on the 4th with expiry on the 9th cannot be expired on the 5th.
+    let category: NotificationCategory | null = status;
+    if (!category && String(c.status || '').toLowerCase() === 'partial') {
       category = 'Partial';
-    } else if (
-      totalShortfall >=
-      monthlyFee * 2
-    ) {
-      category = 'Pending';
     }
 
     if (!category) return;
@@ -565,12 +628,12 @@ const buildCustomerNotifications = (
           )
         : 0;
 
-    const dueAmount =
-      category === 'Partial'
-        ? totalShortfall
-        : category === 'Pending'
-        ? thisMonthRemaining
-        : monthlyFee;
+    const dueAmount = getNotificationDueAmount(
+      category,
+      totalShortfall,
+      thisMonthRemaining,
+      monthlyFee
+    );
 
     const lastPaid =
       getLastPaidInfo(
@@ -637,40 +700,12 @@ const buildPartnerNotifications = (
     getCurrentMonth();
 
   partners.forEach((c) => {
-    const activation =
-      dateInput(c.activationDate);
+    const activation = dateInput(c.activationDate);
+    const expiryInfo = paymentAwareCategory(c, partnerPayments, 'Partner');
+    const expiry = expiryInfo.expiry;
+    const status = expiryInfo.category;
 
-    const rawExpiry = c.expiryDate
-      ? dateInput(c.expiryDate)
-      : expiryDate(activation);
-
-    const expiry = toDate(
-      rawExpiry
-    );
-
-    const shape = {
-      ...c,
-      activationDate:
-        activation,
-      expiryDate: expiry,
-      statusRaw:
-        c.status || 'active',
-    };
-
-    const status =
-      effectiveStatus(shape);
-
-    const isUpcoming =
-      upcomingExpiry(shape);
-
-    const allPayments =
-      partnerPayments.filter(
-        (p) =>
-          getPartnerNameFromPayment(
-            p
-          ) ===
-          (c.name || '').trim()
-      );
+    const allPayments = paymentsForRecord(c, partnerPayments, 'Partner');
 
     const paidPayments =
       allPayments.filter(
@@ -708,30 +743,17 @@ const buildPartnerNotifications = (
       currentAlloc?.remaining ??
       monthlyFee;
 
-    let category:
-      | NotificationCategory
-      | null = null;
-
-    if (status === 'Expired') {
-      category = 'Expired';
-    } else if (isUpcoming) {
-      category =
-        'Upcoming Expiry';
-    } else if (
-      paidPayments.length === 0
-    ) {
-      category = 'Pending';
-    } else if (
-      totalShortfall > 0 &&
-      totalShortfall <
-        monthlyFee * 2
-    ) {
-      category = 'Partial';
-    } else if (
-      totalShortfall >=
-      monthlyFee * 2
-    ) {
-      category = 'Pending';
+    let category: NotificationCategory | null = status;
+    if (!category) {
+      if (String(c.status || '').toLowerCase() === 'partial') {
+        category = 'Partial';
+      } else if (paidPayments.length === 0) {
+        category = 'Pending';
+      } else if (monthlyFee > 0 && totalShortfall > 0 && totalShortfall < monthlyFee * 2) {
+        category = 'Partial';
+      } else if (monthlyFee > 0 && totalShortfall >= monthlyFee * 2) {
+        category = 'Pending';
+      }
     }
 
     if (!category) return;
@@ -751,12 +773,12 @@ const buildPartnerNotifications = (
           )
         : 0;
 
-    const dueAmount =
-      category === 'Partial'
-        ? totalShortfall
-        : category === 'Pending'
-        ? thisMonthRemaining
-        : monthlyFee;
+    const dueAmount = getNotificationDueAmount(
+      category,
+      totalShortfall,
+      thisMonthRemaining,
+      monthlyFee
+    );
 
     const lastPaid =
       getLastPaidInfo(
@@ -1035,140 +1057,37 @@ function RecoveryNotificationsPageContent() {
           partnerPaymentsData,
           customerAreasData,
           partnerAreasData,
-        ] =
-          await Promise.all([
-            safeGet(
-              '/customers?limit=10000'
-            ),
-            safeGet(
-              '/partners?limit=10000'
-            ),
-            safeGet('/payments'),
-            safeGet(
-              '/partner-payments'
-            ),
-            safeGet('/areas'),
-            safeGet(
-              '/partner-areas'
-            ),
-          ]);
+        ] = await Promise.all([
+          safeGet('/customers?limit=10000'),
+          safeGet('/partners?limit=10000'),
+          safeGet('/payments'),
+          safeGet('/partner-payments'),
+          safeGet('/areas'),
+          safeGet('/partner-areas'),
+        ]);
 
-        const customers =
-          customersData?.customers ||
-          customersData?.data ||
-          [];
+        const customers = customersData?.customers || customersData?.data || [];
+        const partners = partnersData?.partners || partnersData?.data || [];
+        const customerPayments = customerPaymentsData?.payments || customerPaymentsData?.data || [];
+        const partnerPayments = partnerPaymentsData?.payments || partnerPaymentsData?.data || [];
+        const customerAreas = customerAreasData?.areas || customerAreasData?.data || [];
+        const partnerAreas = partnerAreasData?.areas || partnerAreasData?.data || [];
 
-        const partners =
-          partnersData?.partners ||
-          partnersData?.data ||
-          [];
-
-        const customerPayments =
-          customerPaymentsData?.payments ||
-          customerPaymentsData?.data ||
-          [];
-
-        const partnerPayments =
-          partnerPaymentsData?.payments ||
-          partnerPaymentsData?.data ||
-          [];
-
-        const customerAreas =
-          customerAreasData?.areas ||
-          customerAreasData?.data ||
-          [];
-
-        const partnerAreas =
-          partnerAreasData?.areas ||
-          partnerAreasData?.data ||
-          [];
-
-        console.log(
-          '📊 Data loaded:',
-          {
-            customers:
-              customers.length,
-            partners:
-              partners.length,
-            customerPayments:
-              customerPayments.length,
-            partnerPayments:
-              partnerPayments.length,
-            customerAreas:
-              customerAreas.length,
-            partnerAreas:
-              partnerAreas.length,
-          }
+        const customerNotifs = buildCustomerNotifications(
+          customers, customerPayments, customerAreas
+        );
+        const partnerNotifs = buildPartnerNotifications(
+          partners, partnerPayments, partnerAreas
         );
 
-        const customerNotifs =
-          buildCustomerNotifications(
-            customers,
-            customerPayments,
-            customerAreas
-          );
-
-        const partnerNotifs =
-          buildPartnerNotifications(
-            partners,
-            partnerPayments,
-            partnerAreas
-          );
-
-        console.log(
-          '✅ Notifications built:',
-          {
-            customers:
-              customerNotifs.length,
-            partners:
-              partnerNotifs.length,
-          }
+        // Customer and partner IDs have separate prefixes; do not create
+        // duplicates or hardcode an assumed number of partner notifications.
+        const built = Array.from(
+          new Map([...customerNotifs, ...partnerNotifs].map(n => [n.id, n])).values()
         );
-
-        const built = [
-          ...customerNotifs,
-          ...partnerNotifs,
-        ];
-
-        const viewedKeys =
-          getViewedNotificationKeys();
-
-        /*
-         * IMPORTANT:
-         *
-         * Normally viewed Expired/Upcoming notifications
-         * are removed from the page.
-         *
-         * BUT if the user came here by clicking a notification
-         * in the header dropdown, we keep that exact notification
-         * visible so the user can actually see it.
-         */
-        const visibleNotifications =
-          built.filter(
-            (notification) => {
-              const isViewed =
-                viewedKeys.has(
-                  getNotificationViewedKey(
-                    notification
-                  )
-                );
-
-              const isOpenedFromHeader =
-                Boolean(
-                  urlNotificationId &&
-                    notification.id ===
-                      urlNotificationId
-                );
-
-              if (
-                isOpenedFromHeader
-              ) {
-                return true;
-              }
-
-              return !isViewed;
-            }
-          );
+        // Viewing is tracked separately: it must never change
+        // status totals or hide a currently qualifying user.
+        const visibleNotifications = built;
 
         setNotifications(
           visibleNotifications
@@ -1487,27 +1406,9 @@ function RecoveryNotificationsPageContent() {
         } catch {}
       }
 
-      /*
-       * If this notification was opened from the header,
-       * don't remove it immediately. The user needs to see it.
-       *
-       * For normal page clicks, preserve the old behaviour.
-       */
-      if (
-        urlNotificationId ===
-        notification.id
-      ) {
-        return;
-      }
+      // Mark as read without removing an active status notification.
+      // It disappears only when its Users-page status changes.
 
-      setNotifications(
-        (prev) =>
-          prev.filter(
-            (item) =>
-              item.id !==
-              notification.id
-          )
-      );
     };
 
   // ============================================================
