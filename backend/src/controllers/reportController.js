@@ -8,6 +8,40 @@ const Package = require('../models/Package');
 const Area = require('../models/Area');
 const Staff = require('../models/Staff');
 const logger = require('../utils/logger');
+const mongoose = require('mongoose');
+
+// A report is calculated from tenant-owned records; no separate Report model is needed.
+// Enforce access at the controller as well as on the route: never accept tenantId
+// from req.query, req.params or req.body.
+const requireReportTenant = (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ success: false, message: 'Authentication required' });
+    return null;
+  }
+
+  if (req.user.role === 'superadmin') {
+    res.status(403).json({ success: false, message: 'Master accounts cannot use tenant reports' });
+    return null;
+  }
+
+  const raw = req.user.tenantId?._id || req.user.tenantId;
+  const tenantId = raw ? String(raw) : '';
+
+  if (!mongoose.Types.ObjectId.isValid(tenantId)) {
+    res.status(403).json({ success: false, message: 'Company account has no valid tenant assigned' });
+    return null;
+  }
+
+  // Guard against inconsistencies in authentication middleware context.
+  const middlewareTenantId = req.tenantId?._id || req.tenantId;
+  if (middlewareTenantId && String(middlewareTenantId) !== tenantId) {
+    res.status(403).json({ success: false, message: 'Tenant context mismatch' });
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(tenantId);
+};
+
 
 // ============================================================
 // HELPERS
@@ -53,8 +87,8 @@ const parseCommissionRate = (rateStr) => {
 };
 
 // Build area ID -> area name lookup
-const buildAreaLookup = async () => {
-  const areas = await Area.find({}).select('_id name').lean();
+const buildAreaLookup = async (tenantId) => {
+  const areas = await Area.find({ tenantId }).select('_id name').lean();
 
   const map = {};
 
@@ -69,11 +103,12 @@ const buildAreaLookup = async () => {
 // STAFF SALARY HELPER
 // ============================================================
 
-const getSalaryCost = async (fromDate, toDate) => {
-  const staff = await Staff.find({ isActive: true }).populate(
-    'assignedArea',
-    'name'
-  );
+const getSalaryCost = async (fromDate, toDate, tenantId) => {
+  const staff = await Staff.find({ tenantId, isActive: true }).populate({
+    path: 'assignedArea',
+    select: 'name',
+    match: { tenantId },
+  });
 
   const totalMonthlySalary = staff.reduce(
     (sum, st) => sum + (st.salary || 0),
@@ -121,9 +156,11 @@ const getSalaryCost = async (fromDate, toDate) => {
 
 exports.getCustomerReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const { area, status, fromDate, toDate } = req.query;
 
-    const filter = {};
+    const filter = { tenantId };
 
     if (area && area !== 'All Areas') {
       filter.area = area;
@@ -180,14 +217,17 @@ exports.getCustomerReport = async (req, res) => {
 
 exports.getBalanceReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const { area, status } = req.query;
 
-    const filter = {};
+    const filter = { tenantId };
 
-    const areaLookup = await buildAreaLookup();
+    const areaLookup = await buildAreaLookup(tenantId);
 
     if (area && area !== 'All Areas') {
       const areaDoc = await Area.findOne({
+        tenantId,
         name: area,
       })
         .select('_id')
@@ -210,6 +250,7 @@ exports.getBalanceReport = async (req, res) => {
     const customers = await Customer.find(filter).lean();
 
     const payments = await Payment.find({
+        tenantId,
       isNoPayment: false,
     });
 
@@ -323,6 +364,8 @@ exports.getBalanceReport = async (req, res) => {
 
 exports.getCollectionReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const {
       fromDate,
       toDate,
@@ -330,11 +373,12 @@ exports.getCollectionReport = async (req, res) => {
     } = req.query;
 
     const filter = {
+      tenantId,
       isNoPayment: false,
     };
 
     const areaLookup =
-      await buildAreaLookup();
+      await buildAreaLookup(tenantId);
 
     if (fromDate && toDate) {
       const from = new Date(fromDate);
@@ -354,11 +398,13 @@ exports.getCollectionReport = async (req, res) => {
         path: 'customer',
         select:
           'name code customerId area',
+        match: { tenantId },
       })
-      .populate(
-        'receivedBy',
-        'name'
-      )
+      .populate({
+        path: 'receivedBy',
+        select: 'name',
+        match: { tenantId },
+      })
       .sort({
         paymentDate: -1,
       });
@@ -471,12 +517,14 @@ exports.getCollectionReport = async (req, res) => {
 
 exports.getOutstandingReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const { area } = req.query;
 
-    const filter = {};
+    const filter = { tenantId };
 
     const areaLookup =
-      await buildAreaLookup();
+      await buildAreaLookup(tenantId);
 
     if (
       area &&
@@ -484,6 +532,7 @@ exports.getOutstandingReport = async (req, res) => {
     ) {
       const areaDoc =
         await Area.findOne({
+        tenantId,
           name: area,
         })
           .select('_id')
@@ -510,6 +559,7 @@ exports.getOutstandingReport = async (req, res) => {
 
     const payments =
       await Payment.find({
+        tenantId,
         isNoPayment: false,
       });
 
@@ -635,18 +685,21 @@ exports.getOutstandingReport = async (req, res) => {
 
 exports.getAreaReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const customers =
       await Customer.find(
-        {}
+        { tenantId }
       ).lean();
 
     const payments =
       await Payment.find({
+        tenantId,
         isNoPayment: false,
       });
 
     const areaLookup =
-      await buildAreaLookup();
+      await buildAreaLookup(tenantId);
 
     const resolveAreaName = (
       raw
@@ -796,11 +849,13 @@ exports.getAreaReport = async (req, res) => {
 
 exports.getPackageReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const packages =
-      await Package.find({});
+      await Package.find({ tenantId });
 
     const customers =
-      await Customer.find({});
+      await Customer.find({ tenantId });
 
     const rows =
       packages.map((pkg) => {
@@ -910,6 +965,8 @@ exports.getPackageReport = async (req, res) => {
 
 exports.getUserPaymentReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const mongoose =
       require('mongoose');
 
@@ -934,9 +991,10 @@ exports.getUserPaymentReport = async (req, res) => {
     }
 
     const customer =
-      await Customer.findById(
-        customerId
-      ).lean();
+      await Customer.findOne({
+        _id: customerId,
+        tenantId,
+      }).lean();
 
     if (!customer) {
       return res.status(404).json({
@@ -971,9 +1029,10 @@ exports.getUserPaymentReport = async (req, res) => {
           )
         ) {
           const areaDoc =
-            await Area.findById(
-              raw
-            )
+            await Area.findOne({
+              _id: raw,
+              tenantId,
+            })
               .select('name')
               .lean();
 
@@ -992,6 +1051,7 @@ exports.getUserPaymentReport = async (req, res) => {
     // ---------------------------
 
     const paymentFilter = {
+      tenantId,
       customer:
         customer._id,
 
@@ -1068,10 +1128,11 @@ exports.getUserPaymentReport = async (req, res) => {
         await Payment.find(
           paymentFilter
         )
-          .populate(
-            'receivedBy',
-            'name'
-          )
+          .populate({
+            path: 'receivedBy',
+            select: 'name',
+            match: { tenantId },
+          })
           .sort({
             paymentDate: -1,
           });
@@ -1080,10 +1141,11 @@ exports.getUserPaymentReport = async (req, res) => {
         await Payment.find(
           paymentFilter
         )
-          .populate(
-            'receivedBy',
-            'name'
-          )
+          .populate({
+            path: 'receivedBy',
+            select: 'name',
+            match: { tenantId },
+          })
           .sort({
             createdAt: -1,
           });
@@ -1277,6 +1339,8 @@ exports.getUserPaymentReport = async (req, res) => {
 
 exports.getDealerPaymentReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const mongoose =
       require('mongoose');
 
@@ -1301,13 +1365,15 @@ exports.getDealerPaymentReport = async (req, res) => {
     }
 
     const dealer =
-      await Dealer.findById(
-        dealerId
-      )
-        .populate(
-          'area',
-          'name'
-        )
+      await Dealer.findOne({
+        _id: dealerId,
+        tenantId,
+      })
+        .populate({
+          path: 'area',
+          select: 'name',
+          match: { tenantId },
+        })
         .lean();
 
     if (!dealer) {
@@ -1319,6 +1385,7 @@ exports.getDealerPaymentReport = async (req, res) => {
     }
 
     const paymentFilter = {
+      tenantId,
       dealer:
         dealer._id,
     };
@@ -1369,10 +1436,11 @@ exports.getDealerPaymentReport = async (req, res) => {
       await DealerPayment.find(
         paymentFilter
       )
-        .populate(
-          'receivedBy',
-          'name'
-        )
+        .populate({
+          path: 'receivedBy',
+          select: 'name',
+          match: { tenantId },
+        })
         .sort({
           paymentDate: -1,
           createdAt: -1,
@@ -1665,12 +1733,14 @@ exports.getDealerPaymentReport = async (req, res) => {
 
 exports.getExpenseReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const {
       fromDate,
       toDate,
     } = req.query;
 
-    const filter = {};
+    const filter = { tenantId };
 
     if (
       fromDate &&
@@ -1707,7 +1777,7 @@ exports.getExpenseReport = async (req, res) => {
     }
 
     const purchaseFilter =
-      {};
+      { tenantId };
 
     if (
       fromDate &&
@@ -1835,6 +1905,8 @@ exports.getExpenseReport = async (req, res) => {
 
 exports.getProfitLossReport = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const {
       fromDate,
       toDate,
@@ -1878,6 +1950,7 @@ exports.getProfitLossReport = async (req, res) => {
     }
 
     const paymentFilter = {
+      tenantId,
       isNoPayment: false,
     };
 
@@ -1889,7 +1962,7 @@ exports.getProfitLossReport = async (req, res) => {
         dateFilter;
     }
 
-    const expenseFilter = {};
+    const expenseFilter = { tenantId };
 
     if (
       fromDate &&
@@ -1899,7 +1972,7 @@ exports.getProfitLossReport = async (req, res) => {
         dateFilter;
     }
 
-    const purchaseFilter = {};
+    const purchaseFilter = { tenantId };
 
     if (
       fromDate &&
@@ -1909,7 +1982,7 @@ exports.getProfitLossReport = async (req, res) => {
         dateFilter;
     }
 
-    const dealerFilter = {};
+    const dealerFilter = { tenantId };
 
     if (
       fromDate &&
@@ -1922,24 +1995,27 @@ exports.getProfitLossReport = async (req, res) => {
     const payments =
       await Payment.find(
         paymentFilter
-      ).populate(
-        'customer',
-        'name package'
-      );
+      ).populate({
+        path: 'customer',
+        select: 'name package',
+        match: { tenantId },
+      });
 
     const packages =
-      await Package.find({});
+      await Package.find({ tenantId });
 
     const dealerReceive =
       await DealerPayment.find({
+        tenantId,
         ...dealerFilter,
 
         paymentType:
           'receive_payment',
-      }).populate(
-        'dealer',
-        'name commission'
-      );
+      }).populate({
+        path: 'dealer',
+        select: 'name commission',
+        match: { tenantId },
+      });
 
     const expenses =
       await Expense.find(
@@ -2139,7 +2215,8 @@ exports.getProfitLossReport = async (req, res) => {
     const salary =
       await getSalaryCost(
         fromDate,
-        toDate
+        toDate,
+        tenantId
       );
 
     const totalSalaries =
@@ -2360,6 +2437,8 @@ exports.getProfitLossReport = async (req, res) => {
 
 exports.getDashboardSummary = async (req, res) => {
   try {
+    const tenantId = requireReportTenant(req, res);
+    if (!tenantId) return;
     const now = new Date();
 
     const startOfMonth =
@@ -2383,16 +2462,18 @@ exports.getDashboardSummary = async (req, res) => {
 
     const totalCustomers =
       await Customer.countDocuments(
-        {}
+        { tenantId }
       );
 
     const activeCustomers =
       await Customer.countDocuments({
+        tenantId,
         status: 'active',
       });
 
     const payments =
       await Payment.find({
+        tenantId,
         isNoPayment: false,
 
         paymentDate: {
@@ -2402,10 +2483,11 @@ exports.getDashboardSummary = async (req, res) => {
           $lte:
             endOfMonth,
         },
-      }).populate(
-        'customer',
-        'name package'
-      );
+      }).populate({
+        path: 'customer',
+        select: 'name package',
+        match: { tenantId },
+      });
 
     const totalCollected =
       payments.reduce(
@@ -2417,7 +2499,7 @@ exports.getDashboardSummary = async (req, res) => {
 
     const customers =
       await Customer.find(
-        {}
+        { tenantId }
       );
 
     const monthlyReceivable =
@@ -2445,6 +2527,7 @@ exports.getDashboardSummary = async (req, res) => {
 
     const allPayments =
       await Payment.find({
+        tenantId,
         isNoPayment: false,
       });
 
@@ -2549,7 +2632,7 @@ exports.getDashboardSummary = async (req, res) => {
     );
 
     const packages =
-      await Package.find({});
+      await Package.find({ tenantId });
 
     const packageMap = {};
 
@@ -2600,6 +2683,7 @@ exports.getDashboardSummary = async (req, res) => {
 
     const monthDealerReceived =
       await DealerPayment.find({
+        tenantId,
         paymentType:
           'receive_payment',
 
@@ -2610,10 +2694,11 @@ exports.getDashboardSummary = async (req, res) => {
           $lte:
             endOfMonth,
         },
-      }).populate(
-        'dealer',
-        'commission'
-      );
+      }).populate({
+        path: 'dealer',
+        select: 'commission',
+        match: { tenantId },
+      });
 
     let commissionProfitMonth = 0;
 
@@ -2635,6 +2720,7 @@ exports.getDashboardSummary = async (req, res) => {
 
     const monthExpenses =
       await Expense.find({
+        tenantId,
         date: {
           $gte:
             startOfMonth,
@@ -2646,6 +2732,7 @@ exports.getDashboardSummary = async (req, res) => {
 
     const monthPurchases =
       await Purchase.find({
+        tenantId,
         purchaseDate: {
           $gte:
             startOfMonth,
@@ -2673,6 +2760,7 @@ exports.getDashboardSummary = async (req, res) => {
 
     const activeStaff =
       await Staff.find({
+        tenantId,
         isActive: true,
       });
 
