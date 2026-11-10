@@ -128,52 +128,9 @@ const getCurrentMonth = (): string => {
 /* ============================================================
    PAYMENT HELPERS
 \============================================================ */
-function getUserPayments(
-  user: any,
-  payments: any[]
-): any[] {
-  return payments.filter((p) => {
-    if (p.isNoPayment) return false;
-    const partner =
-      p.partner &&
-      typeof p.partner === 'object'
-        ? p.partner
-        : null;
-    const paymentPartnerId =
-      partner?._id ??
-      partner?.id ??
-      (typeof p.partner === 'string'
-        ? p.partner
-        : null);
-    const paymentPartnerCode =
-      partner?.partnerId ??
-      p.partnerId;
-    const hasIdentifier =
-      Boolean(paymentPartnerId) ||
-      Boolean(paymentPartnerCode);
-    if (hasIdentifier) {
-      const matchesMongoId =
-        paymentPartnerId &&
-        String(paymentPartnerId) === String(user.id);
-      const matchesPartnerId =
-        paymentPartnerCode &&
-        String(paymentPartnerCode) ===
-          String(user.customerId);
-      return (
-        Boolean(matchesMongoId) ||
-        Boolean(matchesPartnerId)
-      );
-    }
-    const paymentPartnerName =
-      partner?.name ??
-      p.partnerName ??
-      p.name;
-    const matchesName =
-      paymentPartnerName &&
-      String(paymentPartnerName).trim().toLowerCase() ===
-        String(user.name).trim().toLowerCase();
-    return Boolean(matchesName);
-  });
+function getUserPayments(user: any, payments: any[]): any[] {
+  // The same partner identity matching is used by expiry and collection.
+  return payments.filter((p: any) => partnerPaymentMatches(p, user));
 }
 function getPaymentPaidAmount(p: any): number {
   const candidates = [
@@ -457,6 +414,28 @@ function partnerPaymentAmount(p: any): number {
   }
   return 0;
 }
+// Activation does not shift the next renewal date. Only create the initial
+// month's collection row when it is selected or an initial-month receipt exists.
+// This recognizes partial activation-month receipts and carries the remainder
+// forward without changing the renewal / expiry calculation.
+function partnerCollectionBillingStartMonth(
+  customer: any,
+  partnerPayments: any[],
+  selectedMonth: string
+): string | undefined {
+  const firstRenewal = partnerFirstBillingMonth(customer.activationDate);
+  if (!firstRenewal) return undefined;
+  const parsed = parseMonth(firstRenewal);
+  if (parsed.idx < 0 || !Number.isFinite(parsed.year)) return firstRenewal;
+  const initial = new Date(parsed.year, parsed.idx - 1, 1);
+  const activationMonth = `${MONTHS[initial.getMonth()]} ${initial.getFullYear()}`;
+  const hasInitialReceipt = partnerPayments.some((p: any) =>
+    String(p.month || '').trim().toLowerCase() === activationMonth.toLowerCase()
+  );
+  return hasInitialReceipt || selectedMonth === activationMonth
+    ? activationMonth : firstRenewal;
+}
+
 // Each bill begins one calendar month after activation. Payments stay assigned
 // to their chosen month. No-payment months still produce outstanding charges.
 function allocatePayments(
@@ -805,12 +784,12 @@ function ReceivePartnerPaymentModal({
       );
       setCustomerDetails(customer || null);
       if (customer) {
-        // Formatted payments carry the partner's _id in `customerId`
+        // Match the same raw receipts used for expiry and Save Record.
         const customerPayments = payments.filter((p: any) => partnerPaymentMatches(p, customer));
         const allocs = allocatePayments(
           Number(customer.monthlyFee || 0),
           customerPayments.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
-          partnerFirstBillingMonth(customer.activationDate),
+          partnerCollectionBillingStartMonth(customer, customerPayments, selectedMonth),
           selectedMonth,
           partnerBillingDay(customer.activationDate)
         );
@@ -884,17 +863,17 @@ function ReceivePartnerPaymentModal({
       const freshLedger = allocatePayments(
         Number(customerObj.monthlyFee || 0),
         related.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
-        partnerFirstBillingMonth(customerObj.activationDate),
+        partnerCollectionBillingStartMonth(customerObj, related, selectedMonth),
         selectedMonth,
         partnerBillingDay(customerObj.activationDate)
       );
-      const due = freshLedger.reduce((sum, row) =>
-        sum + (compareMonths(row.month, selectedMonth) < 0
-          ? Math.max(0, row.expected - row.paidForMonth)
-          : row.month === selectedMonth ? Math.max(0, row.expected - row.paidForMonth) : 0), 0);
+      const selectedBill = freshLedger.find((row) => row.month === selectedMonth);
+      if (!selectedBill) {
+        throw new Error('No bill exists for this selected month. Check the activation date.');
+      }
+      const due = Math.max(0, selectedBill.previousBalance + selectedBill.currentBalance);
       if (wanted > due + 0.001) {
-        toast.error(`Outstanding balance changed. Maximum payable is Rs. ${due.toLocaleString()}. Please refresh.`);
-        return;
+        throw new Error(`Outstanding balance changed. Maximum payable is Rs. ${due.toLocaleString()}. Please refresh.`);
       }
       let left = wanted;
       // Oldest unpaid invoice first. Every request stays below the monthly cap.

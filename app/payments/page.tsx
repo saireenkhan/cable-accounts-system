@@ -130,7 +130,6 @@ interface MonthAllocation {
   previousBalance: number;
   currentBalance: number;
   paidForMonth: number;
-  deadline: Date;
 }
 
 function partnerBillingDate(value: any): Date | null {
@@ -174,6 +173,28 @@ function partnerPaymentAmount(p: any): number {
   }
   return 0;
 }
+// Activation does not shift the next renewal date. Only create the initial
+// month's collection row when it is selected or an initial-month receipt exists.
+// This recognizes partial activation-month receipts and carries the remainder
+// forward without changing the renewal / expiry calculation.
+function partnerCollectionBillingStartMonth(
+  customer: any,
+  partnerPayments: any[],
+  selectedMonth: string
+): string | undefined {
+  const firstRenewal = partnerFirstBillingMonth(customer.activationDate);
+  if (!firstRenewal) return undefined;
+  const parsed = parseMonth(firstRenewal);
+  if (parsed.idx < 0 || !Number.isFinite(parsed.year)) return firstRenewal;
+  const initial = new Date(parsed.year, parsed.idx - 1, 1);
+  const activationMonth = `${MONTHS[initial.getMonth()]} ${initial.getFullYear()}`;
+  const hasInitialReceipt = partnerPayments.some((p: any) =>
+    String(p.month || '').trim().toLowerCase() === activationMonth.toLowerCase()
+  );
+  return hasInitialReceipt || selectedMonth === activationMonth
+    ? activationMonth : firstRenewal;
+}
+
 // Each bill begins one calendar month after activation. Payments stay assigned
 // to their chosen month. No-payment months still produce outstanding charges.
 function allocatePayments(
@@ -181,42 +202,76 @@ function allocatePayments(
   paymentsForPartner: { month: string; amount: number }[],
   startMonth?: string,
   endMonth?: string,
-  billingDay = 1,
+  billingDay = 1
 ): MonthAllocation[] {
-  if (!Number.isFinite(monthlyFee) || monthlyFee <= 0 || !startMonth) return [];
-  const from = parseMonth(startMonth);
-  const to = parseMonth(endMonth || `${MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}`);
-  if (from.idx < 0 || to.idx < 0 || from.year < 2000 || to.year < 2000) return [];
-  const count = (to.year - from.year) * 12 + to.idx - from.idx + 1;
-  if (count <= 0 || count > 600) return [];
-  const totals: Record<string, number> = {};
-  for (const payment of paymentsForPartner) {
-    const amount = Number(payment.amount);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    const month = String(payment.month || '').trim();
-    totals[month] = (totals[month] || 0) + amount;
+  if (!Number.isFinite(monthlyFee) || monthlyFee <= 0) return [];
+  const byMonth: Record<string, number> = {};
+  for (const p of paymentsForPartner) {
+    const parsed = parseMonth(String(p.month || '').trim());
+    const amount = Number(p.amount);
+    if (parsed.idx < 0 || parsed.year < 2000 || !Number.isFinite(amount) || amount <= 0) continue;
+    const key = `${MONTHS[parsed.idx]} ${parsed.year}`;
+    byMonth[key] = (byMonth[key] || 0) + amount;
   }
+  const validMonth = (value?: string): boolean => {
+    if (!value) return false;
+    const parsed = parseMonth(value);
+    return parsed.idx >= 0 && parsed.year >= 2000 && Number.isFinite(parsed.year);
+  };
+  const today = new Date();
+  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const currentMonth = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
+  const paymentMonths = Object.keys(byMonth).sort(compareMonths);
+  const requestedStart = validMonth(startMonth) ? startMonth! : (paymentMonths[0] || currentMonth);
+  // Never generate renewal charges before the first post-activation billing month.
+  // Any activation-month payment is for the initial service and is not a new renewal bill.
+  const first = requestedStart;
+  const requestedEnd = validMonth(endMonth) ? endMonth! : currentMonth;
+  const last = paymentMonths.length && compareMonths(paymentMonths[paymentMonths.length - 1], requestedEnd) > 0
+    ? paymentMonths[paymentMonths.length - 1] : requestedEnd;
+  if (compareMonths(first, last) > 0) return [];
+  const from = parseMonth(first);
+  const to = parseMonth(last);
+  const numberOfMonths = (to.year - from.year) * 12 + to.idx - from.idx + 1;
+  if (numberOfMonths > 600) return [];
+
   const result: MonthAllocation[] = [];
-  let debt = 0;
-  let credit = 0;
-  for (let i = 0; i < count; i++) {
-    const day = new Date(from.year, from.idx + i, 1);
-    const month = `${MONTHS[day.getMonth()]} ${day.getFullYear()}`;
-    const maxDay = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
-    const deadline = new Date(day.getFullYear(), day.getMonth(), Math.min(Math.max(1, billingDay), maxDay));
-    const paid = totals[month] || 0;
-    const creditUsed = Math.min(credit, monthlyFee);
-    credit -= creditUsed;
-    const applied = Math.min(monthlyFee - creditUsed, paid);
-    const currentBalance = Math.max(0, monthlyFee - creditUsed - applied);
-    const extra = Math.max(0, paid - applied);
-    const previousBalance = Math.max(0, debt - extra);
-    credit += Math.max(0, extra - debt);
-    result.push({ month, expected: monthlyFee, applied: applied + creditUsed,
-      remaining: currentBalance, isPaid: currentBalance === 0,
-      overpaid: credit, previousBalance, currentBalance, paidForMonth: paid, deadline });
-    // The previous month's unpaid bill is carried forward after its due date.
-    debt = previousBalance + (deadline <= new Date() || paid > 0 ? currentBalance : 0);
+  let oldDebt = 0;
+  let advanceCredit = 0;
+  for (let i = 0; i < numberOfMonths; i++) {
+    const date = new Date(from.year, from.idx + i, 1);
+    const month = `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+    const paidForMonth = byMonth[month] || 0;
+    const daysInMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const deadline = new Date(date.getFullYear(), date.getMonth(), Math.min(Math.max(1, billingDay), daysInMonth));
+    const deadlineReached = deadline <= todayOnly;
+
+    // Credit from an overpayment reduces subsequent monthly package charges.
+    const creditApplied = Math.min(monthlyFee, advanceCredit);
+    advanceCredit -= creditApplied;
+    const amountDueThisMonth = monthlyFee - creditApplied;
+    const amountAppliedThisMonth = Math.min(amountDueThisMonth, paidForMonth);
+    const currentBalance = Math.max(0, amountDueThisMonth - amountAppliedThisMonth);
+    const excess = Math.max(0, paidForMonth - amountAppliedThisMonth);
+    // Any amount paid beyond the current package settles oldest outstanding dues.
+    const previousBalance = Math.max(0, oldDebt - excess);
+    advanceCredit += Math.max(0, excess - oldDebt);
+
+    result.push({
+      month,
+      expected: monthlyFee,
+      applied: creditApplied + amountAppliedThisMonth,
+      remaining: currentBalance,
+      isPaid: currentBalance <= 0,
+      overpaid: advanceCredit,
+      previousBalance,
+      currentBalance,
+      paidForMonth,
+    });
+
+    // An unpaid bill enters older dues after its billing deadline.
+    // If a partial payment already exists, its remainder also carries forward.
+    oldDebt = previousBalance + (deadlineReached || paidForMonth > 0 ? currentBalance : 0);
   }
   return result;
 }
@@ -517,7 +572,11 @@ function ReceivePartnerPaymentModal({
       const now = new Date();
       const defaultMonth = `${MONTHS[now.getMonth()]} ${now.getFullYear()}`;
       setSelectedMonth(defaultMonth);
-      setPaymentDate(now.toISOString().split('T')[0]);
+      setPaymentDate([
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0'),
+      ].join('-'));
       setSelectedIsp('');
       setSelectedPartner('');
       setSelectedArea('');
@@ -539,12 +598,12 @@ function ReceivePartnerPaymentModal({
       setCustomerDetails(customer || null);
 
       if (customer) {
-        // Formatted payments carry the partner's _id in `customerId`
+        // Match the same raw receipts used for expiry and Save Record.
         const customerPayments = payments.filter((p: any) => partnerPaymentMatches(p, customer));
         const allocs = allocatePayments(
           Number(customer.monthlyFee || 0),
           customerPayments.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
-          partnerFirstBillingMonth(customer.activationDate),
+          partnerCollectionBillingStartMonth(customer, customerPayments, selectedMonth),
           selectedMonth,
           partnerBillingDay(customer.activationDate)
         );
@@ -599,79 +658,107 @@ function ReceivePartnerPaymentModal({
   const alreadyPaidThisMonth = selectedAllocation?.paidForMonth ?? 0;
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
     if (showIspFilter && !selectedIsp) return toast.error('Please select an ISP first');
     if (!selectedPartner) return toast.error('Please select a partner');
-    if (!selectedArea) return toast.error('Please select an area');
+    if (!selectedArea) return toast.error('Please select an area first');
     if (!selectedCustomerId) return toast.error('Please select a user');
     if (!selectedMonth) return toast.error('Please select a billing month');
-    if (!receiveAmount || parseFloat(receiveAmount) <= 0)
+
+    // Each POST is restricted to one month's outstanding package charge.
+    // Split a combined collection across unpaid months, oldest-first.
+    const requested = Number(receiveAmount);
+    if (!Number.isFinite(requested) || requested <= 0) {
       return toast.error('Please enter a valid amount');
-
-    if (isDuplicateMonth) {
-      toast.error(
-        `${customerDetails?.name} has already fully paid for ${selectedMonth}. Duplicate entries are not allowed.`
-      );
-      return;
     }
+    if (requested > totalBalance + 0.001) {
+      return toast.error(`Maximum outstanding balance is Rs. ${totalBalance.toLocaleString()}`);
+    }
+    if (isDuplicateMonth) return toast.error('No outstanding balance to collect');
 
+    const partnerObj = customers.find((c: any) => String(c._id) === String(selectedCustomerId));
+    if (!partnerObj) return toast.error('Partner user not found');
+
+    // Refresh the ledger before POSTing in case another operator collected money.
     setIsSubmitting(true);
-    let successful = 0;
+    let savedAmount = 0;
+    let savedMonths = 0;
     try {
-      const customerObj = customers.find((c: any) => String(c._id) === String(selectedCustomerId));
-      if (!customerObj) throw new Error('Partner not found');
-      const wanted = Number(receiveAmount);
-      if (!Number.isFinite(wanted) || wanted <= 0 || wanted > totalBalance + 0.001) {
-        toast.error(`Enter an amount between Rs. 1 and Rs. ${totalBalance.toLocaleString()}`);
-        return;
-      }
-      // Refresh before saving: validation is enforced by the backend per month.
-      const response = await api.get('/partner-payments');
-      const allLatest = response?.data?.payments;
-      if (!Array.isArray(allLatest)) throw new Error('Unable to verify latest payments');
-      const related = allLatest.filter((p: any) => partnerPaymentMatches(p, customerObj));
+      const latestResponse = await api.get('/partner-payments');
+      const latestPayments: any[] = latestResponse.data?.payments ?? latestResponse.data?.data ?? [];
+      if (!Array.isArray(latestPayments)) throw new Error('Could not verify partner payment history');
+      const matched = latestPayments.filter((p: any) => partnerPaymentMatches(p, partnerObj));
+
+      const fee = Number(partnerObj.monthlyFee || 0);
+      if (!Number.isFinite(fee) || fee <= 0) throw new Error('Invalid partner monthly fee');
+      // Fresh receipts can change balances while this dialog is open.
+      // Rebuild the same ledger as the modal before splitting the payment.
       const freshLedger = allocatePayments(
-        Number(customerObj.monthlyFee || 0),
-        related.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
-        partnerFirstBillingMonth(customerObj.activationDate),
+        fee,
+        matched.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+        partnerCollectionBillingStartMonth(partnerObj, matched, selectedMonth),
         selectedMonth,
-        partnerBillingDay(customerObj.activationDate)
+        partnerBillingDay(partnerObj.activationDate)
       );
-      const due = freshLedger.reduce((sum, row) =>
-        sum + (compareMonths(row.month, selectedMonth) < 0
-          ? Math.max(0, row.expected - row.paidForMonth)
-          : row.month === selectedMonth ? Math.max(0, row.expected - row.paidForMonth) : 0), 0);
-      if (wanted > due + 0.001) {
-        toast.error(`Outstanding balance changed. Maximum payable is Rs. ${due.toLocaleString()}. Please refresh.`);
-        return;
+      const selectedBill = freshLedger.find((row) => row.month === selectedMonth);
+      if (!selectedBill) {
+        throw new Error('No bill exists for this selected month. Check the activation date.');
       }
-      let left = wanted;
-      // Oldest unpaid invoice first. Every request stays below the monthly cap.
-      for (const row of freshLedger) {
-        if (left <= 0.001) break;
-        if (compareMonths(row.month, selectedMonth) > 0) break;
-        const monthDue = Math.max(0, row.expected - row.paidForMonth);
-        const part = Math.min(left, monthDue);
-        if (part <= 0.001) continue;
-        const saved = await api.post('/partner-payments', {
-          partner: String(customerObj._id), month: row.month,
-          amount: Math.round(part * 100) / 100,
-          paymentMethod, paymentDate, remarks: notes,
+      const liveBalance = Math.max(0, selectedBill.previousBalance + selectedBill.currentBalance);
+      if (requested > liveBalance + 0.001) {
+        throw new Error(`Balance changed. Only Rs. ${liveBalance.toLocaleString()} remains due. Refresh and retry.`);
+      }
+      const eligibleMonths = freshLedger
+        .filter((row) => compareMonths(row.month, selectedMonth) <= 0)
+        .sort((a, b) => compareMonths(a.month, b.month));
+      const allocations: { month: string; amount: number }[] = [];
+      let amountToAllocate = requested;
+      for (const row of eligibleMonths) {
+        const paidAlready = matched
+          .filter((p: any) => String(p.month || '').trim().toLowerCase() === row.month.toLowerCase())
+          .reduce((sum: number, p: any) => sum + partnerPaymentAmount(p), 0);
+        const available = Math.max(0, fee - paidAlready);
+        const part = Math.round(Math.min(available, amountToAllocate) * 100) / 100;
+        if (part > 0) {
+          allocations.push({ month: row.month, amount: part });
+          amountToAllocate = Math.round((amountToAllocate - part) * 100) / 100;
+        }
+        if (amountToAllocate <= 0) break;
+      }
+      if (amountToAllocate > 0.001) {
+        throw new Error(`Only Rs. ${(requested - amountToAllocate).toLocaleString()} can be allocated to the selected and earlier billing months. Refresh the page to update balances.`);
+      }
+
+      // Multiple monthly POSTs are not one database transaction. If any fails,
+      // stop and tell the operator exactly how much was successfully saved.
+      for (const allocation of allocations) {
+        const response = await api.post('/partner-payments', {
+          partner: partnerObj._id,
+          month: allocation.month,
+          amount: allocation.amount,
+          paymentMethod,
+          paymentDate,
+          remarks: notes || (allocations.length > 1 ? `Split payment for ${selectedMonth}` : ''),
         });
-        if (!saved?.data?.success) throw new Error(saved?.data?.message || `Failed for ${row.month}`);
-        left = Math.round((left - part) * 100) / 100;
-        successful++;
+        if (!response.data?.success) {
+          throw new Error(response.data?.message || `Payment failed for ${allocation.month}`);
+        }
+        savedAmount += allocation.amount;
+        savedMonths += 1;
       }
-      if (left > 0.001) throw new Error(`Rs. ${left.toLocaleString()} could not be allocated`);
-      toast.success(`Payment saved across ${successful} billing month(s)`);
+      toast.success(`Rs. ${savedAmount.toLocaleString()} recorded across ${savedMonths} billing month(s)`);
       await fetchData();
       onSuccess?.();
       onClose();
     } catch (error: any) {
-      console.error('Partner payment failed:', error);
-      toast.error(successful
-        ? `${successful} payment(s) saved before an error. Refresh and verify receipts before retrying.`
-        : (error?.response?.data?.message || error?.message || 'Failed to record payment'));
-      if (successful) await fetchData();
+      const reason = error?.response?.data?.message || error?.message || 'Failed to record partner payment';
+      if (savedMonths > 0) {
+        toast.error(`Only Rs. ${savedAmount.toLocaleString()} was saved. ${reason}. Refresh and verify receipts before retrying.`, { duration: 9000 });
+        await fetchData();
+      } else {
+        toast.error(reason);
+      }
+      console.error('Partner payment allocation failed:', reason);
     } finally {
       setIsSubmitting(false);
     }
@@ -776,7 +863,7 @@ const payload = {
                   {customerDetails?.name} has paid Rs.{' '}
                   {alreadyPaidThisMonth.toLocaleString()} for {selectedMonth}. You
                   can record the remaining Rs.{' '}
-                  {(selectedAllocation?.remaining || 0).toLocaleString()}.
+                  {totalBalance.toLocaleString()}.
                 </p>
               </div>
             </div>
@@ -1140,6 +1227,7 @@ export default function ReceivePartnerPaymentPage() {
   const [loading, setLoading] = useState(true);
 
   const [payments, setPayments] = useState<any[]>([]);
+  const [rawPayments, setRawPayments] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
@@ -1162,7 +1250,7 @@ export default function ReceivePartnerPaymentPage() {
       const [paymentsRes, customersRes, packagesRes, areasRes, ispsRes] =
         await Promise.all([
           api.get('/partner-payments'),
-          api.get('/partners?limit=1000'),
+          api.get('/partners?limit=10000'),
           api.get('/packages'),
           api.get('/partner-areas'),
           api.get('/isps'),
@@ -1190,6 +1278,9 @@ export default function ReceivePartnerPaymentPage() {
       }
 
       if (paymentsRes.data.success) {
+        const originalPayments: any[] = paymentsRes.data.payments ?? paymentsRes.data.data ?? [];
+        if (!Array.isArray(originalPayments)) throw new Error('Invalid partner payment response');
+        setRawPayments(originalPayments);
         const partnerIdMap: Record<string, string> = {};
         const partnerIspMap: Record<string, string> = {};
         // ✅ FIX 1a: name -> _id map
@@ -1206,7 +1297,7 @@ export default function ReceivePartnerPaymentPage() {
           }
         });
 
-        const formattedPayments = paymentsRes.data.payments.map((payment: any) => {
+        const formattedPayments = originalPayments.map((payment: any) => {
           const partnerName = payment.partner?.name || 'Unknown';
           const displayUserId =
             payment.partner?.partnerId ||
@@ -1264,106 +1355,152 @@ export default function ReceivePartnerPaymentPage() {
   };
 
   const totalCustomers = customers.length;
-
-  const totalReceivable = customers.reduce((sum: number, customer: any) => {
-    const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
-    if (monthlyFee === 0) return sum;
-
-    const customerPayments = payments.filter(
-      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
-    );
-    const activeMonths = new Set<string>();
-    customerPayments.forEach((p) => {
-      if (p.month) activeMonths.add(p.month);
-    });
-
-    const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
-
-    return sum + monthlyFee * monthCount;
-  }, 0);
-
-  const totalCollected = payments
-    .filter((p) => !p.isNoPayment)
-    .reduce((sum, p) => sum + (parseFloat(String(p.amount)) || 0), 0);
-
-  const totalProfit = payments
-    .filter((p) => !p.isNoPayment)
-    .reduce((sum, p) => {
-      const customer = customers.find(
-        (c) => String(c._id) === String(p.customerId)
-      );
-      if (!customer) return sum;
-
-      const pkgName =
-        typeof customer.package === 'string'
-          ? customer.package
-          : customer.package?.name;
-      if (!pkgName) return sum;
-
-      const pkg = packages.find((pk: any) => pk.name === pkgName);
-      if (!pkg) return sum;
-
-      const selling = parseFloat(String(pkg.sellingPrice)) || 0;
-      const cost = parseFloat(String(pkg.purchasePrice)) || 0;
-      if (selling <= 0) return sum;
-
-      const ratio = (selling - cost) / selling;
-      const profit = (parseFloat(String(p.amount)) || 0) * ratio;
-
-      return sum + profit;
-    }, 0);
-
-  const totalProfitMargin =
-    totalCollected > 0 ? Math.round((totalProfit / totalCollected) * 100) : 0;
-
   const now = new Date();
   const currentMonthIndex = now.getMonth();
   const currentYear = now.getFullYear();
+  const currentMonth = `${MONTHS[currentMonthIndex]} ${currentYear}`;
+
+  // All stat cards follow the same rules as the Receive Payment page.
+  // Receivable: total unpaid balance (previous dues + unpaid current month)
+  // per partner user. Received/profit: money actually received this calendar
+  // month, even if the receipt is assigned to an older billing month.
+  const { totalReceivable, totalCollected, totalProfit } = useMemo(() => {
+    const byMongoId = new Map<string, any>();
+    const byPartnerCode = new Map<string, any>();
+    const byPackageName = new Map<string, any>();
+    const byPackageId = new Map<string, any>();
+
+    customers.forEach((customer: any) => {
+      if (customer._id) byMongoId.set(String(customer._id), customer);
+      const code = String(customer.partnerId || customer.code || '').trim().toLowerCase();
+      if (code) byPartnerCode.set(code, customer);
+    });
+    packages.forEach((pkg: any) => {
+      if (pkg._id) byPackageId.set(String(pkg._id), pkg);
+      if (pkg.name) byPackageName.set(String(pkg.name).trim().toLowerCase(), pkg);
+    });
+
+    let receivedThisMonth = 0;
+    let profitThisMonth = 0;
+
+    const receivedInCurrentMonth = (value: any): boolean => {
+      if (!value) return false;
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return Number(value.slice(0, 4)) === currentYear &&
+          Number(value.slice(5, 7)) === currentMonthIndex + 1;
+      }
+      const date = new Date(value);
+      return !Number.isNaN(date.getTime()) &&
+        date.getFullYear() === currentYear && date.getMonth() === currentMonthIndex;
+    };
+
+    // Use raw records for financial totals, never table display strings.
+    rawPayments.forEach((payment: any) => {
+      if (payment.isNoPayment) return;
+      const amount = partnerPaymentAmount(payment);
+      if (!Number.isFinite(amount) || amount <= 0) return;
+
+      const populated = payment.partner && typeof payment.partner === 'object'
+        ? payment.partner : null;
+      const mongoId = populated?._id || populated?.id ||
+        (typeof payment.partner === 'string' ? payment.partner : '');
+      const code = String(payment.partnerId || populated?.partnerId || '').trim().toLowerCase();
+      const customer = byMongoId.get(String(mongoId)) ||
+        byMongoId.get(String(payment.partnerId || '')) ||
+        (code ? byPartnerCode.get(code) : null) ||
+        customers.find((candidate: any) => partnerPaymentMatches(payment, candidate));
+
+      if (!receivedInCurrentMonth(payment.paymentDate || payment.createdAt)) return;
+      receivedThisMonth += amount;
+
+      if (!customer) return;
+      const selectedPackage = customer.package;
+      const packageName = typeof selectedPackage === 'string'
+        ? selectedPackage : selectedPackage?.name || '';
+      const packageId = typeof selectedPackage === 'object'
+        ? selectedPackage?._id : packageName;
+      const pkg = byPackageId.get(String(packageId || '')) ||
+        byPackageName.get(String(packageName).trim().toLowerCase());
+      if (!pkg || pkg.sellingPrice == null || pkg.purchasePrice == null ||
+          pkg.sellingPrice === '' || pkg.purchasePrice === '') return;
+      const selling = Number(pkg.sellingPrice);
+      const cost = Number(pkg.purchasePrice);
+      if (!Number.isFinite(selling) || selling <= 0 || !Number.isFinite(cost)) return;
+      // Margin is proportional to the amount received, including partial payments.
+      profitThisMonth += amount * ((selling - cost) / selling);
+    });
+
+    const expectedThisMonth = customers.reduce((sum: number, customer: any) => {
+      const monthlyFee = Number(customer.monthlyFee || 0);
+      if (!Number.isFinite(monthlyFee) || monthlyFee <= 0) return sum;
+      const partnerReceipts = rawPayments.filter((p: any) => partnerPaymentMatches(p, customer));
+      const ledger = allocatePayments(
+        monthlyFee,
+        partnerReceipts.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+        partnerCollectionBillingStartMonth(customer, partnerReceipts, currentMonth),
+        currentMonth,
+        partnerBillingDay(customer.activationDate)
+      );
+      const thisMonth = ledger.find((row) => row.month === currentMonth);
+      // Match the Total Balance field in ReceivePartnerPaymentModal, including
+      // its package-fee fallback when there is no current-month ledger row.
+      const previousBalance = thisMonth?.previousBalance ?? 0;
+      const currentBalance = thisMonth?.currentBalance ?? monthlyFee;
+      return sum + Math.max(0, previousBalance + currentBalance);
+    }, 0);
+
+    return {
+      totalReceivable: Math.round(expectedThisMonth * 100) / 100,
+      totalCollected: Math.round(receivedThisMonth * 100) / 100,
+      totalProfit: Math.round(profitThisMonth * 100) / 100,
+    };
+  }, [customers, rawPayments, packages, currentMonth, currentMonthIndex, currentYear]);
+
+  const totalProfitMargin = totalCollected > 0
+    ? Math.round((totalProfit / totalCollected) * 100) : 0;
 
   const isPastOrCurrentMonth = (monthStr: string) => {
     const [monthName, yearStr] = monthStr.split(' ');
     const year = parseInt(yearStr);
     const monthIndex = MONTHS.indexOf(monthName);
-
     if (isNaN(year) || monthIndex === -1) return false;
-
     if (year < currentYear) return true;
     if (year === currentYear && monthIndex <= currentMonthIndex) return true;
-
     return false;
   };
 
-  const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
-  const currentMonth = `${MONTHS[currentMonthIndex]} ${currentYear}`;
-
+  const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0, noFee: 0 };
   customers.forEach((customer: any) => {
-    const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
-    if (monthlyFee === 0) return;
-
-    const customerPayments = payments.filter(
-      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
-    );
-
+    const monthlyFee = Number(customer.monthlyFee || 0);
+    if (!Number.isFinite(monthlyFee) || monthlyFee <= 0) {
+      monthStatusCounts.noFee += 1;
+      return;
+    }
+    const customerPayments = rawPayments.filter((p: any) => partnerPaymentMatches(p, customer));
+    if (customerPayments.length === 0) {
+      monthStatusCounts.notpaid += 1;
+      return;
+    }
     const allocs = allocatePayments(
       monthlyFee,
-      customerPayments.map((p: any) => ({ month: p.month, amount: p.amount })),
-      partnerFirstBillingMonth(customer.activationDate), currentMonth, partnerBillingDay(customer.activationDate)
+      customerPayments.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+      partnerCollectionBillingStartMonth(customer, customerPayments, currentMonth),
+      currentMonth,
+      partnerBillingDay(customer.activationDate)
     );
-
     const currentAlloc = allocs.find((a) => a.month === currentMonth);
-
     if (currentAlloc) {
-      if (currentAlloc.isPaid && currentAlloc.previousBalance <= 0) monthStatusCounts.paid += 1;
-      else if (currentAlloc.paidForMonth > 0) monthStatusCounts.partial += 1;
+      if (currentAlloc.isPaid) monthStatusCounts.paid += 1;
+      else if (currentAlloc.applied > 0) monthStatusCounts.partial += 1;
       else monthStatusCounts.notpaid += 1;
     } else {
       monthStatusCounts.notpaid += 1;
     }
   });
-
   const paidCustomers = monthStatusCounts.paid;
   const partialCustomers = monthStatusCounts.partial;
   const notPaidCustomers = monthStatusCounts.notpaid;
+  const noFeeCustomers = monthStatusCounts.noFee;
 
   const getPaymentStatus = (payment: any) => {
     const customer = customers.find(
@@ -1378,20 +1515,17 @@ export default function ReceivePartnerPaymentPage() {
       return { status: 'paid', label: 'Paid', color: 'paid' };
     }
 
-    const allCustomerPayments = payments.filter(
-      (p) => String(p.customerId) === String(customer._id) && !p.isNoPayment
-    );
-
+    const allCustomerPayments = rawPayments.filter((p: any) => partnerPaymentMatches(p, customer));
     if (allCustomerPayments.length === 0) {
       return { status: 'pending', label: 'Not Paid', color: 'pending' };
     }
-
     const allocs = allocatePayments(
       monthlyFee,
-      allCustomerPayments.map((p: any) => ({ month: p.month, amount: p.amount })),
-      partnerFirstBillingMonth(customer.activationDate), payment.month, partnerBillingDay(customer.activationDate)
+      allCustomerPayments.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+      partnerCollectionBillingStartMonth(customer, allCustomerPayments, payment.month),
+      payment.month,
+      partnerBillingDay(customer.activationDate)
     );
-
     const thisMonth = allocs.find((a) => a.month === payment.month);
     if (!thisMonth) {
       return { status: 'partial', label: 'Partial', color: 'partial' };
@@ -1542,6 +1676,12 @@ export default function ReceivePartnerPaymentPage() {
                     <XCircle className="h-3 w-3" />
                     {notPaidCustomers} Not Paid
                   </span>
+                  {noFeeCustomers > 0 && (
+                    <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {noFeeCustomers} No Fee
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="h-12 w-12 bg-blue-50 dark:bg-blue-900/30 rounded-full flex items-center justify-center flex-shrink-0">
@@ -1554,13 +1694,13 @@ export default function ReceivePartnerPaymentPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  TOTAL RECEIVABLE
+                  THIS MONTH'S RECEIVABLE
                 </p>
                 <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
                   Rs. {totalReceivable.toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Expected total (all active months)
+                  Sum of users' total unpaid balances (including older dues)
                 </p>
               </div>
               <div className="h-12 w-12 bg-purple-50 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
@@ -1573,7 +1713,7 @@ export default function ReceivePartnerPaymentPage() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  TOTAL COLLECTION
+                  RECEIVED THIS MONTH
                 </p>
                 <p className="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">
                   Rs. {totalCollected.toLocaleString()}
@@ -1583,7 +1723,7 @@ export default function ReceivePartnerPaymentPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                       <TrendingUp className="h-3 w-3 text-emerald-500" />
-                      TOTAL PROFIT
+                      THIS MONTH'S PROFIT
                     </span>
                     <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">
                       Rs. {Math.round(totalProfit).toLocaleString()}
@@ -1591,11 +1731,8 @@ export default function ReceivePartnerPaymentPage() {
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-right">
                     {totalCollected > 0
-                      ? `${totalProfitMargin}% margin · ${Math.min(
-                          100,
-                          Math.round((totalCollected / totalReceivable) * 100)
-                        )}% recovered`
-                      : '0% margin'}
+                      ? `${totalProfitMargin}% profit margin on this month's receipts`
+                      : '0% profit margin'}
                   </p>
                 </div>
               </div>
@@ -1642,26 +1779,17 @@ export default function ReceivePartnerPaymentPage() {
                 const area = resolveAreaName(partner?.area, areaLookup);
 
                 const monthlyFee = parseFloat(String(partner?.monthlyFee)) || 0;
-                const partnerPayments = payments.filter(
-                  (p) =>
-                    String(p.customerId) === String(item.customerId) &&
-                    !p.isNoPayment
-                );
+                const partnerPayments = rawPayments.filter((p: any) => partner && partnerPaymentMatches(p, partner));
                 const allocs = allocatePayments(
                   monthlyFee,
-                  partnerPayments.map((p: any) => ({
-                    month: p.month,
-                    amount: p.amount,
-                  })),
-                  partnerFirstBillingMonth(partner?.activationDate), item.month,
+                  partnerPayments.map((p: any) => ({ month: p.month, amount: partnerPaymentAmount(p) })),
+                  partner ? partnerCollectionBillingStartMonth(partner, partnerPayments, item.month) : undefined,
+                  item.month,
                   partnerBillingDay(partner?.activationDate)
                 );
-
                 const currentAlloc = allocs.find((a) => a.month === item.month);
-                const previousBalance = currentAlloc?.previousBalance || 0;
-                const currentBalance = currentAlloc
-                  ? currentAlloc.remaining
-                  : monthlyFee;
+                const previousBalance = currentAlloc?.previousBalance ?? 0;
+                const currentBalance = currentAlloc?.currentBalance ?? monthlyFee;
                 const totalBalance = previousBalance + currentBalance;
 
                 downloadReceipt({
@@ -1685,10 +1813,7 @@ export default function ReceivePartnerPaymentPage() {
                   previousBalance,
                   currentBalance,
                   totalBalance,
-                  remainingBalance: Math.max(
-                    0,
-                    totalBalance - (item.amount || 0)
-                  ),
+                  remainingBalance: Math.max(0, totalBalance),
                   isNoPayment: item.isNoPayment,
                 });
 
@@ -1708,7 +1833,7 @@ export default function ReceivePartnerPaymentPage() {
             fetchAllData();
           }}
           customers={customers}
-          payments={payments}
+          payments={rawPayments}
           packages={packages}
           areas={areas}
           isps={isps}

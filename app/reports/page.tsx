@@ -137,6 +137,86 @@ function DateFormatInput({
   );
 }
 
+
+// Report Center P&L uses the same receipt-based package profit calculation as
+// Receive Payment and Receive Partner Payment. These are *gross package profits*;
+// true net P&L also subtracts expenses, purchases and salaries and includes the
+// existing dealer commission profit from the tenant-scoped P&L backend.
+const isReceiptInMonth = (raw: any, year: number, zeroBasedMonth: number): boolean => {
+  if (!raw) return false;
+  if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return Number(raw.slice(0, 4)) === year && Number(raw.slice(5, 7)) === zeroBasedMonth + 1;
+  }
+  const date = new Date(raw);
+  return !Number.isNaN(date.getTime()) &&
+    date.getFullYear() === year && date.getMonth() === zeroBasedMonth;
+};
+
+const calculateReceiptPackageProfit = (
+  receipts: any[],
+  accounts: any[],
+  packages: any[],
+  accountType: 'customer' | 'partner',
+  year: number,
+  monthIndex: number
+): number => {
+  const byId = new Map<string, any>();
+  const byCode = new Map<string, any>();
+  const packageById = new Map<string, any>();
+  const packageByName = new Map<string, any>();
+
+  for (const account of accounts) {
+    if (account._id) byId.set(String(account._id), account);
+    const code = String(accountType === 'partner'
+      ? (account.partnerId || account.code || '')
+      : (account.customerId || account.code || '')).trim().toLowerCase();
+    if (code) byCode.set(code, account);
+  }
+  for (const pkg of packages) {
+    if (pkg._id) packageById.set(String(pkg._id), pkg);
+    if (pkg.name) packageByName.set(String(pkg.name).trim().toLowerCase(), pkg);
+  }
+
+  let profit = 0;
+  for (const receipt of receipts) {
+    if (receipt.isNoPayment ||
+        !isReceiptInMonth(receipt.paymentDate || receipt.createdAt, year, monthIndex)) continue;
+
+    const amount = Number(receipt.amount ?? receipt.paidAmount ?? receipt.amountPaid ?? receipt.receivedAmount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+
+    const populated = receipt[accountType] && typeof receipt[accountType] === 'object'
+      ? receipt[accountType] : null;
+    const mongoId = populated?._id || populated?.id ||
+      (typeof receipt[accountType] === 'string' ? receipt[accountType] : '');
+    const identifier = accountType === 'partner' ? 'partnerId' : 'customerId';
+    const rawCode = receipt[identifier] || populated?.[identifier] || '';
+    const code = String(rawCode).trim().toLowerCase();
+    const account = byId.get(String(mongoId)) || byId.get(String(rawCode)) ||
+      (code ? byCode.get(code) : undefined);
+    if (!account) continue;
+
+    const accountPackage = account.package;
+    const packageName = typeof accountPackage === 'string'
+      ? accountPackage : accountPackage?.name || '';
+    const packageId = typeof accountPackage === 'object'
+      ? accountPackage?._id : packageName;
+    const pkg = packageById.get(String(packageId || '')) ||
+      packageByName.get(String(packageName).trim().toLowerCase());
+
+    // Missing prices must NOT silently be treated as 100% profit.
+    if (!pkg || pkg.sellingPrice == null || pkg.purchasePrice == null ||
+        pkg.sellingPrice === '' || pkg.purchasePrice === '') continue;
+    const selling = Number(pkg.sellingPrice);
+    const cost = Number(pkg.purchasePrice);
+    if (!Number.isFinite(selling) || selling <= 0 || !Number.isFinite(cost)) continue;
+
+    // Include partial receipts and older dues paid during this calendar month.
+    profit += amount * ((selling - cost) / selling);
+  }
+  return profit;
+};
+
 export default function ReportsPage() {
   // ============================================================
   // FILTER STATES
@@ -177,6 +257,15 @@ export default function ReportsPage() {
 
   const [summary, setSummary] = useState<any>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
+  const [loadingProfitLoss, setLoadingProfitLoss] = useState(true);
+  const [profitLoss, setProfitLoss] = useState<{
+    netProfit: number;
+    isProfit: boolean;
+    userPackageProfit: number;
+    partnerPackageProfit: number;
+    dealerCommissionProfit: number;
+    totalCosts: number;
+  } | null>(null);
 
   // ============================================================
   // USER / DEALER STATES
@@ -198,6 +287,7 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadSummary();
+    loadProfitLoss();
     loadCustomers();
     loadDealers();
   }, []);
@@ -219,6 +309,74 @@ export default function ReportsPage() {
       console.error('Summary fetch failed:', error);
     } finally {
       setLoadingSummary(false);
+    }
+  };
+
+  // ============================================================
+  // THIS MONTH'S PROFIT / LOSS — matches both Receive Payment pages
+  // ============================================================
+
+  const loadProfitLoss = async () => {
+    setLoadingProfitLoss(true);
+    setProfitLoss(null);
+    try {
+      const today = new Date();
+      const year = today.getFullYear();
+      const monthIndex = today.getMonth();
+      const first = `${year}-${String(monthIndex + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+      const last = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      const params = new URLSearchParams({ fromDate: first, toDate: last });
+
+      // The P&L endpoint is the source of the existing salaries, expenses,
+      // purchases and dealer commissions. The two payment endpoints provide
+      // the *same receipt data* used by their respective collection pages.
+      // All endpoints must enforce tenant scoping on the backend.
+      const [pnlRes, customerPaymentRes, partnerPaymentRes, customerRes, partnerRes, packageRes] =
+        await Promise.all([
+          api.get(`/reports/profit-loss?${params.toString()}`),
+          api.get('/payments'),
+          api.get('/partner-payments'),
+          api.get('/customers?limit=10000'),
+          api.get('/partners?limit=10000'),
+          api.get('/packages'),
+        ]);
+      if (![pnlRes, customerPaymentRes, partnerPaymentRes, customerRes, partnerRes, packageRes]
+        .every((response) => response.data?.success)) {
+        throw new Error('One or more profit/loss data sources failed');
+      }
+
+      const pnl = pnlRes.data.report;
+      const userPayments = customerPaymentRes.data.payments ?? customerPaymentRes.data.data;
+      const partnerPayments = partnerPaymentRes.data.payments ?? partnerPaymentRes.data.data;
+      const users = customerRes.data.customers ?? customerRes.data.data;
+      const partners = partnerRes.data.partners ?? partnerRes.data.data;
+      const pricePackages = packageRes.data.packages ?? packageRes.data.data;
+      if (!pnl || ![userPayments, partnerPayments, users, partners, pricePackages]
+        .every(Array.isArray) || !Number.isFinite(Number(pnl.totalCosts)) ||
+        !Number.isFinite(Number(pnl.totalCommissionProfit))) {
+        throw new Error('Incomplete profit/loss data from the backend');
+      }
+
+      const userPackageProfit = calculateReceiptPackageProfit(
+        userPayments, users, pricePackages, 'customer', year, monthIndex
+      );
+      const partnerPackageProfit = calculateReceiptPackageProfit(
+        partnerPayments, partners, pricePackages, 'partner', year, monthIndex
+      );
+      const dealerCommissionProfit = Number(pnl.totalCommissionProfit);
+      const totalCosts = Number(pnl.totalCosts);
+      const netProfit = Math.round((userPackageProfit + partnerPackageProfit +
+        dealerCommissionProfit - totalCosts) * 100) / 100;
+
+      setProfitLoss({ netProfit, isProfit: netProfit >= 0,
+        userPackageProfit, partnerPackageProfit, dealerCommissionProfit, totalCosts });
+    } catch (error) {
+      // Do not present a misleading Rs. 0 when a source is unavailable.
+      console.error('Profit / loss calculation failed:', error);
+      setProfitLoss(null);
+    } finally {
+      setLoadingProfitLoss(false);
     }
   };
 
@@ -727,24 +885,24 @@ export default function ReportsPage() {
     {
       title: 'Profit / Loss',
 
-      value: loadingSummary
+      value: loadingProfitLoss || !profitLoss
         ? '—'
-        : `Rs. ${(
-            summary?.netProfit || 0
-          ).toLocaleString()}`,
+        : `Rs. ${profitLoss.netProfit.toLocaleString()}`,
 
-      subtitle: loadingSummary
+      subtitle: loadingProfitLoss
         ? 'Loading...'
-        : summary?.isProfit
-        ? 'Profit this month'
-        : 'Loss this month',
+        : !profitLoss
+        ? 'Profit / loss data unavailable'
+        : profitLoss.isProfit
+        ? 'Net profit this month'
+        : 'Net loss this month',
 
       icon: <TrendingUp className="h-6 w-6" />,
 
       action: summary?.monthLabel || 'This month',
 
       color:
-        summary?.isProfit === false
+        profitLoss?.isProfit === false
           ? 'red'
           : 'amber',
     },
@@ -777,7 +935,7 @@ export default function ReportsPage() {
 
           <div className="flex gap-2">
             <button
-              onClick={loadSummary}
+              onClick={() => { loadSummary(); loadProfitLoss(); }}
               className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             >
               <RefreshCw

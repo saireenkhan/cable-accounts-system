@@ -546,6 +546,29 @@ function getBillingDay(activationDate: any): number {
   const date = new Date(activationDate);
   return Number.isNaN(date.getTime()) ? 1 : date.getDate();
 }
+// Ordinary renewals start in the month after activation. If a receipt was
+// explicitly recorded for the activation month, include THAT month's charge
+// when showing its partial remainder and carrying it into later months.
+// This does not shift any activation, expiry, or monthly billing dates.
+function getCollectionBillingStartMonth(
+  customer: any,
+  customerPayments: any[],
+  selectedMonth: string
+): string | undefined {
+  const firstRenewal = getFirstBillingMonth(customer.activationDate);
+  if (!firstRenewal) return undefined;
+  const parsed = parseMonth(firstRenewal);
+  if (parsed.idx < 0 || !Number.isFinite(parsed.year)) return firstRenewal;
+  const initial = new Date(parsed.year, parsed.idx - 1, 1);
+  const activationMonth = `${MONTHS[initial.getMonth()]} ${initial.getFullYear()}`;
+  const activationReceipt = customerPayments.some((payment: any) =>
+    String(payment.month || '').trim().toLowerCase() === activationMonth.toLowerCase()
+  );
+  // An operator can also collect the unpaid initial month for the first time.
+  if (activationReceipt || selectedMonth === activationMonth) return activationMonth;
+  return firstRenewal;
+}
+
 function SearchableSelect({
   options,
   value,
@@ -820,18 +843,13 @@ function ReceivePaymentModal({
       const customer = customers.find((c) => String(c._id) === String(selectedCustomerId));
       setCustomerDetails(customer || null);
       if (customer) {
-        const customerPayments = payments.filter((p: any) =>
-          !p.isNoPayment && (
-            String(p.customer?._id || '') === String(customer._id) ||
-            String(p.customer || '') === String(customer._id) ||
-            String(p.customerId || '') === String(customer._id) ||
-            (customer.customerId && String(p.customerId || '') === String(customer.customerId))
-          )
-        );
+        // The expiry calculation and both payment modals must recognize the
+        // same receipts, including populated customer IDs and customer codes.
+        const customerPayments = getUserPayments(customer, payments);
         const allocs = allocatePayments(
           Number(customer.monthlyFee || 0),
-          customerPayments.map((p: any) => ({ month: p.month, amount: p.amount })),
-          getFirstBillingMonth(customer.activationDate),
+          customerPayments.map((p: any) => ({ month: p.month, amount: getPaymentPaidAmount(p) })),
+          getCollectionBillingStartMonth(customer, customerPayments, selectedMonth),
           selectedMonth,
           getBillingDay(customer.activationDate)
         );
@@ -912,19 +930,28 @@ function ReceivePaymentModal({
       const latestPayments: any[] = latestResponse.data?.payments ?? latestResponse.data?.data ?? [];
       if (!Array.isArray(latestPayments)) throw new Error('Could not verify payment history');
 
-      const customerId = String(customerObj._id);
-      const code = String(customerObj.customerId || '').trim();
-      const matched = latestPayments.filter((p: any) => {
-        if (p.isNoPayment) return false;
-        const ids = [p.customer?._id, p.customer?.id,
-          typeof p.customer === 'string' ? p.customer : null,
-          p.customerId, p.customer?.customerId].filter(Boolean).map(String);
-        return ids.includes(customerId) || (!!code && ids.includes(code));
-      });
-
+      const matched = getUserPayments(customerObj, latestPayments);
       const fee = Number(customerObj.monthlyFee || 0);
       if (!Number.isFinite(fee) || fee <= 0) throw new Error('Invalid customer monthly fee');
-      const eligibleMonths = monthlySummary
+
+      // Recalculate from live receipts, not the potentially stale modal state.
+      // This keeps the amount being saved consistent with the displayed ledger.
+      const freshLedger = allocatePayments(
+        fee,
+        matched.map((p: any) => ({ month: p.month, amount: getPaymentPaidAmount(p) })),
+        getCollectionBillingStartMonth(customerObj, matched, selectedMonth),
+        selectedMonth,
+        getBillingDay(customerObj.activationDate)
+      );
+      const selectedBill = freshLedger.find((row) => row.month === selectedMonth);
+      if (!selectedBill) {
+        throw new Error('No charge exists for this billing month. Check the activation date and selected month.');
+      }
+      const liveBalance = selectedBill.previousBalance + selectedBill.currentBalance;
+      if (requested > liveBalance + 0.001) {
+        throw new Error(`Balance changed. Only Rs. ${liveBalance.toLocaleString()} remains due. Refresh and retry.`);
+      }
+      const eligibleMonths = freshLedger
         .filter((row) => compareMonths(row.month, selectedMonth) <= 0)
         .sort((a, b) => compareMonths(a.month, b.month));
       const allocations: { month: string; amount: number }[] = [];
@@ -932,7 +959,7 @@ function ReceivePaymentModal({
       for (const row of eligibleMonths) {
         const paidAlready = matched
           .filter((p: any) => String(p.month || '').trim().toLowerCase() === row.month.toLowerCase())
-          .reduce((sum: number, p: any) => sum + Number(p.amount || p.paidAmount || 0), 0);
+          .reduce((sum: number, p: any) => sum + getPaymentPaidAmount(p), 0);
         const available = Math.max(0, fee - paidAlready);
         const part = Math.round(Math.min(available, amountToAllocate) * 100) / 100;
         if (part > 0) {
