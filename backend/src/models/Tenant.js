@@ -8,7 +8,11 @@ const tenantSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-
+theme: {
+  type: String,
+  enum: ['original', 'blue-black', 'green-black'],
+  default: 'original',
+},
     slug: {
       type: String,
       required: true,

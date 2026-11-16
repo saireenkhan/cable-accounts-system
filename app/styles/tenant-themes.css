@@ -1,0 +1,421 @@
+
+/* ==========================================
+   SMART RECOVERY - AUTOMATIC COMPANY THEMES
+   No React component changes required
+========================================== */
+
+/* BLUE & BLACK */
+html[data-sr-theme="blue-black"] {
+  --sr-header: #101c30;
+  --sr-sidebar: #0d1727;
+  --sr-rail: #081d38;
+  --sr-primary: #1688fa;
+  --sr-primary-hover: #0875df;
+  --sr-text: #ecf5ff;
+  --sr-border: #2c4562;
+}
+
+/* GREEN & BLACK */
+html[data-sr-theme="green-black"] {
+  --sr-header: #10251d;
+  --sr-sidebar: #0d2019;
+  --sr-rail: #09251b;
+  --sr-primary: #18b67b;
+  --sr-primary-hover: #119664;
+  --sr-text: #e9fff4;
+  --sr-border: #315b48;
+}
+
+/* ==========================================
+   HEADER
+========================================== */
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) header.sticky.top-0 {
+  background-color: var(--sr-header) !important;
+  border-color: var(--sr-border) !important;
+}
+
+/* Company name (RJ Internet) */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) header h1 {
+  color: var(--sr-primary) !important;
+}
+
+/* ==========================================
+   MAIN SIDEBAR
+========================================== */
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class*="dark:bg-[#102A43]"] {
+  background-color: var(--sr-sidebar) !important;
+  border-color: var(--sr-border) !important;
+}
+
+/* Sidebar brand: Recovery */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside span[class~="dark:text-[#F4D477]"] {
+  color: var(--sr-primary) !important;
+}
+
+/* Selected navigation item */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside a[class~="dark:bg-[#d6b138]"] {
+  background-color: var(--sr-primary) !important;
+  color: #ffffff !important;
+}
+
+/* Selected navigation icons */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside a[class~="dark:bg-[#d6b138]"] span,
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside a[class~="dark:bg-[#d6b138]"] svg {
+  color: #ffffff !important;
+}
+
+/* Active section titles */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside button[class~="dark:text-[#F4D477]"] {
+  color: var(--sr-primary) !important;
+}
+
+/* ==========================================
+   LEFT SIDEBAR RAIL
+========================================== */
+
+/* Existing SidebarRail outer background */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"] {
+  background-color: var(--sr-rail) !important;
+}
+
+/* Active rail icon button */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside button[class~="bg-[#F8D77A]"] {
+  background-color: var(--sr-primary) !important;
+  color: #ffffff !important;
+}
+
+/* Active rail SVG */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside button[class~="bg-[#F8D77A]"] svg {
+  color: #ffffff !important;
+}
+
+/* Rail hover */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"] nav button:hover {
+  border-color: var(--sr-primary);
+}
+
+/* ==========================================
+   ORIGINAL THEME
+   No overrides - preserve existing design
+========================================== */
+
+/* ==============================================
+   SMART RECOVERY - ALL TENANT PAGES
+   Original theme remains unchanged
+============================================== */
+
+html[data-sr-theme="blue-black"] {
+  --sr-page-bg: #070c15;
+  --sr-card-bg: #172438;
+  --sr-primary: #1688fa;
+  --sr-border: #2c4562;
+  --sr-text: #ecf5ff;
+}
+
+html[data-sr-theme="green-black"] {
+  --sr-page-bg: #07110e;
+  --sr-card-bg: #173329;
+  --sr-primary: #18b67b;
+  --sr-border: #315b48;
+  --sr-text: #e9fff4;
+}
+
+/* Page backgrounds */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main {
+  background-color: var(--sr-page-bg) !important;
+}
+
+/* Common page cards */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  .bg-white,
+  .bg-gray-800,
+  .bg-slate-800,
+  .bg-slate-900,
+  .dark\:bg-gray-800,
+  .dark\:bg-slate-800
+) {
+  background-color: var(--sr-card-bg) !important;
+  border-color: var(--sr-border);
+}
+
+/* Page titles and main text */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  h1,
+  h2,
+  h3
+) {
+  color: var(--sr-text);
+}
+
+/* Page primary action buttons */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  button,
+  a
+):is(
+  [class*="bg-yellow"],
+  [class*="bg-amber"],
+  [class*="bg-[#D6B138]"],
+  [class*="bg-[#F4D477]"],
+  [class*="bg-[#d6b138]"]
+) {
+  background-color: var(--sr-primary) !important;
+  color: white !important;
+}
+
+/* Common selected tabs and highlights */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  [class*="border-yellow"],
+  [class*="border-amber"]
+) {
+  border-color: var(--sr-primary) !important;
+}
+
+/* =====================================================
+   SMART RECOVERY - REMAINING PAGE THEME FIXES
+   Works with Blue & Black / Green & Black
+   Original remains unchanged
+   No React component changes
+===================================================== */
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) {
+  --sr-accent: var(--sr-primary);
+  --sr-accent-hover: var(--sr-primary-hover);
+  --sr-accent-soft: color-mix(
+    in srgb,
+    var(--sr-primary) 13%,
+    transparent
+  );
+}
+
+/* =============================================
+   1. ADD ISP AND ADD AREA BUTTONS
+============================================= */
+
+/* Exact Add ISP button class */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main button[class~="bg-[#D9A82E]"] {
+  background-color: var(--sr-accent) !important;
+  color: #fff !important;
+}
+
+/* Existing gold action buttons */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(button, a)[class~="bg-[#d6b138]"] {
+  background-color: var(--sr-accent) !important;
+  color: #fff !important;
+}
+
+/* Icons and labels inside action buttons */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  button[class~="bg-[#D9A82E]"],
+  button[class~="bg-[#d6b138]"],
+  a[class~="bg-[#d6b138]"]
+) :is(svg, span) {
+  color: inherit !important;
+}
+
+/* =============================================
+   2. WHATSAPP SETTINGS AND ACTIVE TABS
+============================================= */
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main [class~="text-[#d6b138]"] {
+  color: var(--sr-accent) !important;
+}
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main [class~="dark:text-[#f7ce48]"] {
+  color: var(--sr-accent) !important;
+}
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main [class~="border-[#d6b138]"] {
+  border-color: var(--sr-accent) !important;
+}
+
+/* Active switch controls */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main button[class~="bg-[#d6b138]"][class*="rounded-full"] {
+  background-color: var(--sr-accent) !important;
+}
+
+/* =============================================
+   3. BULK UPLOAD SELECTION AND STEP NUMBERS
+============================================= */
+
+/* Numbered steps and selection badges */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main div[class~="bg-[#d6b138]"] {
+  background-color: var(--sr-accent) !important;
+  color: #fff !important;
+}
+
+/* Exact gold border classes */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  [class~="border-[#d6b138]"],
+  [class~="border-[#d6b138]/60"],
+  [class~="dark:border-[#b8942e]"]
+) {
+  border-color: var(--sr-accent) !important;
+}
+
+/* Tailwind ring color overrides */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(
+  [class~="ring-[#d6b138]"],
+  [class~="ring-[#d6b138]/30"],
+  [class~="ring-[#d6b138]/20"],
+  [class~="focus:ring-[#d6b138]"],
+  [class~="focus:ring-[#d6b138]/50"]
+) {
+  --tw-ring-color: var(--sr-accent) !important;
+}
+
+/* Gold accents used on selected upload cards */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main [class~="bg-[#d6b138]"] {
+  background-color: var(--sr-accent) !important;
+}
+
+/* =============================================
+   4. PAGE TITLE ICONS
+============================================= */
+
+/* Icons actually inside heading elements */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(h1, h2, h3) svg {
+  color: var(--sr-accent) !important;
+}
+
+/* Icons immediately before a heading */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(svg:has(+ h1), svg:has(+ h2)) {
+  color: var(--sr-accent) !important;
+}
+
+/* =============================================
+   5. SPINNERS AND FOCUS RINGS
+============================================= */
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main .animate-spin[class~="border-[#d6b138]"] {
+  border-color: var(--sr-accent) !important;
+}
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(input, select, textarea):focus-visible {
+  --tw-ring-color: var(--sr-accent) !important;
+  outline-color: var(--sr-accent);
+}
+
+/* =============================================
+   6. HOVER STATES
+============================================= */
+
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main :is(button, a)[class~="hover:bg-[#f7ce48]"]:hover {
+  background-color: var(--sr-accent-hover) !important;
+}
+
+/* Keep disabled controls visibly disabled */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) main button:disabled {
+  cursor: not-allowed;
+}
+
+/* =============================================
+   ORIGINAL THEME
+   No overrides: existing design is preserved
+============================================= */

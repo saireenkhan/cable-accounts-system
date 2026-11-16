@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { Plus, Search, Eye, EyeOff, Pencil, Trash2, X, Users, ShieldCheck, Building2, RefreshCw, CheckCircle2, AlertCircle, LockKeyhole, Copy, ArrowLeft } from 'lucide-react';
 
 import MasterShell from '@/app/components/ui/MasterShell';
+import CompanyThemePicker from '@/app/components/ui/CompanyThemePicker';
+import { companyThemeName, resolveCompanyTheme, type CompanyTheme } from '@/app/lib/companyThemes';
 
 const API = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '');
 
@@ -16,7 +18,7 @@ type Admin = {
 
   isActive: boolean; createdAt: string;
 
-  company: { _id: string; name: string; ownerEmail: string; plan: string; masterPackageId?: string | { _id: string; name: string }; isActive: boolean } | null;
+  company: { _id: string; name: string; ownerEmail: string; plan: string; masterPackageId?: string | { _id: string; name: string }; theme?: CompanyTheme; isActive: boolean } | null;
 
 };
 
@@ -29,7 +31,10 @@ type Company = {
   ownerEmail: string;
 
   plan: string;
+
   masterPackageId?: string | { _id: string; name: string };
+
+  theme?: CompanyTheme;
 
   isActive: boolean;
 
@@ -57,11 +62,11 @@ type AdminForm = {
 
   companyName: string; ownerEmail: string; plan: string; masterPackageId: string; adminName: string;
 
-  adminEmail: string; adminPassword: string; phone: string; address: string; isActive: boolean;
+  adminEmail: string; adminPassword: string; phone: string; address: string; isActive: boolean; theme: CompanyTheme;
 
 };
 
-const initialForm: AdminForm = { companyName: '', ownerEmail: '', plan: '', masterPackageId: '', adminName: '', adminEmail: '', adminPassword: '', phone: '', address: '', isActive: true };
+const initialForm: AdminForm = { companyName: '', ownerEmail: '', plan: '', masterPackageId: '', adminName: '', adminEmail: '', adminPassword: '', phone: '', address: '', isActive: true, theme: 'original' };
 
 const inputClass = 'w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:focus:ring-amber-500/20';
 
@@ -70,12 +75,19 @@ const labelClass = 'mb-2 block text-sm font-semibold text-slate-700 dark:text-sl
 const cardClass = 'rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800';
 
 type SubscriptionPackage = {
+
   _id: string;
+
   name: string;
+
   description?: string;
+
   monthlyPrice: number;
+
   allowedPages: string[];
+
   isActive: boolean;
+
 };
 
 export default function CreateAdminPage() {
@@ -85,7 +97,9 @@ export default function CreateAdminPage() {
   const [admins, setAdmins] = useState<Admin[]>([]);
 
   const [companies, setCompanies] = useState<Company[]>([]);
+
   const [availablePackages, setAvailablePackages] = useState<SubscriptionPackage[]>([]);
+
   const [packagesError, setPackagesError] = useState('');
 
   const [loading, setLoading] = useState(true);
@@ -159,9 +173,13 @@ export default function CreateAdminPage() {
 }
 
     const contentType = response.headers.get('content-type') || '';
+
     if (!contentType.includes('application/json')) {
+
       throw new Error(`API returned non-JSON (HTTP ${response.status}) from ${response.url}. Check Express API routing.`);
+
     }
+
     const data = await response.json();
 
     if (!response.ok || !data.success) throw new Error(data.message || 'Request failed.');
@@ -171,13 +189,21 @@ export default function CreateAdminPage() {
   }, [redirectUnauthorized, router]);
 
   const loadPackages = useCallback(async () => {
+
     try {
+
       const result = await apiRequest('/packages');
+
       setAvailablePackages(Array.isArray(result.packages) ? result.packages : []);
+
       setPackagesError('');
+
     } catch (err) {
+
       setPackagesError(err instanceof Error ? err.message : 'Could not fetch packages');
+
     }
+
   }, [apiRequest]);
 
   const loadAdmins = useCallback(async () => {
@@ -223,9 +249,10 @@ export default function CreateAdminPage() {
   const openEdit = (admin: Admin) => {
 
     setSelected(admin);
+
     void loadPackages();
 
-    setForm({ companyName: admin.company?.name || '', ownerEmail: admin.company?.ownerEmail || '', plan: admin.company?.plan || '', masterPackageId: typeof admin.company?.masterPackageId === 'string' ? admin.company.masterPackageId : admin.company?.masterPackageId?._id || '', adminName: admin.name, adminEmail: admin.email, adminPassword: '', phone: admin.phone || '', address: admin.address || '', isActive: admin.isActive });
+    setForm({ companyName: admin.company?.name || '', ownerEmail: admin.company?.ownerEmail || '', plan: admin.company?.plan || '', masterPackageId: typeof admin.company?.masterPackageId === 'string' ? admin.company.masterPackageId : admin.company?.masterPackageId?._id || '', adminName: admin.name, adminEmail: admin.email, adminPassword: '', phone: admin.phone || '', address: admin.address || '', isActive: admin.isActive, theme: resolveCompanyTheme(companies.find(c => c._id === admin.company?._id)?.theme ?? admin.company?.theme) });
 
     setModalError(''); setShowPassword(false); setModal('edit');
 
@@ -266,11 +293,14 @@ export default function CreateAdminPage() {
     try {
 
       if ((modal === 'add' || modal === 'edit') && !form.masterPackageId) {
+
         throw new Error('Please select a subscription package.');
+
       }
+
       if (modal === 'add') {
 
-        await apiRequest('/companies', { method: 'POST', body: JSON.stringify({ companyName: form.companyName.trim(), ownerEmail: form.ownerEmail.trim(), plan: form.plan, masterPackageId: form.masterPackageId, adminName: form.adminName.trim(), adminEmail: form.adminEmail.trim(), adminPassword: form.adminPassword }) });
+        await apiRequest('/companies', { method: 'POST', body: JSON.stringify({ companyName: form.companyName.trim(), ownerEmail: form.ownerEmail.trim(), plan: form.plan, masterPackageId: form.masterPackageId, adminName: form.adminName.trim(), adminEmail: form.adminEmail.trim(), adminPassword: form.adminPassword, theme: form.theme }) });
 
         setCredentials({ email: form.adminEmail.trim(), password: form.adminPassword });
 
@@ -280,7 +310,7 @@ export default function CreateAdminPage() {
 
       } else if (modal === 'edit' && selected) {
 
-        await apiRequest(`/admins/${selected._id}`, { method: 'PATCH', body: JSON.stringify({ name: form.adminName.trim(), email: form.adminEmail.trim(), phone: form.phone.trim(), address: form.address.trim(), isActive: form.isActive, companyName: form.companyName.trim(), ownerEmail: form.ownerEmail.trim(), plan: form.plan, masterPackageId: form.masterPackageId, ...(form.adminPassword ? { password: form.adminPassword } : {}) }) });
+        await apiRequest(`/admins/${selected._id}`, { method: 'PATCH', body: JSON.stringify({ name: form.adminName.trim(), email: form.adminEmail.trim(), phone: form.phone.trim(), address: form.address.trim(), isActive: form.isActive, companyName: form.companyName.trim(), ownerEmail: form.ownerEmail.trim(), plan: form.plan, masterPackageId: form.masterPackageId, theme: form.theme, ...(form.adminPassword ? { password: form.adminPassword } : {}) }) });
 
         setSuccess('Administrator updated successfully.');
 
@@ -442,7 +472,7 @@ const rows: ManagementRow[] = companies.flatMap<ManagementRow>(
 
     ['Address', selected.address || '—'], ['Company', selected.company?.name || '—'],
 
-    ['Company Email', selected.company?.ownerEmail || '—'], ['Plan', selected.company?.plan || '—'],
+    ['Company Email', selected.company?.ownerEmail || '—'], ['Plan', selected.company?.plan || '—'], ['Theme', companyThemeName(companies.find(c => c._id === selected.company?._id)?.theme ?? selected.company?.theme)],
 
     ['Password', 'Protected — use Edit to reset'], ['Admin Status', selected.isActive ? 'Active' : 'Inactive'],
 
@@ -562,7 +592,7 @@ const rows: ManagementRow[] = companies.flatMap<ManagementRow>(
 
                 <td className="px-5 py-4 capitalize">
 
-                  {availablePackages.find(p => p._id === (typeof row.company?.masterPackageId === 'string' ? row.company.masterPackageId : row.company?.masterPackageId?._id))?.name || row.company?.plan || row.admin?.company?.plan || '—'}
+                  {availablePackages.find(p => p._id === (typeof row.company?.masterPackageId === 'string' ? row.company.masterPackageId : row.company?.masterPackageId?._id))?.name || row.company?.plan || row.admin?.company?.plan || '—'}<div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Theme: {companyThemeName(row.company?.theme ?? row.admin?.company?.theme)}</div>
 
                 </td>
 
@@ -639,24 +669,42 @@ const rows: ManagementRow[] = companies.flatMap<ManagementRow>(
         <form onSubmit={submit} className="overflow-y-auto p-6"><div className="grid gap-4 sm:grid-cols-2">
 
           {(modal === 'add' || modal === 'edit') && <><h3 className="border-b border-slate-200 pb-2 text-sm font-bold dark:border-slate-700 sm:col-span-2">Company Information</h3><div><label htmlFor="companyName" className={labelClass}>Company Name *</label><input id="companyName" required maxLength={120} className={inputClass} value={form.companyName} onChange={e => update('companyName', e.target.value)} /></div><div><label htmlFor="ownerEmail" className={labelClass}>Company Email *</label><input id="ownerEmail" required type="email" className={inputClass} value={form.ownerEmail} onChange={e => update('ownerEmail', e.target.value)} /></div><div className="sm:col-span-2">
+
               <label htmlFor="masterPackageId" className={labelClass}>Subscription Package *</label>
+
               <select id="masterPackageId" required className={inputClass} value={form.masterPackageId}
+
                 onChange={e => {
+
                   const pkg = availablePackages.find(p => p._id === e.target.value);
+
                   setForm(prev => ({ ...prev, masterPackageId: e.target.value, plan: pkg?.name || '' }));
+
                 }}>
+
                 <option value="">Select a package</option>
+
                 {availablePackages.filter(p => p.isActive || p._id === form.masterPackageId).map(pkg => (
+
                   <option key={pkg._id} value={pkg._id}>{pkg.name} — PKR {Number(pkg.monthlyPrice || 0).toLocaleString()} / month ({pkg.allowedPages.length} pages){!pkg.isActive ? ' [Inactive]' : ''}</option>
+
                 ))}
+
               </select>
+
               {packagesError && <p className="mt-2 text-xs text-red-600">{packagesError}</p>}
+
               {!packagesError && availablePackages.length === 0 && <p className="mt-2 text-xs text-amber-600">No packages found. Create one in Master Package Management first.</p>}
+
               {form.masterPackageId && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-slate-700 dark:border-amber-900 dark:bg-slate-900 dark:text-slate-200">
+
                 <p className="font-bold">Included Pages</p>
+
                 <p className="mt-1">{availablePackages.find(p => p._id === form.masterPackageId)?.allowedPages.join(', ') || 'No page information available'}</p>
+
               </div>}
-            </div></>}
+
+            </div><CompanyThemePicker value={form.theme} onChange={theme => update('theme', theme)} /></>}
 
           <h3 className="border-b border-slate-200 pb-2 text-sm font-bold dark:border-slate-700 sm:col-span-2">Administrator Information</h3><div><label htmlFor="adminName" className={labelClass}>Full Name *</label><input id="adminName" required className={inputClass} value={form.adminName} onChange={e => update('adminName', e.target.value)} /></div><div><label htmlFor="adminEmail" className={labelClass}>Login Email *</label><input id="adminEmail" required type="email" className={inputClass} value={form.adminEmail} onChange={e => update('adminEmail', e.target.value)} /></div>
 

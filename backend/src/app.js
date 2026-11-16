@@ -31,13 +31,33 @@ const partnerAreaRoutes = require('./routes/partnerAreaRoutes');
 const partnerRoutes = require('./routes/partnerRoutes');
 const promiseRoutes = require('./routes/promiseRoutes');
 const masterRoutes = require('./routes/masterRoutes');
-const masterPackageRoutes = require("./routes/masterPackageRoutes");
+const masterPackageRoutes = require('./routes/masterPackageRoutes');
 const tenantPackageRoutes = require('./routes/tenantPackageRoutes');
 const allUsersRoutes = require('./routes/allUsersRoutes');
+
+// Existing Tenant schema is the company model.
+const Company = require('./models/Tenant');
+
+// Existing tenant authentication: protect sets req.tenantId,
+// requireTenant ensures the authenticated user is a tenant user.
+const { protect, requireTenant } = require('./middleware/auth');
+
+// Preserve both existing Master authentication middleware functions.
+const masterAuthExport = require('./middleware/requireMaster');
+const masterAuthHandlers = Array.isArray(masterAuthExport)
+  ? masterAuthExport
+  : typeof masterAuthExport === 'function'
+    ? [masterAuthExport]
+    : typeof masterAuthExport?.requireMaster === 'function'
+      ? [masterAuthExport.requireMaster]
+      : [];
+
+const createMasterCompanyThemesRouter = require('./routes/masterCompanyThemes');
+const createTenantCompanyThemeRouter = require('./routes/tenantCompanyTheme');
+
 // ============================================================
 // PROCESS ERROR HANDLERS
 // ============================================================
-
 process.on('unhandledRejection', (reason) => {
   console.error('❌ Unhandled Rejection:', reason);
 });
@@ -49,67 +69,40 @@ process.on('uncaughtException', (err) => {
 // ============================================================
 // EXPRESS APP
 // ============================================================
-
 const app = express();
-
 app.set('trust proxy', 1);
 
 // ============================================================
 // DATABASE CONNECTION
 // ============================================================
-
-// Start connection without blocking application initialization.
-// Individual API requests will also make sure DB is connected.
 connectDB().catch((err) => {
-  console.error(
-    '❌ Initial MongoDB connection failed:',
-    err.message
-  );
+  console.error('❌ Initial MongoDB connection failed:', err.message);
 });
 
 // ============================================================
 // SECURITY / BODY PARSING
 // ============================================================
-
 app.use(helmet());
 
 app.use(
   cors({
-    origin:
-      process.env.CLIENT_URL ||
-      'http://localhost:3000',
+    origin: process.env.CLIENT_URL || 'http://localhost:3000',
     credentials: true,
   })
 );
 
-app.use(
-  express.json({
-    limit: '10mb',
-  })
-);
-
-app.use(
-  express.urlencoded({
-    extended: true,
-    limit: '10mb',
-  })
-);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============================================================
 // DATABASE MIDDLEWARE
-// Make sure MongoDB is connected before API requests
 // ============================================================
-
 app.use('/api', async (req, res, next) => {
   try {
     await connectDB();
     next();
   } catch (err) {
-    console.error(
-      '❌ DB not ready:',
-      err.message
-    );
-
+    console.error('❌ DB not ready:', err.message);
     return res.status(503).json({
       success: false,
       message: 'Database temporarily unavailable',
@@ -119,10 +112,7 @@ app.use('/api', async (req, res, next) => {
 
 // ============================================================
 // VERCEL / BACKEND TEST ENDPOINT
-// IMPORTANT: This endpoint is intentionally simple.
-// It does NOT access MongoDB.
 // ============================================================
-
 app.get('/api/test', (req, res) => {
   res.json({
     success: true,
@@ -134,7 +124,6 @@ app.get('/api/test', (req, res) => {
 // ============================================================
 // HEALTH CHECK
 // ============================================================
-
 const healthHandler = (req, res) => {
   res.json({
     status: 'ok',
@@ -149,100 +138,93 @@ app.get('/api/health', healthHandler);
 // ============================================================
 // ROUTES
 // ============================================================
-
 app.use('/api/promises', promiseRoutes);
-app.use(
-  '/api/whatsapp',
-  require('./routes/whatsappRoutes')
-);
-
-app.use(
-  '/api/partners-list',
-  require('./routes/partnerListRoutes')
-);
-
-app.use(
-  '/api/partner-payments',
-  require('./routes/partnerPaymentRoutes')
-);
-
+app.use('/api/whatsapp', require('./routes/whatsappRoutes'));
+app.use('/api/partners-list', require('./routes/partnerListRoutes'));
+app.use('/api/partner-payments', require('./routes/partnerPaymentRoutes'));
 app.use('/api/auth', authRoutes);
-
 app.use('/api/customers', customerRoutes);
-
 app.use('/api/bills', billRoutes);
-
 app.use('/api/payments', paymentRoutes);
-
 app.use('/api/packages', packageRoutes);
-
 app.use('/api/dealers', dealerRoutes);
-
-app.use(
-  '/api/dealer-payments',
-  dealerPaymentRoutes
-);
-
+app.use('/api/dealer-payments', dealerPaymentRoutes);
 app.use('/api/purchases', purchaseRoutes);
-
 app.use('/api/areas', areaRoutes);
-
 app.use('/api/staff', staffRoutes);
-
 app.use('/api/attendance', attendanceRoutes);
-
 app.use('/api/installation', installationRoutes);
-
 app.use('/api/expenses', expenseRoutes);
-
 app.use('/api/reports', reportRoutes);
 app.use('/api/isps', ispRoutes);
-app.use(
-  '/api/dealer-areas',
-  dealerAreaRoutes
-);
-
-app.use(
-  '/api/partner-areas',
-  partnerAreaRoutes
-);
-
-app.use(
-  '/api/partners',
-  partnerRoutes
-);
-app.use('/api/master', masterRoutes);
-
-app.use("/api/master/packages", masterPackageRoutes);
+app.use('/api/dealer-areas', dealerAreaRoutes);
+app.use('/api/partner-areas', partnerAreaRoutes);
+app.use('/api/partners', partnerRoutes);
 app.use('/api/tenant-package', tenantPackageRoutes);
+
+// ============================================================
+// TENANT COMPANY THEME
+// GET /api/tenant/theme/current
+// ============================================================
+// The factory expects a single middleware function. Wrap the
+// existing protect + requireTenant chain in an Express Router.
+const tenantThemeAuth = express.Router();
+tenantThemeAuth.use(protect, requireTenant);
+
+app.use(
+  '/api/tenant/theme',
+  createTenantCompanyThemeRouter({
+    requireTenant: tenantThemeAuth,
+    Company,
+    resolveAuthenticatedCompanyId: (req) => req.tenantId,
+  })
+);
+
+// ============================================================
+// MASTER COMPANY THEMES
+// ============================================================
+if (
+  !masterAuthHandlers.length ||
+  masterAuthHandlers.some((middleware) => typeof middleware !== 'function')
+) {
+  throw new Error(
+    'Invalid Master auth export: expected a function or an array of middleware functions'
+  );
+}
+
+const masterThemeAuth = express.Router();
+masterThemeAuth.use(...masterAuthHandlers);
+
+app.use(
+  '/api/master/company-themes',
+  createMasterCompanyThemesRouter({
+    requireMaster: masterThemeAuth,
+    Company,
+  })
+);
+
+app.use('/api/master', masterRoutes);
+app.use('/api/master/packages', masterPackageRoutes);
 app.use('/api/all-users', allUsersRoutes);
+
 // ============================================================
 // ERROR HANDLER
 // ============================================================
-
 app.use(errorHandler);
 
 // ============================================================
 // LOCAL DEVELOPMENT SERVER
-// Vercel handles production automatically.
 // ============================================================
-
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 5000;
 
   app.listen(PORT, () => {
-    logger.info(
-      `🚀 Server running on port ${PORT}`
-    );
-
-    logger.info(
-      `📡 Environment: ${process.env.NODE_ENV}`
-    );
+    logger.info(`🚀 Server running on port ${PORT}`);
+    logger.info(`📡 Environment: ${process.env.NODE_ENV}`);
   });
 }
 
 // ============================================================
 // EXPORT EXPRESS APP
 // ============================================================
-
 module.exports = app;

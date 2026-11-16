@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -8,6 +9,8 @@ import { cn } from '@/app/lib/utils';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import AuthGuard from '@/app/components/auth/AuthGuard';
 import IdleLogout from '@/app/components/auth/IdleLogout';
+import '@/app/styles/tenant-themes.css';
+import TenantCompanyThemeSync from '@/app/components/ui/TenantCompanyThemeSync';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -15,7 +18,9 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [activeSection, setActiveSection] = useState<SidebarSection>('user');
+  const [activeSection, setActiveSection] =
+    useState<SidebarSection>('user');
+
   const isMobile = useMediaQuery('(max-width: 768px)');
 
   useEffect(() => {
@@ -27,7 +32,7 @@ export default function Layout({ children }: LayoutProps) {
   }, [isMobile]);
 
   const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
+    setSidebarOpen((prev) => !prev);
   };
 
   const closeSidebar = () => {
@@ -38,20 +43,24 @@ export default function Layout({ children }: LayoutProps) {
 
   const handleRailClick = (section: SidebarSection) => {
     setActiveSection(section);
-    if (isMobile) setSidebarOpen(true);
+
+    if (isMobile) {
+      setSidebarOpen(true);
+    }
   };
 
-  return (
-    <AuthGuard>
-      <IdleLogout />
+
+return (
+  <AuthGuard>
+    <IdleLogout />
+
+    <TenantCompanyThemeSync>
       <div className="h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 flex">
-        {/* Left icon rail (desktop only) */}
         <SidebarRail
           activeSection={activeSection}
           onSectionClick={handleRailClick}
         />
 
-        {/* Main sidebar */}
         <Sidebar
           isOpen={sidebarOpen}
           onClose={closeSidebar}
@@ -59,7 +68,6 @@ export default function Layout({ children }: LayoutProps) {
           onSectionChange={setActiveSection}
         />
 
-        {/* Content */}
         <div
           className={cn(
             'flex-1 flex flex-col h-full transition-all duration-300 min-w-0',
@@ -76,10 +84,13 @@ export default function Layout({ children }: LayoutProps) {
               msOverflowStyle: 'none',
             }}
           >
-            <div className="w-full min-w-0">{children}</div>
+            <div className="w-full min-w-0">
+              {children}
+            </div>
           </main>
         </div>
       </div>
-    </AuthGuard>
-  );
+    </TenantCompanyThemeSync>
+  </AuthGuard>
+);
 }
