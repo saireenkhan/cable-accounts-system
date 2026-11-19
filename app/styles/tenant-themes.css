@@ -419,3 +419,438 @@ html:is(
    ORIGINAL THEME
    No overrides: existing design is preserved
 ============================================= */
+
+/* =====================================================
+   APPEARANCE-AWARE TENANT PAGE BACKGROUNDS
+   Honors browser/OS light or dark preference.
+   Does not alter company accent colors or Original.
+===================================================== */
+
+/* Default: light window appearance. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) {
+  --sr-page-bg: #f4f7f9;
+  --sr-card-bg: #ffffff;
+  --sr-page-text: #0f172a;
+  --sr-text: var(--sr-page-text);
+}
+
+/* Dark window appearance. */
+@media (prefers-color-scheme: dark) {
+  html[data-sr-theme="blue-black"] {
+    --sr-page-bg: #0b1220;
+    --sr-card-bg: #172438;
+    --sr-page-text: #ecf5ff;
+    --sr-text: var(--sr-page-text);
+  }
+  html[data-sr-theme="green-black"] {
+    --sr-page-bg: #0b1511;
+    --sr-card-bg: #173329;
+    --sr-page-text: #e9fff4;
+    --sr-text: var(--sr-page-text);
+  }
+}
+
+/* Respect an explicit Tailwind dark-mode class, if enabled. */
+html.dark[data-sr-theme="blue-black"] {
+  --sr-page-bg: #0b1220;
+  --sr-card-bg: #172438;
+  --sr-page-text: #ecf5ff;
+  --sr-text: var(--sr-page-text);
+}
+html.dark[data-sr-theme="green-black"] {
+  --sr-page-bg: #0b1511;
+  --sr-card-bg: #173329;
+  --sr-page-text: #e9fff4;
+  --sr-text: var(--sr-page-text);
+}
+
+/* Explicit light mode overrides the operating-system preference. */
+html.light:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) {
+  --sr-page-bg: #f4f7f9;
+  --sr-card-bg: #ffffff;
+  --sr-page-text: #0f172a;
+  --sr-text: var(--sr-page-text);
+}
+
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main {
+  background-color: var(--sr-page-bg) !important;
+  color: var(--sr-page-text);
+}
+
+/* =====================================================
+   FINAL READABILITY FIXES — TENANT THEMES ONLY
+   Keep titles neutral; icons and actions use company accent.
+===================================================== */
+
+/* Page headings: dark text in light mode, light text in dark mode.
+   Heading icons remain company-blue/company-green. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  main :is(h1, h2, h3, h4) {
+  color: var(--sr-page-text) !important;
+}
+
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  main :is(h1, h2, h3, h4) svg {
+  color: var(--sr-primary) !important;
+}
+
+/* Bulk Upload: the selected User/Partner Management panel uses
+   the original ring-2 + gold-border classes. Theme its entire panel,
+   and explicitly make both title and description white. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  main button.ring-2[class~="border-[#d6b138]"] {
+  background-color: var(--sr-primary) !important;
+  border-color: var(--sr-primary) !important;
+  --tw-ring-color: var(--sr-primary) !important;
+  color: #ffffff !important;
+}
+
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  main button.ring-2[class~="border-[#d6b138]"] :is(p, span, svg) {
+  color: #ffffff !important;
+}
+
+/* Ensure navigation stays readable even when the OS/browser is light.
+   Existing active sidebar classes continue to take the accent color. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  aside[class*="dark:bg-[#102A43]"] :is(a, button) {
+  color: #cbd5e1;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  aside[class*="dark:bg-[#102A43]"] :is(a, button):not([class~="dark:bg-[#d6b138]"]):hover {
+  color: #ffffff;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  aside[class*="dark:bg-[#102A43]"] a[class~="dark:bg-[#d6b138]"],
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  aside[class*="dark:bg-[#102A43]"] a[class~="dark:bg-[#d6b138]"] :is(span, svg) {
+  color: #ffffff !important;
+}
+
+/* Preserve branding and selected section labels in accent color. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  aside span[class~="dark:text-[#F4D477]"],
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  aside button[class~="dark:text-[#F4D477]"] {
+  color: var(--sr-primary) !important;
+}
+
+/* Dark header always has light username, menu labels and icons;
+   company name remains company-accent color. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  header.sticky > div > div > button :is(span, svg),
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  header.sticky > div > div > div > button :is(span, svg) {
+  color: #f1f5f9 !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"])
+  header.sticky h1 {
+  color: var(--sr-primary) !important;
+}
+
+
+/* ==========================================================
+   MODERN ADAPTIVE SHELL — tenant themes only
+   Light appearance: airy cool-white / slate
+   Dark appearance: deep slate, not pure black
+   Company accent remains Blue or Green
+   Place after all older tenant theme rules.
+   ========================================================== */
+
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) {
+  --sr-page-bg: #f5f7fb;
+  --sr-card-bg: #ffffff;
+  --sr-page-text: #18243a;
+  --sr-text: #18243a;
+  --sr-header: #ffffff;
+  --sr-sidebar: #f9fbff;
+  --sr-rail: #eaf1fb;
+  --sr-navigation-text: #23354c;
+  --sr-navigation-muted: #60728a;
+  --sr-border: #dce5f0;
+  --sr-shell-divider: #e4eaf2;
+  --sr-shell-hover: #eaf1fa;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]):not(.light) {
+    --sr-page-bg: #111827;
+    --sr-card-bg: #1b2739;
+    --sr-page-text: #f1f5fb;
+    --sr-text: #f1f5fb;
+    --sr-header: #182338;
+    --sr-sidebar: #151f30;
+    --sr-rail: #101b2d;
+    --sr-navigation-text: #f1f5fb;
+    --sr-navigation-muted: #b1c0d3;
+    --sr-border: #34455c;
+    --sr-shell-divider: #334155;
+    --sr-shell-hover: #24364f;
+    color-scheme: dark;
+  }
+}
+
+/* An explicit app appearance choice wins over OS preference. */
+html.dark:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) {
+  --sr-page-bg: #111827;
+  --sr-card-bg: #1b2739;
+  --sr-page-text: #f1f5fb;
+  --sr-text: #f1f5fb;
+  --sr-header: #182338;
+  --sr-sidebar: #151f30;
+  --sr-rail: #101b2d;
+  --sr-navigation-text: #f1f5fb;
+  --sr-navigation-muted: #b1c0d3;
+  --sr-border: #34455c;
+  --sr-shell-divider: #334155;
+  --sr-shell-hover: #24364f;
+  color-scheme: dark;
+}
+html.light:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) {
+  --sr-page-bg: #f5f7fb;
+  --sr-card-bg: #ffffff;
+  --sr-page-text: #18243a;
+  --sr-text: #18243a;
+  --sr-header: #ffffff;
+  --sr-sidebar: #f9fbff;
+  --sr-rail: #eaf1fb;
+  --sr-navigation-text: #23354c;
+  --sr-navigation-muted: #60728a;
+  --sr-border: #dce5f0;
+  --sr-shell-divider: #e4eaf2;
+  --sr-shell-hover: #eaf1fa;
+  color-scheme: light;
+}
+
+/* Subtle company flavor only in a selection — no tinted page backgrounds. */
+html[data-sr-theme="blue-black"] { --sr-accent-soft-modern: #e6f2ff; }
+html[data-sr-theme="green-black"] { --sr-accent-soft-modern: #e6f8f0; }
+
+/* Shell and its shared background. Keep page titles neutral. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) body,
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main {
+  background-color: var(--sr-page-bg) !important;
+  color: var(--sr-page-text);
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main :is(h1,h2,h3,h4) {
+  color: var(--sr-page-text) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main :is(h1,h2,h3,h4) svg,
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main :is(svg:has(+ h1),svg:has(+ h2)) {
+  color: var(--sr-primary) !important;
+}
+
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main :is(
+  .bg-white, .bg-gray-800, .bg-slate-800, .bg-slate-900,
+  .dark\:bg-gray-800, .dark\:bg-slate-800
+) {
+  background-color: var(--sr-card-bg) !important;
+  border-color: var(--sr-border);
+}
+
+/* Header — consistent with the page appearance. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) header.sticky.top-0 {
+  background: var(--sr-header) !important;
+  border-bottom-color: var(--sr-shell-divider) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) header.sticky :is(button,button span,button svg) {
+  color: var(--sr-navigation-text) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) header.sticky h1 {
+  color: var(--sr-primary) !important;
+}
+/* Keep initials on blue circular avatar white. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) header.sticky .bg-blue-600 {
+  color: #ffffff !important;
+}
+
+/* Main navigation sidebar and icon rail, no JSX changes. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] {
+  background: var(--sr-sidebar) !important;
+  border-right-color: var(--sr-shell-divider) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class~="bg-[#08284D]"] {
+  background: var(--sr-rail) !important;
+  border-right: 1px solid var(--sr-shell-divider);
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] > div:first-child {
+  border-bottom-color: var(--sr-shell-divider) !important;
+}
+/* Ensure Smart is always readable; Recovery retains the company accent. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] > div:first-child > span {
+  color: var(--sr-navigation-text) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside span[class~="dark:text-[#F4D477]"] {
+  color: var(--sr-primary) !important;
+}
+
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav a:not([class~="dark:bg-[#d6b138]"]),
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav a:not([class~="dark:bg-[#d6b138]"]) :is(span,svg) {
+  color: var(--sr-navigation-text) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav button:not([class~="dark:text-[#F4D477]"]) {
+  color: var(--sr-navigation-muted) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav button[class~="dark:text-[#F4D477]"] {
+  color: var(--sr-primary) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav a[class~="dark:bg-[#d6b138]"] {
+  background-color: var(--sr-primary) !important;
+  color: #ffffff !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav a[class~="dark:bg-[#d6b138]"] :is(span,svg) {
+  color: #ffffff !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class*="dark:bg-[#102A43]"] nav a:not([class~="dark:bg-[#d6b138]"]):hover {
+  background-color: var(--sr-shell-hover) !important;
+}
+
+/* Rail: inactive symbols readable in either appearance. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class~="bg-[#08284D]"] nav button:not([class~="bg-[#F8D77A]"]),
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class~="bg-[#08284D]"] nav button:not([class~="bg-[#F8D77A]"]) svg {
+  color: var(--sr-navigation-text) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside[class~="bg-[#08284D]"] nav button:not([class~="bg-[#F8D77A]"]):hover {
+  background-color: var(--sr-shell-hover) !important;
+}
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside button[class~="bg-[#F8D77A]"],
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside button[class~="bg-[#F8D77A]"] svg {
+  background-color: var(--sr-primary) !important;
+  color: #ffffff !important;
+}
+/* Do not give the icon SVG its own blue box. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) aside button[class~="bg-[#F8D77A]"] svg {
+  background: transparent !important;
+}
+
+/* Selected Bulk Upload choices: retain white heading and subheading. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) main button.ring-2[class~="border-[#d6b138]"] :is(p,span,svg) {
+  color: #ffffff !important;
+}
+
+/* Override older, more-specific header rules which forced white on light mode. */
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) header.sticky > div > div > button :is(span,svg),
+html:is([data-sr-theme="blue-black"], [data-sr-theme="green-black"]) header.sticky > div > div > div > button :is(span,svg) {
+  color: var(--sr-navigation-text) !important;
+}
+
+/* ============================================
+   SMART RECOVERY - SIDEBAR RAIL FINAL FIX
+   Light / Dark appearance + Company Themes
+   Original theme remains unchanged
+============================================ */
+
+/* Modern light appearance */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) {
+  --sr-rail-bg: #eaf0f8;
+  --sr-rail-icon: #344861;
+  --sr-rail-logo-bg: #243650;
+  --sr-rail-hover: #dbe6f4;
+}
+
+/* Dark appearance */
+@media (prefers-color-scheme: dark) {
+  html:is(
+    [data-sr-theme="blue-black"],
+    [data-sr-theme="green-black"]
+  ):not(.light) {
+    --sr-rail-bg: #111c2d;
+    --sr-rail-icon: #cbd5e1;
+    --sr-rail-logo-bg: #263b55;
+    --sr-rail-hover: #26364d;
+  }
+}
+
+/* Explicit app dark mode */
+html.dark:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) {
+  --sr-rail-bg: #111c2d;
+  --sr-rail-icon: #cbd5e1;
+  --sr-rail-logo-bg: #263b55;
+  --sr-rail-hover: #26364d;
+}
+
+/* Explicit app light mode */
+html.light:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) {
+  --sr-rail-bg: #eaf0f8;
+  --sr-rail-icon: #344861;
+  --sr-rail-logo-bg: #243650;
+  --sr-rail-hover: #dbe6f4;
+}
+
+/* Rail background */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"] {
+  background-color: var(--sr-rail-bg) !important;
+  border-right: 1px solid var(--sr-border, #d9e2ec);
+}
+
+/* SR logo background */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"]
+  > div:first-child > div {
+  background-color: var(--sr-rail-logo-bg) !important;
+}
+
+/* SR logo text */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"]
+  > div:first-child > div span {
+  color: #ffffff !important;
+}
+
+/* Inactive rail icons */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"] nav button:not(
+  [class~="bg-[#F8D77A]"]
+) {
+  color: var(--sr-rail-icon) !important;
+}
+
+/* Inactive icon hover */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"] nav button:not(
+  [class~="bg-[#F8D77A]"]
+):hover {
+  background-color: var(--sr-rail-hover) !important;
+  color: var(--sr-primary) !important;
+}
+
+/* Selected icon - blue or green automatically */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"]
+  nav button[class~="bg-[#F8D77A]"] {
+  background-color: var(--sr-primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.10);
+}
+
+/* Selected icon SVG */
+html:is(
+  [data-sr-theme="blue-black"],
+  [data-sr-theme="green-black"]
+) aside[class~="bg-[#08284D]"]
+  nav button[class~="bg-[#F8D77A]"] svg {
+  color: #ffffff !important;
+}
