@@ -25,6 +25,207 @@ import {
 import { cn } from '@/app/lib/utils';
 import toast from 'react-hot-toast';
 
+// Shared billing rules used by User Management:
+// activation-day renewals, payment matching by ID first,
+// and oldest unpaid renewal remaining outstanding.
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+type Customer = Record<string, any>;
+type Payment = Record<string, any>;
+
+const normalize = (value: unknown) =>
+  String(value ?? '').trim().toLowerCase();
+
+function safeDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = Number(match[1]);
+      const month = Number(match[2]) - 1;
+      const day = Number(match[3]);
+      const date = new Date(year, month, day);
+      return date.getFullYear() === year &&
+        date.getMonth() === month &&
+        date.getDate() === day ? date : null;
+    }
+  }
+  const date = new Date(value as string | number | Date);
+  return Number.isNaN(date.getTime())
+    ? null
+    : new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function renewalDate(activation: Date, offset: number): Date {
+  const first = new Date(
+    activation.getFullYear(), activation.getMonth() + offset, 1
+  );
+  const lastDay = new Date(
+    first.getFullYear(), first.getMonth() + 1, 0
+  ).getDate();
+  return new Date(first.getFullYear(), first.getMonth(),
+    Math.min(activation.getDate(), lastDay));
+}
+
+function getPaymentAmount(payment: Payment): number {
+  for (const candidate of [
+    payment.amount, payment.paidAmount, payment.amountPaid,
+    payment.receivedAmount, payment.amountReceived, payment.paid,
+  ]) {
+    if (candidate !== undefined && candidate !== null && candidate !== '') {
+      const n = Number(candidate);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return 0;
+}
+
+function paymentsFor(customer: Customer, payments: Payment[]): Payment[] {
+  const mongoId = normalize(customer._id ?? customer.id);
+  const code = normalize(customer.customerId);
+  const name = normalize(customer.name);
+
+  return payments.filter((p) => {
+    if (p.isNoPayment) return false;
+    const linked = p.customer && typeof p.customer === 'object'
+      ? p.customer : null;
+
+    const ids = [
+      linked?._id, linked?.id, linked?.customerId,
+      typeof p.customer === 'string' ? p.customer : null,
+      p.customerId,
+    ].map(normalize).filter(Boolean);
+
+    if (ids.length) {
+      // Never assign a payment to the wrong customer because names match.
+      return ids.some((id) =>
+        (mongoId && id === mongoId) || (code && id === code)
+      );
+    }
+
+    const paymentName = normalize(linked?.name ?? p.customerName ?? p.name);
+    return Boolean(name && paymentName === name);
+  });
+}
+
+function monthlyExpiry(
+  customer: Customer,
+  customerPayments: Payment[],
+  today: Date
+): Date | null {
+  const activation = safeDate(customer.activationDate);
+  const storedExpiry = safeDate(customer.expiryDate);
+  if (!activation) return storedExpiry;
+
+  const fee = Number(customer.monthlyFee || 0);
+  if (!Number.isFinite(fee) || fee <= 0) {
+    return storedExpiry ?? renewalDate(activation, 1);
+  }
+
+  const monthOffset = (year: number, month: number) =>
+    (year - activation.getFullYear()) * 12 + month - activation.getMonth();
+
+  const byMonth = new Map<number, number>();
+  for (const payment of customerPayments) {
+    const match = String(payment.month ?? '')
+      .trim().match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (!match) continue;
+    const monthIndex = MONTHS.findIndex(
+      (name) => name.toLowerCase() === match[1].toLowerCase()
+    );
+    if (monthIndex < 0) continue;
+    const offset = monthOffset(Number(match[2]), monthIndex);
+    // Activation-month payments are not an extra renewal.
+    if (offset < 1) continue;
+    const amount = getPaymentAmount(payment);
+    if (amount > 0) {
+      byMonth.set(offset, (byMonth.get(offset) || 0) + amount);
+    }
+  }
+
+  const currentOffset = monthOffset(today.getFullYear(), today.getMonth());
+  const lastPaymentOffset = Math.max(0, ...Array.from(byMonth.keys()));
+  const lastOffset = Math.max(1, currentOffset + 2, lastPaymentOffset + 1);
+  if (lastOffset > 600) {
+    return storedExpiry ?? renewalDate(activation, 1);
+  }
+
+  const balances = new Map<number, number>();
+  let advanceCredit = 0;
+  for (let offset = 1; offset <= lastOffset; offset++) {
+    const paid = byMonth.get(offset) || 0;
+    const creditUsed = Math.min(fee, advanceCredit);
+    advanceCredit -= creditUsed;
+    const charge = fee - creditUsed;
+    const applied = Math.min(charge, paid);
+    balances.set(offset, charge - applied);
+    let excess = Math.max(0, paid - applied);
+
+    // Overpayments settle earlier arrears oldest-first.
+    for (let prior = 1; prior < offset && excess > 0; prior++) {
+      const outstanding = balances.get(prior) || 0;
+      const settled = Math.min(outstanding, excess);
+      balances.set(prior, outstanding - settled);
+      excess -= settled;
+    }
+    advanceCredit += excess;
+  }
+
+  for (let offset = 1; offset <= lastOffset; offset++) {
+    if ((balances.get(offset) || 0) > 0.00001) {
+      return renewalDate(activation, offset);
+    }
+  }
+  return renewalDate(activation, lastOffset + 1);
+}
+
+type EffectiveStatus =
+  'Active' | 'Inactive' | 'Suspended' | 'Upcoming Expiry' | 'Expired';
+
+function effectiveCustomerStatus(
+  customer: Customer,
+  customerPayments: Payment[],
+  today: Date
+): EffectiveStatus {
+  const raw = normalize(customer.status);
+  if (raw === 'inactive') return 'Inactive';
+  if (raw === 'suspended') return 'Suspended';
+
+  const expiry = monthlyExpiry(customer, customerPayments, today);
+  if (!expiry) {
+    if (raw === 'expired') return 'Expired';
+    return 'Active';
+  }
+  if (expiry <= today) return 'Expired';
+  const remainingDays = Math.round(
+    (Date.UTC(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()) -
+     Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) /
+    86400000
+  );
+  return remainingDays <= 7 ? 'Upcoming Expiry' : 'Active';
+}
+
+function monthPaymentStatus(
+  customer: Customer,
+  customerPayments: Payment[],
+  today: Date
+): 'paid' | 'partial' | 'notpaid' | 'exclude' {
+  const monthlyFee = Number(customer.monthlyFee) || 0;
+  if (monthlyFee <= 0) return 'exclude';
+
+  const thisMonth = `${MONTHS[today.getMonth()]} ${today.getFullYear()}`;
+  const paid = customerPayments
+    .filter((payment) => normalize(payment.month) === normalize(thisMonth))
+    .reduce((sum, payment) => sum + Math.max(0, getPaymentAmount(payment)), 0);
+  if (paid >= monthlyFee) return 'paid';
+  if (paid > 0) return 'partial';
+  return 'notpaid';
+}
+
+
 export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -56,36 +257,36 @@ export default function DashboardPage() {
       const areas = areasRes.data.areas || [];
 
       const totalCustomers = customers.length;
-      const _now = new Date();
+      const todayForStatus = new Date();
+      const todayDay = new Date(
+        todayForStatus.getFullYear(), todayForStatus.getMonth(), todayForStatus.getDate()
+      );
+      const effectiveStatuses: EffectiveStatus[] = customers.map((customer: any) =>
+        effectiveCustomerStatus(
+          customer,
+          paymentsFor(customer, payments),
+          todayDay
+        )
+      );
 
-      const expiredCustomers = customers.filter((c: any) => {
-        const rawStatus = (c.status || '').toLowerCase();
-        if (rawStatus === 'expired') return true;
-
-        if (!c.expiryDate) return false;
-        const expiry = new Date(c.expiryDate);
-        if (isNaN(expiry.getTime())) return false;
-
-        return expiry < _now && rawStatus !== 'inactive' && rawStatus !== 'suspended';
-      }).length;
-
-      const activeCustomers = customers.filter(
-        (c: any) => c.status?.toLowerCase() === 'active'
+      const activeCustomers = effectiveStatuses.filter(
+        (status) => status === 'Active'
       ).length;
-      const inactiveCustomers = customers.filter(
-        (c: any) => c.status?.toLowerCase() === 'inactive'
+      const inactiveCustomers = effectiveStatuses.filter(
+        (status) => status === 'Inactive'
       ).length;
-      const suspendedCustomers = customers.filter(
-        (c: any) => c.status?.toLowerCase() === 'suspended'
+      const expiredCustomers = effectiveStatuses.filter(
+        (status) => status === 'Expired'
+      ).length;
+      const suspendedCustomers = effectiveStatuses.filter(
+        (status) => status === 'Suspended'
       ).length;
 
       const totalBilling = customers.reduce((sum: number, customer: any) => {
         const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
         if (monthlyFee === 0) return sum;
 
-        const customerPayments = payments.filter(
-          (p: any) => p.customer?.name === customer.name && !p.isNoPayment
-        );
+        const customerPayments = paymentsFor(customer, payments);
         const activeMonths = new Set<string>();
         customerPayments.forEach((p: any) => {
           if (p.month) activeMonths.add(p.month);
@@ -110,82 +311,20 @@ export default function DashboardPage() {
           ? Math.min(100, (totalRecovered / totalBilling) * 100)
           : 0;
 
-      const today = new Date();
-      const sevenDaysLater = new Date(today);
-      sevenDaysLater.setDate(today.getDate() + 7);
-
-      const upcomingExpiry = customers.filter((c: any) => {
-        if (!c.expiryDate) return false;
-        const expiryDate = new Date(c.expiryDate);
-        return expiryDate >= today && expiryDate <= sevenDaysLater;
-      }).length;
-
-      const now = new Date();
-      const monthsList = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December',
-      ];
-
-      const currentMonthIndex = now.getMonth();
-      const currentYear = now.getFullYear();
-      const currentMonth = `${monthsList[currentMonthIndex]} ${currentYear}`;
-
-      const isPastOrCurrentMonth = (monthStr: string) => {
-        const [monthName, yearStr] = monthStr.split(' ');
-        const year = parseInt(yearStr);
-        const monthIndex = monthsList.indexOf(monthName);
-
-        if (isNaN(year) || monthIndex === -1) return false;
-        if (year < currentYear) return true;
-        if (year === currentYear && monthIndex <= currentMonthIndex) return true;
-
-        return false;
-      };
+      const upcomingExpiry = effectiveStatuses.filter(
+        (status) => status === 'Upcoming Expiry'
+      ).length;
 
       const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
-
       customers.forEach((customer: any) => {
-        const monthlyFee = parseFloat(String(customer.monthlyFee)) || 0;
-        if (monthlyFee === 0) return;
-
-        const customerPayments = payments.filter(
-          (p: any) => p.customer?.name === customer.name && !p.isNoPayment
+        const classification = monthPaymentStatus(
+          customer,
+          paymentsFor(customer, payments),
+          todayDay
         );
-
-        if (customerPayments.length === 0) {
-          monthStatusCounts.notpaid += 1;
-          return;
+        if (classification !== 'exclude') {
+          monthStatusCounts[classification] += 1;
         }
-
-        const monthPaidMap: Record<string, number> = {};
-        customerPayments.forEach((p: any) => {
-          if (!monthPaidMap[p.month]) {
-            monthPaidMap[p.month] = 0;
-          }
-          monthPaidMap[p.month] += parseFloat(String(p.amount)) || 0;
-        });
-
-        const activeMonths = Object.keys(monthPaidMap);
-        const totalPaid = activeMonths.reduce((sum, m) => sum + monthPaidMap[m], 0);
-        const totalExpected = monthlyFee * activeMonths.length;
-
-        if (totalPaid >= totalExpected) {
-          monthStatusCounts.paid += 1;
-          return;
-        }
-
-        activeMonths.forEach((month) => {
-          const paid = monthPaidMap[month];
-          const remaining = monthlyFee - paid;
-
-          if (remaining <= 0) {
-            monthStatusCounts.paid += 1;
-          } else if (month === currentMonth) {
-            monthStatusCounts.partial += 1;
-          } else if (isPastOrCurrentMonth(month)) {
-            monthStatusCounts.notpaid += 1;
-          }
-        });
       });
 
       setStats({

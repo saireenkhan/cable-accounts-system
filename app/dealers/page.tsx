@@ -37,28 +37,32 @@ export default function DealerDashboardPage() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const token = sessionStorage.getItem('token');
+      const token =
+        sessionStorage.getItem('token') ||
+        sessionStorage.getItem('sr_token') ||
+        localStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;
       }
 
       const [dealersRes, paymentsRes, areasRes] = await Promise.all([
-        api.get('/dealers?limit=1000'),
-        api.get('/dealer-payments'),
+        api.get('/dealers?limit=10000'),
+        api.get('/dealer-payments?limit=10000'),
         api.get('/dealer-areas').catch(() => api.get('/areas')),
       ]);
 
-      if (dealersRes.data.success) {
-        setDealers(dealersRes.data.dealers || []);
+      if (!dealersRes.data?.success || !Array.isArray(dealersRes.data.dealers)) {
+        throw new Error('Invalid dealers API response');
+      }
+      if (!paymentsRes.data?.success || !Array.isArray(paymentsRes.data.payments)) {
+        throw new Error('Invalid dealer payments API response');
       }
 
-      if (paymentsRes.data.success) {
-        setPayments(paymentsRes.data.payments || []);
-      }
-
-      if (areasRes?.data?.success) {
-        setAreas(areasRes.data.areas || []);
+      setDealers(dealersRes.data.dealers);
+      setPayments(paymentsRes.data.payments);
+      if (areasRes?.data?.success && Array.isArray(areasRes.data.areas)) {
+        setAreas(areasRes.data.areas);
       }
     } catch (error) {
       console.error('Error fetching dealer dashboard data:', error);
@@ -68,28 +72,61 @@ export default function DealerDashboardPage() {
     }
   };
 
+  // Match payments to the actual dealer, prioritizing stable identifiers.
+  // Name fallback is used only for legacy payments without dealer identifiers.
+  const normalizeDealerKey = (value: unknown): string =>
+    String(value ?? '').trim().toLowerCase();
+
+  const paymentBelongsToDealer = (payment: any, dealer: any): boolean => {
+    const linked = payment.dealer && typeof payment.dealer === 'object'
+      ? payment.dealer
+      : null;
+    const ids = [
+      linked?._id, linked?.id, linked?.dealerId,
+      typeof payment.dealer === 'string' ? payment.dealer : null,
+      payment.dealerId,
+    ].map(normalizeDealerKey).filter(Boolean);
+
+    const dealerMongoId = normalizeDealerKey(dealer._id ?? dealer.id);
+    const dealerCode = normalizeDealerKey(dealer.dealerId);
+    if (ids.length > 0) {
+      return ids.some((id) =>
+        (dealerMongoId !== '' && id === dealerMongoId) ||
+        (dealerCode !== '' && id === dealerCode)
+      );
+    }
+
+    const legacyName = normalizeDealerKey(
+      linked?.name ?? payment.dealerName ?? payment.name
+    );
+    return legacyName !== '' && legacyName === normalizeDealerKey(dealer.name);
+  };
+
+  // Prevent string concatenation (e.g., 1000 + '500') in totals.
+  const money = (value: unknown): number => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   // ============================================================
   // COMPUTE PER-DEALER STATS
   // ============================================================
   const dealerStats = dealers.map((dealer: any) => {
-    const dealerPayments = payments.filter(
-      (p: any) =>
-        (p.dealer?.name === dealer.name) ||
-        (p.dealer?._id === dealer._id) ||
-        (typeof p.dealer === 'string' && p.dealer === dealer.name)
+    const dealerPayments = payments.filter((p: any) =>
+      paymentBelongsToDealer(p, dealer)
     );
 
     const billing = dealerPayments
       .filter((p: any) => p.paymentType === 'add_payment')
-      .reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      .reduce((s: number, p: any) => s + money(p.amount), 0);
 
     const received = dealerPayments
       .filter((p: any) => p.paymentType === 'receive_payment')
-      .reduce((s: number, p: any) => s + (p.amount || 0), 0);
+      .reduce((s: number, p: any) => s + money(p.amount), 0);
 
     const commission = dealerPayments
       .filter((p: any) => p.paymentType === 'receive_payment')
-      .reduce((s: number, p: any) => s + (p.commission || 0), 0);
+      .reduce((s: number, p: any) => s + money(p.commission), 0);
 
     const outstanding = Math.max(0, billing - received);
     const recovery = billing > 0 ? (received / billing) * 100 : 0;
@@ -113,7 +150,9 @@ export default function DealerDashboardPage() {
   // AGGREGATE STATS
   // ============================================================
   const totalDealers = dealers.length;
-  const activeDealers = dealers.filter((d: any) => d.status === 'active').length;
+  const activeDealers = dealers.filter((d: any) =>
+    normalizeDealerKey(d.status || 'active') === 'active'
+  ).length;
 
   const totalBilling = dealerStats.reduce((s, d) => s + d.billing, 0);
   const totalReceived = dealerStats.reduce((s, d) => s + d.received, 0);

@@ -20,6 +20,107 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+// Partner billing status helpers. These mirror the Partner Management page's
+// activation-date renewal rules and use partner IDs before names.
+const PARTNER_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+type PartnerStatus = 'Active' | 'Upcoming Expiry' | 'Expired' | 'Inactive' | 'Suspended';
+
+const partnerNormalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
+function partnerBillingDate(value: unknown): Date | null {
+  if (!value) return null;
+  const iso = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = iso
+    ? new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]))
+    : new Date(value as string | number | Date);
+  return Number.isNaN(date.getTime())
+    ? null
+    : new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function partnerBillingDeadline(activation: Date, offset: number): Date {
+  const first = new Date(activation.getFullYear(), activation.getMonth() + offset, 1);
+  const end = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return new Date(first.getFullYear(), first.getMonth(), Math.min(activation.getDate(), end));
+}
+
+function partnerPaymentMatches(payment: any, partner: any): boolean {
+  if (payment.isNoPayment) return false;
+  const mongoId = partnerNormalize(partner._id || partner.id);
+  const code = partnerNormalize(partner.partnerId || partner.customerId);
+  const object = payment.partner && typeof payment.partner === 'object'
+    ? payment.partner : null;
+  const ids = [
+    object?._id, object?.id, object?.partnerId,
+    typeof payment.partner === 'string' ? payment.partner : null,
+    payment.partnerId, payment.customerId,
+  ].map(partnerNormalize).filter(Boolean);
+  if (ids.length) {
+    return ids.some((id) => (mongoId && id === mongoId) || (code && id === code));
+  }
+  const name = partnerNormalize(object?.name || payment.partnerName || payment.name);
+  return Boolean(name && name === partnerNormalize(partner.name));
+}
+
+function partnerPaymentAmount(payment: any): number {
+  for (const value of [
+    payment.amount, payment.paidAmount, payment.amountPaid,
+    payment.receivedAmount, payment.amountReceived, payment.paid,
+  ]) {
+    if (value !== undefined && value !== null && value !== '') {
+      const amount = Number(value);
+      if (Number.isFinite(amount)) return Math.max(0, amount);
+    }
+  }
+  return 0;
+}
+
+// Same overdue-vs-next-renewal convention as Partner Management.
+function partnerMonthlyExpiry(partner: any, related: any[], today: Date): Date | null {
+  const activation = partnerBillingDate(partner.activationDate);
+  if (!activation) return partnerBillingDate(partner.expiryDate);
+  const fee = Number(partner.monthlyFeeRaw ?? partner.monthlyFee ?? 0);
+  if (!Number.isFinite(fee) || fee <= 0) return partnerBillingDate(partner.expiryDate);
+
+  const first = partnerBillingDeadline(activation, 1);
+  if (today < first) return first;
+  const count = Math.max(1,
+    (today.getFullYear() - activation.getFullYear()) * 12 +
+    today.getMonth() - activation.getMonth() + 1);
+  if (count > 600) return partnerBillingDate(partner.expiryDate) ?? first;
+
+  let owed = 0;
+  let paid = 0;
+  let next = first;
+  for (let offset = 1; offset <= count; offset++) {
+    const deadline = partnerBillingDeadline(activation, offset);
+    if (deadline > today) { next = deadline; break; }
+    owed += fee;
+    const month = `${PARTNER_MONTHS[deadline.getMonth()]} ${deadline.getFullYear()}`;
+    paid += related
+      .filter((payment) => partnerNormalize(payment.month) === partnerNormalize(month))
+      .reduce((sum: number, payment: any) => sum + partnerPaymentAmount(payment), 0);
+    next = partnerBillingDeadline(activation, offset + 1);
+  }
+  return owed > paid + 0.001 ? today : next;
+}
+
+function partnerEffectiveStatus(partner: any, related: any[], today: Date): PartnerStatus {
+  const raw = partnerNormalize(partner.status);
+  if (raw === 'inactive') return 'Inactive';
+  if (raw === 'suspended') return 'Suspended';
+  const expiry = partnerMonthlyExpiry(partner, related, today);
+  if (!expiry) return raw === 'expired' ? 'Expired' : 'Active';
+  if (expiry <= today) return 'Expired';
+  const days = Math.round((Date.UTC(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()) -
+    Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+  return days >= 1 && days <= 7 ? 'Upcoming Expiry' : 'Active';
+}
+
 export default function PartnerDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -56,284 +157,80 @@ export default function PartnerDashboardPage() {
       console.log('📦 Packages:', packages.length);
       console.log('📍 Partner Areas:', areas.length);
 
-      // PARTNER STATUS COUNTS
+      // PARTNER STATUS COUNTS - match Partner Management effective status.
       const totalCustomers = partners.length;
-      const _now = new Date();
-
-      const expiredCustomers = partners.filter((c: any) => {
-        const rawStatus = (c.status || '').toLowerCase();
-
-        if (rawStatus === 'expired') return true;
-
-        if (!c.expiryDate) return false;
-
-        const expiry = new Date(c.expiryDate);
-
-        if (isNaN(expiry.getTime())) return false;
-
-        return (
-          expiry < _now &&
-          rawStatus !== 'inactive' &&
-          rawStatus !== 'suspended'
-        );
-      }).length;
-
-      const activeCustomers = partners.filter(
-        (c: any) => c.status?.toLowerCase() === 'active'
-      ).length;
-
-      const inactiveCustomers = partners.filter(
-        (c: any) => c.status?.toLowerCase() === 'inactive'
-      ).length;
-
-      const suspendedCustomers = partners.filter(
-        (c: any) => c.status?.toLowerCase() === 'suspended'
-      ).length;
-
-      // BILLING & COLLECTION STATS
-      const totalBilling = partners.reduce(
-        (sum: number, partner: any) => {
-          const monthlyFee =
-            parseFloat(String(partner.monthlyFee)) || 0;
-
-          if (monthlyFee === 0) return sum;
-
-          const partnerPayments = payments.filter(
-            (p: any) =>
-              p.partner?.name === partner.name &&
-              !p.isNoPayment
-          );
-
-          const activeMonths = new Set<string>();
-
-          partnerPayments.forEach((p: any) => {
-            if (p.month) activeMonths.add(p.month);
-          });
-
-          const monthCount =
-            activeMonths.size > 0
-              ? activeMonths.size
-              : 1;
-
-          return sum + monthlyFee * monthCount;
-        },
-        0
-      );
-
-      const totalRecovered = payments
-        .filter((p: any) => !p.isNoPayment)
-        .reduce(
-          (sum: number, p: any) =>
-            sum +
-            (parseFloat(String(p.amount)) || 0),
-          0
-        );
-
-      const totalOutstanding = Math.max(
-        0,
-        totalBilling - totalRecovered
-      );
-
-      const recoveryRate =
-        totalBilling > 0
-          ? Math.min(
-              100,
-              (totalRecovered / totalBilling) * 100
-            )
-          : 0;
-
-      // UPCOMING EXPIRY
-      const today = new Date();
-      const sevenDaysLater = new Date(today);
-
-      sevenDaysLater.setDate(
-        today.getDate() + 7
-      );
-
-      const upcomingExpiry = partners.filter(
-        (c: any) => {
-          if (!c.expiryDate) return false;
-
-          const expiryDate = new Date(
-            c.expiryDate
-          );
-
-          return (
-            expiryDate >= today &&
-            expiryDate <= sevenDaysLater
-          );
-        }
-      ).length;
-
-      // PER-MONTH STATUS COUNTS
       const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const currentMonth = `${PARTNER_MONTHS[today.getMonth()]} ${today.getFullYear()}`;
 
-      const monthsList = [
-        'January',
-        'February',
-        'March',
-        'April',
-        'May',
-        'June',
-        'July',
-        'August',
-        'September',
-        'October',
-        'November',
-        'December',
-      ];
-
-      const currentMonthIndex =
-        now.getMonth();
-
-      const currentYear =
-        now.getFullYear();
-
-      const currentMonth =
-        `${monthsList[currentMonthIndex]} ${currentYear}`;
-
-      const isPastOrCurrentMonth = (
-        monthStr: string
-      ) => {
-        const [monthName, yearStr] =
-          monthStr.split(' ');
-
-        const year = parseInt(yearStr);
-
-        const monthIndex =
-          monthsList.indexOf(monthName);
-
-        if (
-          isNaN(year) ||
-          monthIndex === -1
-        ) {
-          return false;
-        }
-
-        if (year < currentYear) {
-          return true;
-        }
-
-        if (
-          year === currentYear &&
-          monthIndex <= currentMonthIndex
-        ) {
-          return true;
-        }
-
-        return false;
-      };
-
-      const monthStatusCounts = {
-        paid: 0,
-        partial: 0,
-        notpaid: 0,
-      };
-
-      partners.forEach((partner: any) => {
-        const monthlyFee =
-          parseFloat(
-            String(partner.monthlyFee)
-          ) || 0;
-
-        if (monthlyFee === 0) return;
-
-        const partnerPayments =
-          payments.filter(
-            (p: any) =>
-              p.partner?.name ===
-                partner.name &&
-              !p.isNoPayment
-          );
-
-        if (partnerPayments.length === 0) {
-          monthStatusCounts.notpaid += 1;
-          return;
-        }
-
-        const monthPaidMap: Record<
-          string,
-          number
-        > = {};
-
-        partnerPayments.forEach(
-          (p: any) => {
-            if (!monthPaidMap[p.month]) {
-              monthPaidMap[p.month] = 0;
-            }
-
-            monthPaidMap[p.month] +=
-              parseFloat(
-                String(p.amount)
-              ) || 0;
-          }
+      const partnerStatuses: PartnerStatus[] = partners.map((partner: any) => {
+        const related = payments.filter((payment: any) =>
+          partnerPaymentMatches(payment, partner)
         );
-
-        const activeMonths =
-          Object.keys(monthPaidMap);
-
-        const totalPaid =
-          activeMonths.reduce(
-            (sum, m) =>
-              sum + monthPaidMap[m],
-            0
-          );
-
-        const totalExpected =
-          monthlyFee *
-          activeMonths.length;
-
-        if (totalPaid >= totalExpected) {
-          monthStatusCounts.paid += 1;
-          return;
-        }
-
-        activeMonths.forEach(
-          (month) => {
-            const paid =
-              monthPaidMap[month];
-
-            const remaining =
-              monthlyFee - paid;
-
-            if (remaining <= 0) {
-              monthStatusCounts.paid += 1;
-            } else if (
-              month === currentMonth
-            ) {
-              monthStatusCounts.partial += 1;
-            } else if (
-              isPastOrCurrentMonth(month)
-            ) {
-              monthStatusCounts.notpaid += 1;
-            }
-          }
-        );
+        return partnerEffectiveStatus(partner, related, today);
       });
 
-      const paidCustomers =
-        monthStatusCounts.paid;
+      const activeCustomers = partnerStatuses.filter(
+        (status: PartnerStatus) => status === 'Active'
+      ).length;
+      const inactiveCustomers = partnerStatuses.filter(
+        (status: PartnerStatus) => status === 'Inactive'
+      ).length;
+      const expiredCustomers = partnerStatuses.filter(
+        (status: PartnerStatus) => status === 'Expired'
+      ).length;
+      const suspendedCustomers = partnerStatuses.filter(
+        (status: PartnerStatus) => status === 'Suspended'
+      ).length;
+      const upcomingExpiry = partnerStatuses.filter(
+        (status: PartnerStatus) => status === 'Upcoming Expiry'
+      ).length;
 
-      const partialCustomers =
-        monthStatusCounts.partial;
+      // Retain the original dashboard's financial reporting period/formulas.
+      // Fix ONLY the identity matching so similarly named partners do not mix.
+      const totalBilling = partners.reduce((sum: number, partner: any) => {
+        const monthlyFee = Number(partner.monthlyFee) || 0;
+        if (monthlyFee === 0) return sum;
+        const related = payments.filter((payment: any) =>
+          partnerPaymentMatches(payment, partner)
+        );
+        const activeMonths = new Set<string>();
+        related.forEach((payment: any) => {
+          if (payment.month) activeMonths.add(payment.month);
+        });
+        const monthCount = activeMonths.size > 0 ? activeMonths.size : 1;
+        return sum + monthlyFee * monthCount;
+      }, 0);
 
-      const notPaidCustomers =
-        monthStatusCounts.notpaid;
+      const totalRecovered = payments
+        .filter((payment: any) => !payment.isNoPayment)
+        .reduce((sum: number, payment: any) =>
+          sum + partnerPaymentAmount(payment), 0);
+      const totalOutstanding = Math.max(0, totalBilling - totalRecovered);
+      const recoveryRate = totalBilling > 0
+        ? Math.min(100, (totalRecovered / totalBilling) * 100)
+        : 0;
 
-      console.log(
-        '✅ Paid:',
-        paidCustomers
-      );
-
-      console.log(
-        '🟡 Partial:',
-        partialCustomers
-      );
-
-      console.log(
-        '❌ Not Paid:',
-        notPaidCustomers
-      );
+      // Each partner is counted ONCE based on the current billing month's
+      // receipts; old receipts cannot make the current month appear paid.
+      const monthStatusCounts = { paid: 0, partial: 0, notpaid: 0 };
+      partners.forEach((partner: any) => {
+        const fee = Number(partner.monthlyFee) || 0;
+        if (fee <= 0) return;
+        const paidThisMonth = payments
+          .filter((payment: any) =>
+            partnerPaymentMatches(payment, partner) &&
+            partnerNormalize(payment.month) === partnerNormalize(currentMonth)
+          )
+          .reduce((sum: number, payment: any) =>
+            sum + partnerPaymentAmount(payment), 0);
+        if (paidThisMonth >= fee) monthStatusCounts.paid++;
+        else if (paidThisMonth > 0) monthStatusCounts.partial++;
+        else monthStatusCounts.notpaid++;
+      });
+      const paidCustomers = monthStatusCounts.paid;
+      const partialCustomers = monthStatusCounts.partial;
+      const notPaidCustomers = monthStatusCounts.notpaid;
 
       setStats({
         totalCustomers,
